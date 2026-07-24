@@ -6,6 +6,17 @@
 // (WH-GRID-4FT); build-validator measures buildability against that same module
 // (PANEL_WIDTH_FT = 4), so a 4 ft-grid plan validates as panel-buildable.
 //
+// SCOPE: GENERATED plans only. The traced reference plans (a-frame-22,
+// a-frame-bunk, outpost-medium) are image-traced organic geometry that is off
+// the 4 ft grid by nature (they also fail WH-GRID-4FT), so they are legitimately
+// not panel-modular and are NOT asserted here — "buildable" is a claim about
+// what the generator produces, not about the traced references.
+//
+// UNITS: build-validator reads DenHome.sourceWalls/-Openings in 4 ft GRID units
+// (it multiplies by 4; lib/bim/semantic-bim.ts uses the same GRID_FT = 4, and
+// lib/data.ts emits them via ftToGrid). The adapter below divides artifact feet
+// by 4 for exactly that reason — keep it in step with lib/data.ts.
+//
 // Gated rules grow as each class is root-fixed: wall-module + wall-height +
 // openings (4 ft module, fire 3) + floor-span (bearing-line joist span, fire 4).
 // Still tracked in gen-sweep.md and NOT yet asserted (real, separate):

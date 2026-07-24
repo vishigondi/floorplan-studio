@@ -223,7 +223,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   ];
   const bom = new Map<string, BuildBomItem>();
   const rules = {
-    wallModule: createRule('wall-module', 'Wall length follows 1.2m panel module'),
+    wallModule: createRule('wall-module', 'Wall length follows the 4 ft panel module'),
     wallHeight: createRule('wall-height', 'Wall heights use 2.4m or 3.0m SKU'),
     openings: createRule('openings', 'Openings fit panels or align to joints'),
     floorSpan: createRule('floor-span', 'Floor span is within joist limit'),
@@ -244,7 +244,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     const moduleDelta = nearestMultipleDelta(length, PANEL_WIDTH_FT);
     const label = wall.id ?? `${wall.exterior ? 'exterior' : 'interior'} wall`;
     if (moduleDelta.delta > PANEL_TOLERANCE_FT) {
-      rules.wallModule.blockers.push(`${label} is ${length.toFixed(2)}ft, not N x 1.2m (nearest ${moduleDelta.count} panels is ${(moduleDelta.count * PANEL_WIDTH_FT).toFixed(2)}ft).`);
+      rules.wallModule.blockers.push(`${label} is ${length.toFixed(2)}ft, not N x ${PANEL_WIDTH_FT}ft (nearest ${moduleDelta.count} panels is ${(moduleDelta.count * PANEL_WIDTH_FT).toFixed(2)}ft).`);
     }
     const panelCount = Math.max(1, Math.ceil(length / PANEL_WIDTH_FT));
     if (wall.exterior) exteriorWallPanels += panelCount;
@@ -261,7 +261,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
 
   addBom(bom, {
     componentId: 'wall-ext',
-    description: 'Exterior wall panel, 1.2m module',
+    description: 'Exterior wall panel, 4 ft module',
     category: 'wall',
     quantity: exteriorWallPanels,
     unit: 'each',
@@ -270,7 +270,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   if (interiorWallPanels) {
     addBom(bom, {
       componentId: 'wall-int',
-      description: 'Interior wall panel, 1.2m module',
+      description: 'Interior wall panel, 4 ft module',
       category: 'wall',
       quantity: interiorWallPanels,
       unit: 'each',
@@ -324,7 +324,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   }
   addBom(bom, {
     componentId: 'floor-std',
-    description: 'Floor cassette, 1.2m grid',
+    description: 'Floor cassette, 4 ft grid',
     category: 'floor',
     quantity: Math.ceil(home.footprint.width / PANEL_WIDTH_FT) * Math.ceil(home.footprint.depth / PANEL_WIDTH_FT),
     unit: 'each',
@@ -343,7 +343,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   if (deckPanels) {
     addBom(bom, {
       componentId: 'floor-deck',
-      description: 'Exterior deck panel, 1.2m grid',
+      description: 'Exterior deck panel, 4 ft grid',
       category: 'floor',
       quantity: deckPanels,
       unit: 'each',

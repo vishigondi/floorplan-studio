@@ -140,6 +140,60 @@ _(bug → class → test → root-cause fix → commit)_
 _Frontier: every generated plan must be buildable as a WikiHouse plywood panel
 kit, and the 3D model must match the 2D/code source of truth._
 
+### Post-loop audit (2026-07-22, independent re-validation of the MFG work)
+Re-verified the manufacturability loop's claims from scratch rather than trusting
+the log. Result: **the work stands**; two small honesty defects found and fixed.
+- **Units traced end-to-end (the load-bearing assumption of `check:buildable`):**
+  `build-validator` reads `DenHome.sourceWalls` in **4 ft GRID units** (×4);
+  `lib/bim/semantic-bim.ts` independently agrees (`GRID_FT = 4`); traced stored
+  sourceWalls are grid (a-frame-22 x-range 0..9.01 ×4 = 36.0 ft = its exact
+  footprint); and `lib/data.ts` emits derived walls/openings through `ftToGrid`
+  (= /4). So the gate's ÷4 adapter is FAITHFUL to the real app path
+  (28 ft → 7 grid → ×4 → 28 ft). `validateBuildability` is genuinely wired into
+  the app (lib/data.ts, app/page.tsx) — the gate covers a live path, not a stub.
+  _(An intermediate probe that omitted `ftToGrid` appeared to show 4×-inflated
+  "12 ft doors"; that was the probe being unfaithful, not the app. Recorded so
+  the false alarm isn't rediscovered.)_
+- **DEFECT FIXED — stale module strings:** six user-facing strings still said
+  "1.2m" after the module became 4 ft, one self-contradictory: _"is 27.56ft, not
+  N x 1.2m (nearest 7 panels is 28.00ft)"_. Now derived from `PANEL_WIDTH_FT`
+  (rule label, blocker message, and 4 BOM descriptions).
+- **Scope stated explicitly:** traced reference plans remain `blocked`
+  (wall-module/openings) — they are image-traced organic geometry off the 4 ft
+  grid by nature (they fail WH-GRID-4FT too). Not a regression; documented in
+  `check-buildable.mjs` so "buildable" is read as a claim about GENERATED plans.
+- Gates re-run independently: `npm run gates` + `gates:live` green.
+
+**Guardrail audit across the whole session (UX + GEN + MFG, 120+ commits):**
+- **Protected artifacts never modified** — 0 commits touch a-frame-22,
+  a-frame-bunk, outpost-medium, or gen-001.
+- **"Gates assert MORE, never less" held:** +93 `check()` assertions added, **0
+  removed** (check-generation +62, check-elevations +19, check-brief +5,
+  check-envelope-clip +4, check-code-advisory +3). No tolerance was loosened —
+  the only lib/ diffs against the numeric invariants are message-text changes.
+- **UX-era gates untouched** by the later loops and green in every live ladder;
+  the commits PROJECT_STATUS cites for the 12 UX classes all exist and match.
+
+**Mutation testing — do the gates actually BITE?** Each fix was reverted in place,
+the battery re-run, then restored. All 9 caught the reintroduced bug (exit≠0) and
+returned to green (exit 0):
+
+| reverted fix | battery | verdict |
+|---|---|---|
+| fire 1 — stop refusing >4-bed briefs | check:generation | ✅ bites |
+| fire 6 — parser drops orphan setbacks | check:brief | ✅ bites |
+| fire 7 — compact bath loses its lavatory | check:generation | ✅ bites |
+| fire 9 — bedroom windows back to `fixed` | check:generation | ✅ bites |
+| fire 9 — engine accepts `fixed` as egress | check:code | ✅ bites |
+| fire 12 — stop emitting loft guard rails | check:generation | ✅ bites |
+| fire 19 — 4-bed room off the 4 ft grid | check:generation | ✅ bites |
+| M3 — flat roof back to a non-SKU 9 ft wall | check:buildable | ✅ bites |
+| M4 — revert to the over-conservative simple span | check:buildable | ✅ bites |
+| M6 — unsnap the loft band from the module | check:buildable | ✅ bites |
+
+No vacuous gates found: every substantive claim in both loops is backed by an
+assertion that fails when the fix is removed.
+
 ### M-fire 10 — clean (fresh angles) — 2nd consecutive clean → MANUFACTURABILITY LOOP CLOSED
 - **Drove fresh angles, no defect:** (a) loft-plan 3D envelope-clip — every
   loft-capable style (a-frame/gable/gambrel/barn + loft) clips with 0 envelope
