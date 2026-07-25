@@ -9,6 +9,7 @@ import type { SceneHandle } from '@/components/three/Scene';
 import FloorPlanView from '@/components/FloorPlanView';
 import { DEFAULT_RENDER_THEME_ID, RENDER_THEMES } from '@/lib/render-themes';
 import { validateBuildability } from '@/lib/build-validator';
+import { MAX_TEMPLATE_BEDROOMS, MAX_TEMPLATE_BATHS } from '@/lib/generate/compile-plan';
 import type { DenHome, PairedGeometryAudit, RenderMode, RenderedModelBounds, RenderThemeId, RoofSemantics } from '@/lib/types';
 import { semanticBimFromHome, semanticBimSummary } from '@/lib/bim/semantic-bim';
 import { exportExperimentalIfc } from '@/lib/bim/export-ifc';
@@ -4049,8 +4050,8 @@ function GalleryBriefGenerate() {
         <div className="mt-1.5 text-[10px]" data-home-brief-echo>
           <span className="text-stone-500">
             Understood: {[
-              `${Math.max(1, Math.min(3, echo.bedrooms ?? 2))} bed${(echo.bedrooms ?? 2) > 3 ? ' (max 3)' : ''}`,
-              `${Math.max(1, Math.min(2, Math.round(echo.baths ?? 1)))} bath${Math.round(echo.baths ?? 1) > 2 ? ' (max 2)' : ''}`,
+              `${Math.max(1, Math.min(MAX_TEMPLATE_BEDROOMS, echo.bedrooms ?? 2))} bed${(echo.bedrooms ?? 2) > MAX_TEMPLATE_BEDROOMS ? ` (max ${MAX_TEMPLATE_BEDROOMS})` : ''}`,
+              `${Math.max(1, Math.min(MAX_TEMPLATE_BATHS, Math.round(echo.baths ?? 1)))} bath${Math.round(echo.baths ?? 1) > MAX_TEMPLATE_BATHS ? ` (max ${MAX_TEMPLATE_BATHS})` : ''}`,
               echo.roofStyle ?? 'a-frame',
               echo.hasLoft ? 'loft' : null,
               echo.maxSqft ? `≤${echo.maxSqft} sqft` : null,

@@ -93,6 +93,11 @@ const EPS = 1e-6;
  * rather than silently collapsed to a 3-bedroom plan that misrepresents it. */
 export const MAX_TEMPLATE_BEDROOMS = 4;
 
+/** Baths the deterministic templates host (a 2nd bath needs a primary footprint).
+ * Exported for the same reason as the bedroom ceiling: the UI's brief echo states
+ * this cap to the user, and a hardcoded copy there silently drifts when it moves. */
+export const MAX_TEMPLATE_BATHS = 2;
+
 /** Roof styles the deterministic generator actually builds (geometry, planes,
  * elevations, and clipping all implemented). A brief requesting any other
  * recognized style is refused at compile rather than silently substituted with
@@ -909,7 +914,7 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
               : 'a-frame';
   // Second bath is supported on the primary footprints only (2-bed at 28 ft,
   // 3-bed at 36 ft); 1-bed programs stay single-bath.
-  const bathsRequested = bedrooms === 1 ? 1 : Math.max(1, Math.min(2, Math.round(brief.baths ?? 1)));
+  const bathsRequested = bedrooms === 1 ? 1 : Math.max(1, Math.min(MAX_TEMPLATE_BATHS, Math.round(brief.baths ?? 1)));
   const hostsTwoBaths = (w: number) => (bedrooms === 2 && w === 28) || (bedrooms === 3 && w === 36);
 
   // Candidate footprints, largest first. Gables offer narrow/shallow variants

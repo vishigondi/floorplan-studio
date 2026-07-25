@@ -13,6 +13,7 @@
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
@@ -484,6 +485,19 @@ for (const [label, brief] of [['2-bed barn (square)', '2 bed barn roof, 40x60 lo
     check(`${label}: ${bed.id} R305 passes`, statusOf(bReport, 'IRC-R305.1', bed.id) === 'pass', statusOf(bReport, 'IRC-R305.1', bed.id));
   }
   check(`${label}: zero constraint-fail findings`, bReport.findings.filter((f) => f.status === 'fail').length === 0, bReport.findings.filter((f) => f.status === 'fail').map((f) => f.ruleId).join(', '));
+}
+
+// --- The UI's brief echo must not hardcode the template ceiling -------------
+// The brief echo ("Understood: N bed (max M)") states the generator's bedroom
+// cap to the user. When it hardcodes a literal, raising MAX_TEMPLATE_BEDROOMS
+// leaves the UI contradicting the compiler in the SAME view — the echo said
+// "3 bed (max 3)" while the refusal underneath said "builds at most 4".
+// The echo must derive the cap from the exported constant, not a literal.
+{
+  const pageSource = readFileSync(join(root, 'app/page.tsx'), 'utf8');
+  const echoLine = pageSource.split('\n').find((line) => line.includes('bed${') && line.includes('max'));
+  check('brief echo derives the bedroom cap from MAX_TEMPLATE_BEDROOMS', Boolean(echoLine) && /MAX_TEMPLATE_BEDROOMS/.test(echoLine), echoLine?.trim().slice(0, 110) ?? 'echo line not found');
+  check('app imports MAX_TEMPLATE_BEDROOMS (single source of truth)', /MAX_TEMPLATE_BEDROOMS/.test(pageSource));
 }
 
 // --- 4-bedroom synthesis (fire 19) ------------------------------------------
