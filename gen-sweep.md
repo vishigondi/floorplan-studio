@@ -25,6 +25,47 @@ reliably produce sound, correctly code-checked plans you'd hand to an architect.
    traced plans + gen-001 untouched; keep every data-* hook; delete throwaway
    gen-* after each fire.
 
+## Skylark v1.0 — inspected the real repo (2026-08-15)
+
+Cloned `wikihouseproject/Skylark` (1.2 GB) and read the actual data, not the
+marketing pages. **The kit layer we were about to invent already exists.**
+
+- **58 blocks, 517 DXF cut files**, each block shipping DXF + SKP + DWG + 3DM +
+  a `*_production.csv` (`Label,Quantity` — literally the cut list we were going
+  to design) + a CNC doc. Tolerance offsets and dog-bone pockets are
+  pre-applied; layer conventions are standardised (`4_ANYTOOL_CUTTHROUGH_OUTSIDE`,
+  `5_ANYTOOL_HALF_MILL_9MM_INSIDE`, …). Licence CC BY-SA 4.0.
+- **Sheet spec: `0_SHEET_SPRUCEPLY_2440X1220X18`.** 1220 mm = **4.003 ft** — this
+  VALIDATES the 4 ft panel-module decision from MFG fire 3. The original
+  build-validator constant (1.2 m = 3.937 ft) was simply wrong; real WikiHouse
+  sheets are 1220 mm, i.e. 4 ft. Good: our module already matches the standard.
+- **Block vocabulary:** Walls `C-*` (corner), `G-*`, `V-*`, `W-{L,M,S}`;
+  Floors `E-*`/`F-*`; Roofs `R-{L,S,XXS}` + `-42` variants; Openings
+  `W-O-{L,M,S}-{1..5}`; Ties. Part counts per block are real (R-L-42 = 14 parts,
+  E-L = 21, W-S = 4).
+
+**THE COLLISION — roof coverage.** Skylark 150 ships **6 roof blocks**:
+`R-L`, `R-S`, `R-XXS` and their `-42` variants — essentially ONE roof archetype
+at two pitches per span. Our generator builds **7 roof styles** (a-frame 50.5°,
+gable 23.2°, flat 0°, shed 15.9°, hip 23.2°, gambrel/barn 29.7°). **Most of them
+cannot be built from Skylark 150 blocks.** WikiHouse says so themselves: this
+release has "3 room spans, limited roof profiles"; Skylark 200 is unreleased.
+
+So the roof-style breadth built in fires 14–18 is partly **design freedom the
+open kit cannot deliver**. Options: (a) constrain the generator to
+Skylark-expressible geometry; (b) keep the wider styles but mark them
+NOT-KIT-BUILDABLE (visualisation only); (c) author custom roof blocks — which is
+exactly the joint-authoring we adopted the standard to avoid.
+**Recommended: (a)+(b) — make Skylark-buildability a first-class gate**, so a plan
+is either kit-buildable with real cut files, or honestly flagged as not. Same
+honest-refusal pattern the rest of the pipeline already uses.
+
+**Integration notes:** do NOT vendor 1.2 GB of DXF into this repo — reference it
+(submodule or an extracted metadata subset: block index + production CSVs).
+CC BY-SA means redistributed derivatives of their files carry BY-SA and
+attribution; using the data to drive our software is fine, but get a real legal
+read before shipping derivative cut files.
+
 ## Standards + competitive landscape (2026-08-15) — decisions
 
 **Adopt standards; stop inventing the parts layer.**
