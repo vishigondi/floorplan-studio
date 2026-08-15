@@ -25,6 +25,47 @@ reliably produce sound, correctly code-checked plans you'd hand to an architect.
    traced plans + gen-001 untouched; keep every data-* hook; delete throwaway
    gen-* after each fire.
 
+## Standards + competitive landscape (2026-08-15) — decisions
+
+**Adopt standards; stop inventing the parts layer.**
+- **Kit/joinery → WikiHouse Skylark v1.0.** Block library + CNC files live in the
+  `wikihouseproject/Skylark` GitHub repo (plus a public Airtable), CC-ShareAlike,
+  free for commercial use. Nothing in this repo references Skylark today —
+  `lib/bim/component-registry.ts` is a home-grown marketplace-asset registry over
+  generic categories, NOT a WikiHouse construction system. Skylark becomes the
+  part vocabulary; we do not author joints. (Check the ShareAlike terms before
+  shipping derivatives.)
+- **BIM interchange → IFC (ISO 16739), via the `web-ifc` already installed.**
+  `lib/bim/export-ifc.ts` currently emits a placeholder: a valid ISO-10303-21
+  header wrapping a comment, no entities. Elements already carry `segment`
+  geometry, `floor`, and `ifcClass`, so mapping to IfcProject/Site/Building/
+  Storey/Wall/Slab/Space is bounded finishing work, not invention.
+- **Installed-but-unused:** `@thatopen/fragments`, `ui`, `ui-obc`,
+  `components-front` have zero imports (`@thatopen/components` is used only by
+  `BimPreview`). Either adopt `fragments` or drop the three dead packages.
+
+**Landscape — who else is doing this (3 searches, not exhaustive):**
+- **Higharc** is the heavyweight: $95M Series C (Jun 2026), >$170M total; brief →
+  build-ready homes with construction documents, live estimates, shoppable 3D.
+  Notably they use "spatial AI, distinct from LLMs" + multi-model validation to
+  prevent hallucination + humans in the loop — independent convergence on OUR
+  architecture (deterministic compiler + mechanical gates, never let a model
+  hallucinate geometry). Aimed at volume homebuilders on conventional framing.
+- **Generative design/BIM:** Finch3D, Snaptrude, Autodesk Forma, TestFit — design
+  exploration + BIM, stop before manufacturing.
+- **Prefab with in-house software:** Veev (permit→delivery <30 days), Plant
+  Prefab, Aro Homes, and **AUAR** (robotic micro-factory, modular timber wall/
+  floor/roof panels) — AUAR is the closest cousin, but its panels and factory are
+  proprietary.
+- **The gap:** none of them pairs an OPEN, non-proprietary kit (Skylark) with
+  verifiable code + manufacturability gates and honest refusals. Competing with
+  Higharc on breadth is unwinnable; the defensible wedge is open standard +
+  provable correctness — which is exactly the asset this repo already has.
+
+**What this changes:** Skylark adoption is strategy, not convenience. IFC export
+rises in priority (interop with the BIM world the competition lives in). The
+design-vocabulary gap stays the blocker on anything sellable.
+
 ## Backlog
 _(updated each fire)_
 
