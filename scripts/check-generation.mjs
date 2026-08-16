@@ -19,6 +19,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
 const { codeAdvisoryReport } = await import(join(root, 'lib/standards/code-advisory.ts'));
+const { ceilingHeightAt, ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelope-clip.ts'));
+const ceilingPlanes = (artifact) => ceilingPlanesFromRoofPoints(artifact.roof?.planes ?? []);
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -303,6 +305,27 @@ for (const testCase of CASES) {
       bedWindows.length > 0 && bedWindows.every((win) => win.windowKind && win.windowKind !== 'fixed'),
       bedWindows.map((win) => `${win.id}:${win.windowKind}`).join(', '),
     );
+    // PHYSICAL REALIZABILITY (the universal property, not a per-roof case): an
+    // egress opening must fit the wall that hosts it. The envelope varies across
+    // a facade, so an opening authored blind to the roof can land where there is
+    // no wall — an a-frame once put both bedroom egress windows on a 2.13 ft
+    // eave, which R310 passed because it only checked presence and operability.
+    // Openings are now RESOLVED against the ceiling planes; this proves it.
+    for (const win of bedWindows) {
+      let lowest = Infinity;
+      for (let t = 0; t <= 1; t += 0.25) {
+        const x = win.span.x1 + (win.span.x2 - win.span.x1) * t;
+        const z = win.span.z1 + (win.span.z2 - win.span.z1) * t;
+        lowest = Math.min(lowest, ceilingHeightAt(ceilingPlanes(artifact), x, z));
+      }
+      const clearHeight = (lowest - 0.3) - 0.3;
+      const widthFt = Math.hypot(win.span.x2 - win.span.x1, win.span.z2 - win.span.z1);
+      check(
+        `egress opening physically fits its wall for ${bedroom.id} (${win.id})`,
+        clearHeight >= 24 / 12 && clearHeight * widthFt >= 5.7,
+        `clear ${clearHeight.toFixed(2)} ft x ${widthFt.toFixed(1)} ft = ${(clearHeight * widthFt).toFixed(1)} sqft at wall height ${lowest.toFixed(2)} ft`,
+      );
+    }
   }
   check('4 ft grid passes', statusOf(report, 'WH-GRID-4FT') === 'pass');
   const lotExpectation = testCase.hasLot ? 'pass' : 'not-evaluated';

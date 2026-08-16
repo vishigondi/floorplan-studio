@@ -47,3 +47,6 @@ next-env.d.ts
 # commit downloaded provider payloads unless they become licensed release assets.
 /public/data/bim-components/staging/
 /public/data/bim-components/providers/
+
+# Ad-hoc visual QA captures (scripts/qa-shots.mjs) — scratch, not a gate
+.qa-shots/

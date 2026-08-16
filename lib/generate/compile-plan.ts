@@ -11,6 +11,10 @@
 // generated footprint is refused on the SAME threshold the report would fail
 // (one source of truth — never two 0.35s that can drift apart).
 import { DEFAULT_MAX_COVERAGE_RATIO } from '../standards/code-advisory.ts';
+// Openings are RESOLVED against the envelope, never authored blind to it — the
+// templates' spans are preferences, the roof decides what is physically possible.
+import { resolveEgressWindow } from './place-openings.ts';
+import { ceilingPlanesFromRoofPoints } from '../bim/envelope-clip.ts';
 
 export interface IntentRoom {
   id: string;
@@ -693,6 +697,40 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
           { id: 'roof-plane-north-slope', role: 'roof-plane', points: [{ x: -overhang, y: eave, z: -overhang }, { x: widthFt + overhang, y: eave, z: -overhang }, { x: widthFt + overhang, y: ridge, z: midZ }, { x: -overhang, y: ridge, z: midZ }] },
           { id: 'roof-plane-south-slope', role: 'roof-plane', points: [{ x: -overhang, y: ridge, z: midZ }, { x: widthFt + overhang, y: ridge, z: midZ }, { x: widthFt + overhang, y: eave, z: depthFt + overhang }, { x: -overhang, y: eave, z: depthFt + overhang }] },
         ];
+  // --- Envelope-aware opening resolution ------------------------------------
+  // The roof now exists, so every sleeping room's egress opening is checked
+  // against the REAL ceiling planes (the same ones the 3D clip and elevations
+  // use) and relocated to a wall that can actually host it. Authored spans are
+  // preferences; the envelope is the authority. A room with no legal wall is
+  // refused rather than shipped with an unbuildable escape opening.
+  const ceilingPlanes = ceilingPlanesFromRoofPoints(planes);
+  for (const window of windows) {
+    const roomId = window.roomIds?.[0];
+    if (!roomId || !sleepingRoomIds.has(roomId)) continue;
+    const room = rooms.find((candidate) => candidate.id === roomId);
+    if (!room) continue;
+    const resolved = resolveEgressWindow(
+      { id: room.id, x: room.x, z: room.z, w: room.w, d: room.d },
+      window.span,
+      ceilingPlanes,
+      { widthFt, depthFt },
+    );
+    if (!resolved.span) {
+      errors.push(resolved.reason ?? `sleeping room ${roomId} has no viable egress wall`);
+      continue;
+    }
+    if (resolved.relocated) {
+      window.span = resolved.span;
+      window.wallId = wallFor(resolved.span)?.id;
+      window.facing = wallFor(resolved.span)?.facing;
+      notes.push(
+        `${window.id} moved to the ${window.facing ?? 'nearest viable'} wall of ${roomId}: the authored position `
+        + `left too little wall under the ${roof.style} roof for an IRC R310.1 egress opening`,
+      );
+    }
+  }
+  if (errors.length) return { ok: false, errors };
+
   const flatOutline = (spanFt: number) => [
     { x: -overhang, y: ridge }, { x: spanFt + overhang, y: ridge }, { x: spanFt + overhang, y: slabTop }, { x: -overhang, y: slabTop },
   ];
