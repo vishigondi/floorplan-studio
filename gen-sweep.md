@@ -218,6 +218,59 @@ would be the FIRST of the two consecutive clean fires.
 ## Findings log
 _(bug → class → test → root-cause fix → commit)_
 
+## ARCHITECTURE — placement resolves against the envelope (2026-08-16)
+
+_Not a fire. This is the ordering/authority fault the per-plan sweeps kept
+producing symptoms of, fixed once at the level where it lives._
+
+**The fault.** Openings and fixtures were authored in **2D plan coordinates,
+before the roof existed** — spans were literals in `mockIntentFromBrief`; the
+roof is computed later in `compileIntent`. `ceilingHeightAt` — the shared
+envelope query the 3D clip, the elevations and the constraint engine all use —
+was **never consulted by placement**. So the envelope was a thing plans were
+*checked against* (sometimes) rather than *placed within*. Unbuildable geometry
+was therefore the guaranteed output of any roof whose height varies across a
+facade, not an edge case. Sweeping more plans would have produced an endless
+list of symptoms; the correct fix is to invert the authority — templates
+propose, the envelope disposes.
+
+**Three symptoms, one cause, one inversion:**
+
+1. **Openings** (`lib/generate/place-openings.ts`) — an a-frame put its bedroom
+   EGRESS windows on the **2.13 ft eave wall**: a legal impossibility R310
+   passed, because the engine checked presence and operability but never whether
+   the opening could physically exist. `resolveEgressWindow` keeps the authored
+   span when it genuinely works (stability), else slides along the room's
+   exterior walls to the best position satisfying R310, else refuses honestly.
+2. **Fixtures** (`lib/generate/place-fixtures.ts`) — same blindness: a **kitchen
+   counter under 2.36 ft of ceiling**, a sink under 2.47 ft, a sofa under 3.83 ft.
+   Every existing gate passed (in-room, clear of neighbours); nothing asked how
+   much air was above. Thresholds are code-derived, not taste: **6'8"** (R305.1
+   bath minimum — the height you stand at a fixture) for standing use, **5 ft**
+   (R305's habitable-area cutoff) for seated/lying.
+3. **Elevations** — the drawing set was a hardcoded `[front, side]` pair, so once
+   openings correctly resolve to the rear or right wall, **those walls were drawn
+   nowhere**. The set now derives from the openings: a facade carrying an opening
+   gets an elevation. A shed's two x-faces genuinely differ (x=0 at the ridge,
+   x=width at the eave), so `right` derives from the eave — a derivation, not a
+   special case.
+
+**Gates assert MORE (three universal invariants, all mutation-tested):**
+- egress realizability — every sleeping room's egress opening must fit the
+  envelope where it actually sits;
+- fixture headroom — every fixture has the headroom its use requires
+  (390 assertions across the matrix);
+- documentation completeness — every facade carrying an opening is drawn
+  (98 assertions). This **replaced** two `elevations.length === 2` count checks:
+  the count was a weak proxy, and the property it stood in for is strictly
+  stronger. Not a loosening — the mutation (revert to a fixed front+side pair)
+  fails with `facade with openings is drawn: rear: front, side`.
+
+**Result.** a-frame: 0 fixture-headroom violations, egress relocated with honest
+notes, drawing set front/side/rear/right; gable and shed unchanged where the
+envelope never conflicted (nothing moves without cause). `npm run gates` and
+`npm run gates:live` green.
+
 ## NEW LOOP — Manufacturability + 3D (started 2026-06-22)
 _Frontier: every generated plan must be buildable as a WikiHouse plywood panel
 kit, and the 3D model must match the 2D/code source of truth._

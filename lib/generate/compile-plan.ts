@@ -14,6 +14,7 @@ import { DEFAULT_MAX_COVERAGE_RATIO } from '../standards/code-advisory.ts';
 // Openings are RESOLVED against the envelope, never authored blind to it — the
 // templates' spans are preferences, the roof decides what is physically possible.
 import { resolveEgressWindow } from './place-openings.ts';
+import { resolveFixturePlacement } from './place-fixtures.ts';
 import { ceilingPlanesFromRoofPoints } from '../bim/envelope-clip.ts';
 
 export interface IntentRoom {
@@ -792,6 +793,42 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
               { id: 'side-gable', view: 'side', outline: [{ x: -overhang, y: eave }, { x: midZ, y: ridge }, { x: depthFt + overhang, y: eave }] },
           ];
 
+  // --- The drawing set derives from the openings, not a fixed pair ----------
+  // Elevations used to be hardcoded to exactly [front, side]. Once openings are
+  // resolved against the envelope they can legitimately land on the rear or right
+  // facade (an a-frame's bedroom egress moves to the rear gable), and those walls
+  // then appeared in NO elevation — a plan that is correct but undocumented.
+  // A facade that carries an opening must be drawn.
+  const EPSF = 0.35;
+  const facadeCarriesOpening = (axis: 'x' | 'z', at: number) =>
+    [...windows, ...doors].some((op) => {
+      const span = op.span as { x1: number; z1: number; x2: number; z2: number } | undefined;
+      if (!span) return false;
+      return axis === 'x'
+        ? Math.abs(span.x1 - at) < EPSF && Math.abs(span.x2 - at) < EPSF
+        : Math.abs(span.z1 - at) < EPSF && Math.abs(span.z2 - at) < EPSF;
+    });
+  const frontElevation = elevations.find((e) => e.view === 'front');
+  const sideElevation = elevations.find((e) => e.view === 'side');
+  const derivedElevations = [...elevations];
+  // Rear (z = depth) mirrors the front profile for every roof here: all styles
+  // are symmetric across the ridge, and the shed slopes along x so both z-faces
+  // are identical.
+  if (facadeCarriesOpening('z', depthFt) && frontElevation) {
+    derivedElevations.push({ id: `rear-${roof.style}`, view: 'rear', outline: frontElevation.outline });
+  }
+  // Right (x = width) mirrors the side profile EXCEPT on a shed, whose x-faces
+  // differ by construction: x=0 stands at the ridge, x=width at the eave.
+  if (facadeCarriesOpening('x', widthFt) && sideElevation) {
+    const outline = isShed
+      ? [
+        { x: -overhang, y: eave }, { x: depthFt + overhang, y: eave },
+        { x: depthFt + overhang, y: eave - 0.35 }, { x: -overhang, y: eave - 0.35 },
+      ]
+      : sideElevation.outline;
+    derivedElevations.push({ id: `right-${roof.style}`, view: 'right', outline });
+  }
+
   const artifact: Record<string, unknown> = {
     schemaVersion: 'paired_gpt_floorplan_v1',
     planId,
@@ -825,13 +862,23 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     doors,
     windows,
     openings,
-    fixtures: starterFixtures(intent, allWalls),
+    fixtures: starterFixtures(intent, allWalls).map((fixture) => {
+      // Fixtures resolve against the envelope for the same reason openings do:
+      // a bed or a shower under a 2 ft eave is drawn-but-unusable space.
+      const room = rooms.find((candidate) => candidate.id === fixture.roomId);
+      if (!room || !fixture.bounds) return fixture;
+      const resolved = resolveFixturePlacement(fixture.type, fixture.bounds, room, ceilingPlanes);
+      if (resolved.unplaceable) { notes.push(resolved.unplaceable); return fixture; }
+      if (!resolved.moved) return fixture;
+      notes.push(`${fixture.id} moved within ${room.id} to keep the headroom its use requires under the ${roof.style} roof`);
+      return { ...fixture, bounds: resolved.bounds };
+    }),
     dimensionLines: [
       { id: 'dim-width', span: { x1: 0, z1: -2, x2: widthFt, z2: -2 }, label: `${widthFt}'-0"` },
       { id: 'dim-depth', span: { x1: -2, z1: 0, x2: -2, z2: depthFt }, label: `${depthFt}'-0"` },
     ],
     roof: { style: roof.style, ridgeAxis: roof.ridgeAxis, ridgeHeightFt: ridge, eaveHeightFt: eave, overhangFt: overhang, roofThicknessFt: 0.35, planes },
-    elevations,
+    elevations: derivedElevations,
   };
 
   // Loft level: appended after validation (it is derived from the roof, not an

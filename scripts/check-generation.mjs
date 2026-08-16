@@ -21,6 +21,7 @@ const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/gene
 const { codeAdvisoryReport } = await import(join(root, 'lib/standards/code-advisory.ts'));
 const { ceilingHeightAt, ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelope-clip.ts'));
 const ceilingPlanes = (artifact) => ceilingPlanesFromRoofPoints(artifact.roof?.planes ?? []);
+const { headroomOverFt, requiredHeadroomFt } = await import(join(root, 'lib/generate/place-fixtures.ts'));
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -284,6 +285,48 @@ for (const testCase of CASES) {
     const fxTypes = (artifact.fixtures ?? []).filter((f) => f.roomId === bathroom.id).map((f) => f.type ?? '');
     check(`bathroom ${bathroom.id} has a lavatory`, fxTypes.some((t) => /sink|vanity/i.test(t)), JSON.stringify(fxTypes));
   }
+  // PHYSICAL USABILITY (universal property): every fixture must have the
+  // headroom its use requires — 6'8" to stand at (R305 bath minimum), 5 ft to
+  // occupy (below R305's cutoff the floor area does not count at all). Fixtures
+  // used to be authored in 2D with no ceiling query, so an a-frame would place a
+  // bed or a shower under a ~2 ft eave: drawn, gated, and unusable.
+  for (const fx of artifact.fixtures ?? []) {
+    if (!fx.bounds) continue;
+    const head = headroomOverFt(ceilingPlanes(artifact), fx.bounds);
+    const need = requiredHeadroomFt(fx.type);
+    check(
+      `fixture has usable headroom: ${fx.id} (${fx.type})`,
+      head >= need - 1e-6,
+      `${head.toFixed(2)} ft available, needs ${need.toFixed(2)} ft`,
+    );
+  }
+
+  // DOCUMENTATION COMPLETENESS (universal property): every facade that carries
+  // an opening must appear in the drawing set. The set used to be a hardcoded
+  // [front, side] pair, so once openings resolve against the envelope and land
+  // on the rear or right wall, those walls were drawn nowhere.
+  {
+    const EPSF = 0.35;
+    const faces = [
+      { view: 'front', axis: 'z', at: 0 },
+      { view: 'rear', axis: 'z', at: artifact.footprint.depthFt },
+      { view: 'side', axis: 'x', at: 0 },
+      { view: 'right', axis: 'x', at: artifact.footprint.widthFt },
+    ];
+    const ops = [...(artifact.windows ?? []), ...(artifact.doors ?? [])].filter((o) => o.span);
+    for (const face of faces) {
+      const carries = ops.some((o) => face.axis === 'x'
+        ? Math.abs(o.span.x1 - face.at) < EPSF && Math.abs(o.span.x2 - face.at) < EPSF
+        : Math.abs(o.span.z1 - face.at) < EPSF && Math.abs(o.span.z2 - face.at) < EPSF);
+      if (!carries) continue;
+      check(
+        `facade with openings is drawn: ${face.view}`,
+        (artifact.elevations ?? []).some((e) => e.view === face.view),
+        (artifact.elevations ?? []).map((e) => e.view).join(', '),
+      );
+    }
+  }
+
   const badCallouts = artifact.rooms.filter((room, index) => room.calloutNumber !== index + 1);
   check('callout numbers are 1..N', badCallouts.length === 0);
 
@@ -406,7 +449,7 @@ const flatPlane = (flat.artifact?.roof?.planes ?? [])[0];
 const flatYs = (flatPlane?.points ?? []).map((p) => p.y);
 check('flat roof plane is horizontal (ridge == eave)', flatYs.length > 0 && Math.max(...flatYs) - Math.min(...flatYs) < 1e-6 && flat.artifact.roof.ridgeHeightFt === flat.artifact.roof.eaveHeightFt, `${flat.artifact?.roof?.ridgeHeightFt}/${flat.artifact?.roof?.eaveHeightFt}`);
 check('flat roof stays single level (no loft band under a flat roof)', flat.artifact?.footprint?.levels !== 2);
-check('flat roof elevations are valid outlines (>=3 pts)', (flat.artifact?.elevations ?? []).length === 2 && (flat.artifact?.elevations ?? []).every((e) => (e.outline ?? []).length >= 3));
+check('flat roof elevations are valid outlines (>=3 pts)', (flat.artifact?.elevations ?? []).length >= 2 && (flat.artifact?.elevations ?? []).every((e) => (e.outline ?? []).length >= 3));
 const flatReport = reportForArtifact(flat.artifact);
 const flatBeds = flat.artifact.rooms.filter((r) => r.type === 'bedroom');
 for (const bed of flatBeds) {
@@ -427,7 +470,7 @@ check('shed roof actually slopes (ridge > eave)', shed.artifact?.roof?.ridgeHeig
 const shedPlaneYs = ((shed.artifact?.roof?.planes ?? [])[0]?.points ?? []).map((p) => p.y);
 check('shed plane spans ridge..eave', shedPlaneYs.length > 0 && Math.abs(Math.max(...shedPlaneYs) - shed.artifact.roof.ridgeHeightFt) < 1e-6 && Math.abs(Math.min(...shedPlaneYs) - shed.artifact.roof.eaveHeightFt) < 1e-6);
 check('shed roof stays single level', shed.artifact?.footprint?.levels !== 2);
-check('shed roof elevations are valid outlines (>=3 pts)', (shed.artifact?.elevations ?? []).length === 2 && (shed.artifact?.elevations ?? []).every((e) => (e.outline ?? []).length >= 3));
+check('shed roof elevations are valid outlines (>=3 pts)', (shed.artifact?.elevations ?? []).length >= 2 && (shed.artifact?.elevations ?? []).every((e) => (e.outline ?? []).length >= 3));
 // The across-slope (front) elevation must be ASYMMETRIC: one end at ridge, the
 // other at eave — not a centered gable apex.
 const shedFront = (shed.artifact?.elevations ?? []).find((e) => e.view === 'front');
