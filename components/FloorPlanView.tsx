@@ -72,6 +72,11 @@ interface Props {
   dimensionLines?: SourceDimensionLine[];
   dimensionFrame?: DimensionFrame;
   floorFrames?: Array<DimensionFrame & { floor: number }>;
+  /** Compiled plans derive their level frames, so stacked levels must share one
+   *  building frame. Traced plans keep the per-floor frame their source drawing
+   *  had — the floor frame records a size but no origin, so it can never place
+   *  an upper level; only a shared frame can. */
+  sharedLevelFrame?: boolean;
   /** Trace mode keeps parsed GPT comparisons close to the source proposal style. */
   traceMode?: boolean;
   drawingStyleProfile?: DrawingStyleProfile;
@@ -2076,7 +2081,7 @@ function FloorLevel({
   const labelVisible = showFloorLabel ?? true;
 
   return (
-    <g data-role="floor-level" data-source-floor={floorNum} transform={`translate(${offsetX}, ${offsetY})`}>
+    <g data-role="floor-level" data-source-floor={floorNum} data-frame-width={floorFp.width} data-frame-depth={floorFp.depth} data-frame-x={offsetX} transform={`translate(${offsetX}, ${offsetY})`}>
       {/* Floor level label */}
       {labelVisible && (
         <text
@@ -3293,6 +3298,7 @@ export default function FloorPlanView({
   dimensionLines,
   dimensionFrame,
   floorFrames,
+  sharedLevelFrame,
   traceMode = false,
   drawingStyleProfile,
   annotations,
@@ -3406,7 +3412,7 @@ export default function FloorPlanView({
     }> = [];
 
     // Precompute per-floor footprints first so we can center them consistently
-    const perFloorFp = floorGroups.map(([floorNum, floorRooms]) => {
+    const floorInputs = floorGroups.map(([floorNum, floorRooms]) => {
       const bounds = floorRooms.map(roomGridBounds);
       const floorSourceWalls = sourceWalls?.filter((wall) => (wall.floor ?? 0) === floorNum);
       const floorSourceOpenings = sourceOpenings?.filter((opening) => (opening.floor ?? 0) === floorNum);
@@ -3426,10 +3432,29 @@ export default function FloorPlanView({
         : [];
       const faceBounds = traceMode ? (floorSpaceFaces ?? []).map(spaceFaceGridBounds) : [];
       const traceBounds = traceMode ? [...bounds, ...faceBounds, ...wallBounds, ...frameBounds] : bounds;
-      const minGx = Math.min(...traceBounds.map(r => r.gx));
-      const minGz = Math.min(...traceBounds.map(r => r.gz));
-      const maxGx = Math.max(...traceBounds.map(r => r.gx + r.gw));
-      const maxGz = Math.max(...traceBounds.map(r => r.gz + r.gd));
+      return { floorNum, floorRooms, floorSourceWalls, floorSourceOpenings, floorSpaceFaces, floorDimensionLines, floorDimensionFrame, traceBounds };
+    });
+
+    // ONE FRAME FOR THE WHOLE BUILDING. A loft normalised into its own frame,
+    // at its own offset, cannot be read against the rooms below it, and the
+    // "ground floor outline" ghost then outlines the loft itself. Compiled
+    // plans DERIVE this frame, so it must span every level. Traced plans carry
+    // an authored per-floor frame from the drawing they came from and keep it —
+    // the two lanes have genuinely different sources of truth for the frame.
+    const sharedFrame = sharedLevelFrame && floorInputs.length > 1
+      ? {
+        minGx: Math.min(...floorInputs.flatMap((f) => f.traceBounds.map((r) => r.gx))),
+        minGz: Math.min(...floorInputs.flatMap((f) => f.traceBounds.map((r) => r.gz))),
+        maxGx: Math.max(...floorInputs.flatMap((f) => f.traceBounds.map((r) => r.gx + r.gw))),
+        maxGz: Math.max(...floorInputs.flatMap((f) => f.traceBounds.map((r) => r.gz + r.gd))),
+      }
+      : null;
+
+    const perFloorFp = floorInputs.map(({ floorNum, floorRooms, floorSourceWalls, floorSourceOpenings, floorSpaceFaces, floorDimensionLines, floorDimensionFrame, traceBounds }) => {
+      const minGx = sharedFrame ? sharedFrame.minGx : Math.min(...traceBounds.map(r => r.gx));
+      const minGz = sharedFrame ? sharedFrame.minGz : Math.min(...traceBounds.map(r => r.gz));
+      const maxGx = sharedFrame ? sharedFrame.maxGx : Math.max(...traceBounds.map(r => r.gx + r.gw));
+      const maxGz = sharedFrame ? sharedFrame.maxGz : Math.max(...traceBounds.map(r => r.gz + r.gd));
       const normalizedRooms = floorRooms.map((room) => ({
         ...room,
 	        gx: room.gx - minGx,
@@ -3512,7 +3537,7 @@ export default function FloorPlanView({
     }
 
     return layouts;
-  }, [connections, dimensionFrame, dimensionLines, floorFrames, floorGroups, hasMultipleFloors, rooms, sourceWalls, sourceOpenings, spaceFaces, footprint, stackFloors, traceMode]);
+  }, [connections, dimensionFrame, dimensionLines, floorFrames, floorGroups, hasMultipleFloors, rooms, sourceWalls, sourceOpenings, spaceFaces, footprint, sharedLevelFrame, stackFloors, traceMode]);
 
   const traceLegendEntries = useMemo(() => {
     if (!traceMode) return [];

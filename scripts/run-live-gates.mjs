@@ -10,7 +10,8 @@
 // Usage: npm run gates:live   (or `npm run gates:all` for the whole ladder)
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import http from 'node:http';
 
 const PORT = process.env.LIVE_GATE_PORT || '3000';
@@ -27,8 +28,28 @@ const freePort = () => {
 
 // A production server needs a build. Build if one isn't present so the runner
 // works standalone; `gates:all` will already have built.
-if (!existsSync('.next/BUILD_ID')) {
-  console.log('[live-gates] no build found — running `npm run build` first');
+//
+// A build that is merely PRESENT is not enough: running `gates:live` alone after
+// editing a source file used to serve the previous build, so the live gates
+// reported on code nobody had written. A gate that tests stale code is worse
+// than no gate. Rebuild whenever a source file is newer than the build.
+const buildIsStale = () => {
+  if (!existsSync('.next/BUILD_ID')) return true;
+  const builtAt = statSync('.next/BUILD_ID').mtimeMs;
+  const newest = (dir) => {
+    let latest = 0;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const full = join(dir, entry.name);
+      latest = Math.max(latest, entry.isDirectory() ? newest(full) : statSync(full).mtimeMs);
+    }
+    return latest;
+  };
+  return ['app', 'components', 'lib'].some((dir) => existsSync(dir) && newest(dir) > builtAt);
+};
+
+if (buildIsStale()) {
+  console.log('[live-gates] build missing or older than the sources — running `npm run build` first');
   const build = run('npm', ['run', 'build']);
   if (build.status !== 0) process.exit(build.status ?? 1);
 }
@@ -75,12 +96,18 @@ console.log('[live-gates] server ready — running live gates against', ORIGIN);
 const env = { ...process.env, BROCHURE_QA_URL: ORIGIN, SWEEP_URL: ORIGIN };
 const qa = run('npm', ['run', 'qa:brochure'], { env });
 const sweep = run('npm', ['run', 'verify'], { env });
+// The drawing the customer sees. Three defects (stacked fixtures, undrawn
+// rear/right facades, a loft drawn in its own frame) all shipped past a green
+// offline ladder, because the batteries check the artifact and not the picture.
+// The quick set covers a compiled multi-level plan, a compiled single-level one
+// and a traced one; `npm run check:visual` sweeps the whole matrix.
+const visual = run('npm', ['run', 'check:visual:quick'], { env: { ...env, SWEEP_BASE: ORIGIN } });
 
 shutdown();
 
-const failed = (qa.status ?? 1) !== 0 || (sweep.status ?? 1) !== 0;
+const failed = (qa.status ?? 1) !== 0 || (sweep.status ?? 1) !== 0 || (visual.status ?? 1) !== 0;
 if (failed) {
-  console.error(`[live-gates] FAILED — qa:brochure exit ${qa.status}, sweep exit ${sweep.status}`);
+  console.error(`[live-gates] FAILED — qa:brochure exit ${qa.status}, sweep exit ${sweep.status}, visual exit ${visual.status}`);
   process.exit(1);
 }
 console.log('[live-gates] all live gates green');

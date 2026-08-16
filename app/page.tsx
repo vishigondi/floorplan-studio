@@ -3841,6 +3841,7 @@ function PairedComparison({ home, mode, onModeChange }: { home: DenHome; mode: C
         jsonOnly: isJsonOnlyPlan(home),
       }}
       floorFrames={home.floorFrames}
+      sharedLevelFrame={isJsonOnlyPlan(home)}
       traceMode={home.pairedArtifact}
       drawingStyleProfile={home.drawingStyleProfile}
     />
@@ -3901,7 +3902,7 @@ function PairedComparison({ home, mode, onModeChange }: { home: DenHome; mode: C
       </div>
 
       {effectiveMode === 'compare' ? (
-        <div className="relative z-0 grid gap-4 xl:grid-cols-2">
+        <div className="relative z-0 grid gap-4 xl:grid-cols-2" data-plan-lane={isJsonOnlyPlan(home) ? 'compiled' : 'traced'}>
           <figure className="rounded-lg border border-stone-200 bg-white p-3 shadow-[0_14px_30px_-22px_rgba(41,37,36,0.25)]">
             {isJsonOnlyPlan(home) ? (
               <>
@@ -4433,6 +4434,7 @@ function FeedCard({ home, index, lifecycle, deletable, onOpen, onRepair, onDelet
               dimensionLines={home.dimensionLines}
               dimensionFrame={home.dimensionFrame}
               floorFrames={home.floorFrames}
+              sharedLevelFrame={isJsonOnlyPlan(home)}
               traceMode={home.pairedArtifact}
               drawingStyleProfile={home.drawingStyleProfile}
             />

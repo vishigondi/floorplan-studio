@@ -41,7 +41,9 @@
     "goal:audit": "node scripts/drafted-product-audit.mjs",
     "qa:brochure": "node scripts/brochure-visual-qa.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:visual": "node scripts/visual-sweep.mjs",
+    "check:visual:quick": "node scripts/visual-sweep.mjs --only loft-showcase,gen-001,a-frame-22"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

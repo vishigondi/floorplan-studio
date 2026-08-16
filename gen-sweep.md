@@ -335,6 +335,76 @@ front / side / **rear** (both egress windows) / **right** (kitchen window), the
 last two previously drawn nowhere. Traced plans are untouched (that panel shows
 the GPT proposal for them, not the semantic set). `npm run gates` green.
 
+## ARCHITECTURE fire 3 — the visual sweep, and the loft drawn in its own frame (2026-08-16)
+
+_Built the harness the last two fires proved was missing: `scripts/visual-sweep.mjs`
+drives every plan the app SERVES in a real browser, captures plan + full drawing
+set + 3D, and asserts on the rendered DOM. `scripts/contact-sheet.py` tiles the
+captures so a whole matrix can be reviewed at once instead of one plan at a time._
+
+### The defect: a loft is drawn in its own frame, not the building's
+- **Found by looking** at the contact sheet: the two loft plans showed a LOFT
+  LEVEL floating below the MAIN LEVEL, narrower and offset, with a dashed box
+  around it that reads as the ground-floor outline but is not.
+- **Measured, not eyeballed:** `loft-showcase` rendered `L0 28x28@48` and
+  `L1 18x28@123`. Different extent, different origin.
+- **Root cause:** `FloorPlanView` computes each level's frame as the bounding box
+  of THAT level's own rooms, normalises those rooms to it, then centres each
+  level independently. A loft is therefore drawn stripped of its position in the
+  building — you cannot see which rooms it sits above — and the `floorNum > 0`
+  "ground floor outline ghost" outlines the loft itself. Underneath sits the real
+  limitation: a floor frame records a width and depth but **no origin**
+  (`gx: 0, gz: 0`), so it can never place an upper level; only a shared frame can.
+- **Class:** _a derived drawing frame computed per level instead of per building._
+- **Fix:** stacked levels of a compiled plan share ONE frame spanning the whole
+  building; rooms keep their true coordinates within it. Scoped to the compiled
+  lane by an explicit `sharedLevelFrame` prop — traced plans carry an authored
+  per-floor frame from the drawing they came from, and we do not overrule the
+  source (P4). Verified: `a-frame-bunk` (traced, guardrailed) is byte-identical
+  before and after; `loft-showcase` and the generated lofts now render
+  `L0 28x28@48  L1 28x28@48`, loft aligned under the rooms it covers.
+- **Gate asserts MORE:** the sweep asserts _stacked levels share one drawing
+  frame_ for compiled plans, reading `data-frame-width/depth/x`. Mutation
+  (`sharedLevelFrame={false}`) fails with `L0 28x28@48  L1 18x28@123`; the traced
+  plan correctly never trips it either way.
+
+### Two things I chased that were NOT defects (recorded so they are not re-chased)
+- **"Archived plans 404 / do not render."** The sweep was enumerating plan
+  DIRECTORIES; the app serves 6 of 35 (the rest are archived, artifacts moved to
+  `paired/archive/`). Measuring the wrong population. The sweep now enumerates
+  `data-feed-plan-id` from the feed — what the app actually serves.
+- **"A deep link to a missing plan silently shows the gallery."** It does not:
+  `[data-plan-not-found]` renders "The plan X wasn't found ..." and the tab title
+  becomes "Plan not found". My probe's regex missed "wasn't". Verified positively.
+- The console 404s in the first sweep were **my own** dangling manifest entries
+  from deleting plan directories with `rm -rf` instead of the delete API. The
+  delete API (manifest + directory) is the only correct path; 60 leftover `gen-*`
+  plans from this and earlier live-gate runs were removed through it.
+
+### Result across the whole matrix
+18 plans swept (7 roof styles x 1-3 bedrooms, both loft variants, small lot, plus
+every stored plan the app serves): **0 failures**. Every roof style renders its
+own silhouette in plan, elevation and 3D; every exterior opening is drawn on
+exactly one facade; no invented openings; no console errors; stacked levels share
+a frame. Quantified from the sweep data: before fire 2, every plan in this matrix
+was missing **2-3 windows** from its drawing set (gable-family: `right`=2
+undrawn; a-frame: `rear`=2 + `right`=1).
+
+`npm run check:visual` sweeps the matrix; `check:visual:quick` (a compiled
+multi-level plan, a compiled single-level one, a traced one) is wired into
+`gates:live` so the picture is gated on every run, not only when someone looks.
+
+### Gate integrity: `gates:live` could test code nobody had written
+Chasing the sweep's console-404s (which turned out to be my own `npm run dev`
+and the production server both writing `.next`) surfaced a real hole:
+`run-live-gates.mjs` built only `if (!existsSync('.next/BUILD_ID'))`, so running
+`gates:live` alone after editing a source file served the PREVIOUS build. A gate
+that reports on stale code is worse than no gate. It now rebuilds whenever any
+file under `app/`, `components/` or `lib/` is newer than `.next/BUILD_ID`
+(verified both ways: false when fresh, true after touching one source file).
+`npm run gates` already rebuilds, so the sanctioned pre-commit path was safe —
+the standalone one was not.
+
 ## NEW LOOP — Manufacturability + 3D (started 2026-06-22)
 _Frontier: every generated plan must be buildable as a WikiHouse plywood panel
 kit, and the 3D model must match the 2D/code source of truth._
