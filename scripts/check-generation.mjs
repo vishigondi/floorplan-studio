@@ -22,6 +22,7 @@ const { codeAdvisoryReport } = await import(join(root, 'lib/standards/code-advis
 const { ceilingHeightAt, ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelope-clip.ts'));
 const ceilingPlanes = (artifact) => ceilingPlanesFromRoofPoints(artifact.roof?.planes ?? []);
 const { headroomOverFt, requiredHeadroomFt } = await import(join(root, 'lib/generate/place-fixtures.ts'));
+const { PLACEMENT_CLEARANCE_FT: CLEARANCE_FT } = await import(join(root, 'lib/generate/placement.ts'));
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -299,6 +300,28 @@ for (const testCase of CASES) {
       head >= need - 1e-6,
       `${head.toFixed(2)} ft available, needs ${need.toFixed(2)} ft`,
     );
+  }
+
+  // NON-COLLISION (universal property): no two fixtures may occupy the same
+  // floor. Envelope-aware relocation makes this a live risk — a placement rule
+  // that optimises one fixture at a time sends every fixture in a room to the
+  // same optimum and silently stacks them. Nothing asserted this before, which
+  // is exactly why a plan could ship four kitchen fixtures on one spot.
+  {
+    const fxs = (artifact.fixtures ?? []).filter((fx) => fx.bounds);
+    for (let i = 0; i < fxs.length; i += 1) {
+      for (let j = i + 1; j < fxs.length; j += 1) {
+        const a = fxs[i].bounds;
+        const b = fxs[j].bounds;
+        const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+        const iz = Math.min(a.z + a.d, b.z + b.d) - Math.max(a.z, b.z);
+        check(
+          `fixtures do not overlap: ${fxs[i].id} / ${fxs[j].id}`,
+          !(ix > CLEARANCE_FT && iz > CLEARANCE_FT),
+          `${ix.toFixed(2)} x ${iz.toFixed(2)} ft of shared floor`,
+        );
+      }
+    }
   }
 
   // DOCUMENTATION COMPLETENESS (universal property): every facade that carries

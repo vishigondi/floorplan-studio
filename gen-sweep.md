@@ -271,6 +271,70 @@ notes, drawing set front/side/rear/right; gable and shed unchanged where the
 envelope never conflicted (nothing moves without cause). `npm run gates` and
 `npm run gates:live` green.
 
+## ARCHITECTURE fire 2 — the drawing layer, and a regression I shipped (2026-08-16)
+
+_Found by DRIVING the real surface and LOOKING: generated a plan through the
+live API, screenshotted plan + elevations + 3D, then read the artifact JSON._
+
+### (a) My own regression: envelope-aware relocation stacked the fixtures
+- **Bug:** the plan drawing showed a pile of furniture. The artifact confirmed
+  **7 overlapping fixture pairs** — all four kitchen fixtures on one spot.
+- **Cause:** fire 1's `resolveFixturePlacement` resolved each fixture ALONE
+  against a single objective, "most headroom". Every fixture in a room therefore
+  converged on the same optimum (the ridge). Correct per fixture, nonsense per
+  room.
+- **Class:** _a placement rule that optimises one element at a time produces
+  collisions when it relocates several._
+- **Root cause fix:** resolve AS A SET (`resolveFixtureSet`), with two rules now
+  shared with openings in `lib/generate/placement.ts` (P7): **minimum
+  displacement**, not maximum headroom — the authored layout is design intent and
+  relocation should disturb it as little as the envelope allows — and **each
+  element clears the ones already placed**.
+- **Ordering matters, and it took two tries.** Anchoring the comfortable fixtures
+  first let a 4 ft table block the 8 ft sofa group out of the only band tall
+  enough to hold it, and the room reported "unplaceable" though both plainly fit.
+  The rule is first-fit-decreasing: **the tightest fit chooses first**, measured
+  as the free area its room leaves it. One rule, and it subsumes the roof case.
+
+### (b) Pre-existing, exposed by the new gate: templates author fixtures on top of each other
+- On small-lot plans (`1-bed gable 30x50`, `3-bed gable 40x70`) the template put
+  the dining table **2.50 x 3.50 ft on top of the sofa** — a pure 2D template
+  overlap under a roof with headroom to spare, shipped for as long as those
+  templates have existed and never gated. Now resolved (table moves 3.5 ft).
+
+### (c) The drawing layer could only draw two of the four facades
+- **Bug (this is the one that mattered):** fire 1 added rear/right entries to
+  `artifact.elevations` and gated them — but `lib/elevations.ts`, which is what
+  the app and `check:elevations` actually DRAW from, took `side: 'front'|'side'`
+  and matched openings only at z=0 / x=0. So of the a-frame's 4 windows, **3 were
+  drawn nowhere — including both bedroom EGRESS windows.** The screenshot showed
+  "SIDE ELEVATION - 0 OPENINGS" beside a plan full of windows.
+- **My fire-1 claim that the relocated egress windows were "documented" was
+  wrong**: the metadata listed them, no drawing showed them. Two sources of
+  truth, which is exactly what P7 forbids — and my gate asserted on the one that
+  does not drive the drawing.
+- **Class:** _a gate that asserts on metadata instead of on the artifact the user
+  actually sees can pass while the defect ships._
+- **Root-cause fix:** one facade model (`facadeFor`) for all four elevations —
+  axis, fixed coordinate, span, and the view-from-outside mirror, applied once at
+  the end so silhouette and openings cannot disagree. Front and side keep their
+  exact existing convention (nothing drawn today changes); rear and right are
+  defined as the mirror of the face they oppose. The UI renders every facade that
+  carries an opening.
+- **Gate asserts MORE:** `check:elevations` now asserts the real property across
+  7 roof styles x 1-3 bedrooms — **every exterior opening belongs to exactly one
+  facade and is drawn on that facade's elevation** (105 assertions). Mutating
+  `onFacade` back to z=0/x=0 fails with `right draws []` and the rear elevation
+  drawing the front's openings — i.e. it reproduces the shipped bug exactly.
+- **Also new:** `check:generation` asserts **no two fixtures overlap** (2385
+  assertions). Nothing asserted this before, which is why (a) and (b) both shipped.
+
+**Verified on the real surface, not just in the batteries:** regenerated the
+a-frame through the live API — 0 overlapping fixture pairs, and the UI renders
+front / side / **rear** (both egress windows) / **right** (kitchen window), the
+last two previously drawn nowhere. Traced plans are untouched (that panel shows
+the GPT proposal for them, not the semantic set). `npm run gates` green.
+
 ## NEW LOOP — Manufacturability + 3D (started 2026-06-22)
 _Frontier: every generated plan must be buildable as a WikiHouse plywood panel
 kit, and the 3D model must match the 2D/code source of truth._

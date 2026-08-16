@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
-const { buildElevationModel, elevationSvgString } = await import(join(root, 'lib/elevations.ts'));
+const { buildElevationModel, elevationSvgString, facadeFor } = await import(join(root, 'lib/elevations.ts'));
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -32,10 +32,18 @@ function compiled(brief) {
 }
 
 function expectedFacadeOpenings(artifact, side) {
-  const onFacade = (span) => (side === 'front'
-    ? Math.max(Math.abs(span.z1), Math.abs(span.z2)) < 0.35
-    : Math.max(Math.abs(span.x1), Math.abs(span.x2)) < 0.35);
-  const center = (span) => (side === 'front' ? (span.x1 + span.x2) / 2 : (span.z1 + span.z2) / 2);
+  const { widthFt, depthFt } = artifact.footprint;
+  const facade = facadeFor(side, widthFt, depthFt);
+  const onFacade = (span) => {
+    const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+    return Math.max(Math.abs(c1 - facade.atFt), Math.abs(c2 - facade.atFt)) < 0.35;
+  };
+  const center = (span) => {
+    const [a, b] = facade.axis === 'z' ? [span.x1, span.x2] : [span.z1, span.z2];
+    const along = (a + b) / 2;
+    // Seen from outside, opposite faces run in opposite directions.
+    return facade.mirrored ? facade.spanFt - along : along;
+  };
   const doors = (artifact.doors ?? []).filter((d) => d.openingType === 'exteriorDoor' && onFacade(d.span)).map((d) => center(d.span));
   const windows = (artifact.windows ?? []).filter((w) => onFacade(w.span)).map((w) => center(w.span));
   return [...doors, ...windows].sort((a, b) => a - b);
@@ -170,6 +178,55 @@ check('zero openings drawn', bareModel.openings.length === 0);
 check('svg has no window rects', !elevationSvgString(bareModel).includes('#eef4f4'));
 
 console.log('');
+// ---------------------------------------------------------------------------
+// DRAWING-SET COMPLETENESS (universal property, every roof style x bedroom
+// count): every exterior opening must be drawn in exactly one elevation.
+//
+// This is the assertion that was missing. The drawing set was a hardcoded
+// [front, side] pair while `onFacade` only ever matched z=0 and x=0, so an
+// opening on the rear or right wall was silently dropped from every drawing --
+// including bedroom EGRESS windows, which is the one opening a plan may never
+// leave undocumented. Counting elevations could not catch it; asking whether
+// each opening is actually drawn does.
+console.log('universal: every exterior opening is drawn in exactly one elevation');
+const VIEWS = ['front', 'rear', 'side', 'right'];
+for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn']) {
+  for (const beds of [1, 2, 3]) {
+    if (style === 'a-frame' && beds > 3) continue;
+    let artifact;
+    try {
+      artifact = compiled(`${beds} bed ${style} roof, 80x100 lot, 10 ft setbacks`);
+    } catch {
+      continue; // refused briefs are the refusal battery's business, not this one
+    }
+    const { widthFt, depthFt } = artifact.footprint;
+    const exterior = [
+      ...(artifact.doors ?? []).filter((d) => d.openingType === 'exteriorDoor'),
+      ...(artifact.windows ?? []),
+    ].filter((o) => o.span);
+    for (const opening of exterior) {
+      const { span } = opening;
+      const home = VIEWS.filter((view) => {
+        const facade = facadeFor(view, widthFt, depthFt);
+        const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+        return Math.abs(c1 - facade.atFt) < 0.35 && Math.abs(c2 - facade.atFt) < 0.35;
+      });
+      check(
+        `${beds}-bed ${style}: ${opening.id} belongs to exactly one facade`,
+        home.length === 1,
+        home.join(', ') || 'no facade',
+      );
+      if (home.length !== 1) continue;
+      const model = buildElevationModel(artifact, home[0]);
+      check(
+        `${beds}-bed ${style}: ${opening.id} is drawn on the ${home[0]} elevation`,
+        model.openings.some((drawn) => drawn.id === opening.id),
+        `${home[0]} draws [${model.openings.map((o) => o.id).join(', ')}]`,
+      );
+    }
+  }
+}
+
 if (failures) {
   console.error(`${failures} elevation check(s) failed`);
   process.exit(1);

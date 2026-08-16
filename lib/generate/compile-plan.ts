@@ -14,7 +14,7 @@ import { DEFAULT_MAX_COVERAGE_RATIO } from '../standards/code-advisory.ts';
 // Openings are RESOLVED against the envelope, never authored blind to it — the
 // templates' spans are preferences, the roof decides what is physically possible.
 import { resolveEgressWindow } from './place-openings.ts';
-import { resolveFixturePlacement } from './place-fixtures.ts';
+import { resolveFixtureSet } from './place-fixtures.ts';
 import { ceilingPlanesFromRoofPoints } from '../bim/envelope-clip.ts';
 
 export interface IntentRoom {
@@ -705,6 +705,7 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
   // preferences; the envelope is the authority. A room with no legal wall is
   // refused rather than shipped with an unbuildable escape opening.
   const ceilingPlanes = ceilingPlanesFromRoofPoints(planes);
+  const roomRects = new Map(rooms.map((room) => [room.id, { id: room.id, x: room.x, z: room.z, w: room.w, d: room.d }]));
   for (const window of windows) {
     const roomId = window.roomIds?.[0];
     if (!roomId || !sleepingRoomIds.has(roomId)) continue;
@@ -862,17 +863,24 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     doors,
     windows,
     openings,
-    fixtures: starterFixtures(intent, allWalls).map((fixture) => {
+    fixtures: (() => {
       // Fixtures resolve against the envelope for the same reason openings do:
-      // a bed or a shower under a 2 ft eave is drawn-but-unusable space.
-      const room = rooms.find((candidate) => candidate.id === fixture.roomId);
-      if (!room || !fixture.bounds) return fixture;
-      const resolved = resolveFixturePlacement(fixture.type, fixture.bounds, room, ceilingPlanes);
-      if (resolved.unplaceable) { notes.push(resolved.unplaceable); return fixture; }
-      if (!resolved.moved) return fixture;
-      notes.push(`${fixture.id} moved within ${room.id} to keep the headroom its use requires under the ${roof.style} roof`);
-      return { ...fixture, bounds: resolved.bounds };
-    }),
+      // a bed or a shower under a 2 ft eave is drawn-but-unusable space. They
+      // resolve AS A SET, so a displaced fixture never lands on one already
+      // placed (resolving each alone sends the whole room to one optimum).
+      const authored = starterFixtures(intent, allWalls);
+      const resolutions = resolveFixtureSet(authored, roomRects, ceilingPlanes);
+      return authored.map((fixture) => {
+        const resolved = resolutions.get(fixture.id);
+        if (!resolved) return fixture;
+        if (resolved.unplaceable) { notes.push(resolved.unplaceable); return fixture; }
+        if (!resolved.moved || !resolved.bounds) return fixture;
+        notes.push(resolved.reason === 'clearance'
+          ? `${fixture.id} moved within ${fixture.roomId} to keep it clear of the other fixtures`
+          : `${fixture.id} moved within ${fixture.roomId} to keep the headroom its use requires under the ${roof.style} roof`);
+        return { ...fixture, bounds: resolved.bounds };
+      });
+    })(),
     dimensionLines: [
       { id: 'dim-width', span: { x1: 0, z1: -2, x2: widthFt, z2: -2 }, label: `${widthFt}'-0"` },
       { id: 'dim-depth', span: { x1: -2, z1: 0, x2: -2, z2: depthFt }, label: `${depthFt}'-0"` },

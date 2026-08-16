@@ -17,7 +17,7 @@ import { bimAssetRegistrySummary } from '@/lib/bim/component-registry';
 import { localBimAssetSummary, localVisualAssetAttributions } from '@/lib/bim/component-assets';
 import { buildableBimFromHome, buildableBimSummary } from '@/lib/bim/buildable-bim';
 import { standardsRegistrySummary, validateStandards, codeAdvisoryReportForHome, lotFromArtifact } from '@/lib/standards/floorplan-standards';
-import { buildElevationModel, elevationSvgString, type ElevationArtifactInput } from '@/lib/elevations';
+import { buildElevationModel, elevationSvgString, facadeFor, type ElevationArtifactInput, type ElevationView } from '@/lib/elevations';
 import { LOOKS, buildLookRenderPrompt, lookRenderSpecFromArtifact, type LookId, type LookRenderMode } from '@/lib/look-render';
 import { CODE_ADVISORY_RULES, type CodeAdvisoryFinding } from '@/lib/standards/code-advisory';
 import { parseBrief, briefToPromptFields } from '@/lib/brief';
@@ -1648,7 +1648,7 @@ function escapeHtml(value: unknown) {
 }
 
 /** Elevation model from the paired artifact (honest openings, real roof). */
-function elevationModelForHome(home: DenHome, side: 'front' | 'side') {
+function elevationModelForHome(home: DenHome, side: ElevationView) {
   const raw = rawObject(home.pairedArtifactJson) as unknown as Partial<ElevationArtifactInput> | null;
   const roofRaw = (raw?.roof ?? {}) as ElevationArtifactInput['roof'];
   const artifact: ElevationArtifactInput = {
@@ -1700,7 +1700,7 @@ function lookRenderSpecForHome(home: DenHome) {
 }
 
 /** Standalone elevation SVG, derived from the artifact (no invented openings). */
-function elevationSvgMarkup(home: DenHome, side: 'front' | 'side'): string {
+function elevationSvgMarkup(home: DenHome, side: ElevationView): string {
   return elevationSvgString(elevationModelForHome(home, side));
 }
 
@@ -3905,10 +3905,11 @@ function PairedComparison({ home, mode, onModeChange }: { home: DenHome; mode: C
           <figure className="rounded-lg border border-stone-200 bg-white p-3 shadow-[0_14px_30px_-22px_rgba(41,37,36,0.25)]">
             {isJsonOnlyPlan(home) ? (
               <>
-                <figcaption className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Elevations - Front + Side</figcaption>
-                <div className="flex h-[min(72vh,760px)] flex-col gap-3 overflow-auto">
-                  <SemanticElevationView home={home} side="front" />
-                  <SemanticElevationView home={home} side="side" />
+                <figcaption className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Elevations - Drawing Set</figcaption>
+                <div className="flex h-[min(72vh,760px)] flex-col gap-3 overflow-auto" data-elevation-views={drawnElevationViews(home).join(',')}>
+                  {drawnElevationViews(home).map((view) => (
+                    <SemanticElevationView key={view} home={home} side={view} />
+                  ))}
                 </div>
               </>
             ) : (
@@ -3952,7 +3953,36 @@ function PairedComparison({ home, mode, onModeChange }: { home: DenHome; mode: C
   );
 }
 
-function SemanticElevationView({ home, side }: { home: DenHome; side: 'front' | 'side' }) {
+/**
+ * Which elevations this plan needs. Front and side are always drawn (they carry
+ * the silhouette). Rear and right join them when they carry an opening — a wall
+ * with a window and no drawing is a wall nobody can build, and once openings
+ * resolve against the envelope they land wherever the roof leaves room.
+ */
+function drawnElevationViews(home: DenHome): ElevationView[] {
+  const raw = rawObject(home.pairedArtifactJson) as unknown as {
+    footprint?: { widthFt?: number; depthFt?: number };
+    windows?: Array<{ span?: { x1: number; z1: number; x2: number; z2: number } }>;
+    doors?: Array<{ span?: { x1: number; z1: number; x2: number; z2: number } }>;
+  } | null;
+  const widthFt = Number(raw?.footprint?.widthFt ?? home.footprint.width);
+  const depthFt = Number(raw?.footprint?.depthFt ?? home.footprint.depth);
+  const spans = [...(raw?.windows ?? []), ...(raw?.doors ?? [])]
+    .map((opening) => opening.span)
+    .filter((span): span is { x1: number; z1: number; x2: number; z2: number } => Boolean(span));
+  const views: ElevationView[] = ['front', 'side'];
+  for (const view of ['rear', 'right'] as const) {
+    const facade = facadeFor(view, widthFt, depthFt);
+    const carries = spans.some((span) => {
+      const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+      return Math.abs(c1 - facade.atFt) < 0.35 && Math.abs(c2 - facade.atFt) < 0.35;
+    });
+    if (carries) views.push(view);
+  }
+  return views;
+}
+
+function SemanticElevationView({ home, side }: { home: DenHome; side: ElevationView }) {
   const model = elevationModelForHome(home, side);
   const svg = elevationSvgString(model);
   return (

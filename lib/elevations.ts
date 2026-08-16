@@ -69,7 +69,7 @@ export interface ElevationOpening {
 
 export interface ElevationModel {
   planId: string;
-  side: 'front' | 'side';
+  side: ElevationView;
   spanFt: number;
   eaveFt: number;
   ridgeFt: number;
@@ -104,9 +104,46 @@ export interface ElevationModel {
 // (wall thickness); compiled artifacts sit exactly on it.
 const FACADE_TOLERANCE_FT = 1.6;
 
-function facadeCeiling(planes: CeilingPlane[], side: 'front' | 'side', coord: number, fallback: number): number {
+/**
+ * The four facades of a rectangular footprint. A drawing set has four
+ * elevations, not two: once openings resolve against the envelope they land on
+ * whichever wall actually has room, and a wall that carries an opening no
+ * drawing shows is a wall nobody can build.
+ *
+ * `mirrored` is the view-from-outside convention: opposite faces run in
+ * opposite directions (looking at the rear, +x is on your left). Front and side
+ * keep the existing unmirrored convention exactly, so no drawing that exists
+ * today changes; rear and right are defined as the mirror of the face they
+ * oppose, which is the relationship a real drawing set has regardless.
+ */
+export type ElevationView = 'front' | 'rear' | 'side' | 'right';
+
+export interface FacadeGeometry {
+  /** The axis held constant across this facade. */
+  axis: 'x' | 'z';
+  /** Where that axis sits — 0 or the far edge. */
+  atFt: number;
+  /** Length of the facade, in feet. */
+  spanFt: number;
+  /** Does the along-axis run backwards when seen from outside? */
+  mirrored: boolean;
+}
+
+export function facadeFor(view: ElevationView, widthFt: number, depthFt: number): FacadeGeometry {
+  switch (view) {
+    case 'rear': return { axis: 'z', atFt: depthFt, spanFt: widthFt, mirrored: true };
+    case 'side': return { axis: 'x', atFt: 0, spanFt: depthFt, mirrored: false };
+    case 'right': return { axis: 'x', atFt: widthFt, spanFt: depthFt, mirrored: true };
+    default: return { axis: 'z', atFt: 0, spanFt: widthFt, mirrored: false };
+  }
+}
+
+/** Ceiling height just inside the facade, at `coord` along it (plan coords). */
+function facadeCeiling(planes: CeilingPlane[], facade: FacadeGeometry, coord: number, fallback: number): number {
   if (!planes.length) return fallback;
-  const [x, z] = side === 'front' ? [coord, 0.05] : [0.05, coord];
+  // Sample a hair INSIDE the facade, whichever edge it is.
+  const inset = facade.atFt === 0 ? 0.05 : facade.atFt - 0.05;
+  const [x, z] = facade.axis === 'z' ? [coord, inset] : [inset, coord];
   const height = ceilingHeightAt(planes, x, z);
   return Number.isFinite(height) ? height : fallback;
 }
@@ -139,30 +176,30 @@ function openingFloorBase(opening: { levelIndex?: number; floor?: number; levelF
   return level >= 1 ? 8 : 0;
 }
 
-export function buildElevationModel(artifact: ElevationArtifactInput, side: 'front' | 'side'): ElevationModel {
+export function buildElevationModel(artifact: ElevationArtifactInput, side: ElevationView): ElevationModel {
   const { widthFt, depthFt } = artifact.footprint;
   const roof = artifact.roof;
   const ridgeAxis = roof.ridgeAxis === 'x' ? 'x' : 'z';
-  const spanFt = side === 'front' ? widthFt : depthFt;
-  // Ridge along z meets the z=0 (front) facade head-on -> front is a gable
-  // face. Ridge along x makes the x=0 (side) facade the gable face.
-  const gableFacing = side === 'front' ? ridgeAxis === 'z' : ridgeAxis === 'x';
+  const facade = facadeFor(side, widthFt, depthFt);
+  const spanFt = facade.spanFt;
+  // Ridge along z meets the z-facades (front/rear) head-on -> those are the
+  // gable faces. Ridge along x makes the x-facades (side/right) the gable faces.
+  const gableFacing = facade.axis === 'z' ? ridgeAxis === 'z' : ridgeAxis === 'x';
   const planes = ceilingPlanesFromRoofPoints(roof.planes ?? []);
   const eaveFt = roof.eaveHeightFt;
   const ridgeFt = roof.ridgeHeightFt;
   const facadeWallFt = gableFacing
     ? ridgeFt
-    : Math.max(0.6, facadeCeiling(planes, side, spanFt / 2, eaveFt));
+    : Math.max(0.6, facadeCeiling(planes, facade, spanFt / 2, eaveFt));
 
   const openings: ElevationOpening[] = [];
   const onFacade = (span?: { x1: number; z1: number; x2: number; z2: number }) => {
     if (!span) return false;
-    return side === 'front'
-      ? Math.max(Math.abs(span.z1), Math.abs(span.z2)) < FACADE_TOLERANCE_FT
-      : Math.max(Math.abs(span.x1), Math.abs(span.x2)) < FACADE_TOLERANCE_FT;
+    const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+    return Math.max(Math.abs(c1 - facade.atFt), Math.abs(c2 - facade.atFt)) < FACADE_TOLERANCE_FT;
   };
   const alongCoords = (span: { x1: number; z1: number; x2: number; z2: number }): [number, number] =>
-    side === 'front' ? [span.x1, span.x2] : [span.z1, span.z2];
+    facade.axis === 'z' ? [span.x1, span.x2] : [span.z1, span.z2];
 
   for (const door of artifact.doors ?? []) {
     // Compiled artifacts mark exterior doors; traced artifacts often omit
@@ -213,8 +250,8 @@ export function buildElevationModel(artifact: ElevationArtifactInput, side: 'fro
   // A shed roof's across-slope face is a single slope, not a centered apex.
   // Sample the roof at both ends of the span to learn which edge is high.
   const monoPitch = roof.style === 'shed';
-  const startCeil = facadeCeiling(planes, side, 0.05, eaveFt);
-  const endCeil = facadeCeiling(planes, side, Math.max(0.05, spanFt - 0.05), eaveFt);
+  const startCeil = facadeCeiling(planes, facade, 0.05, eaveFt);
+  const endCeil = facadeCeiling(planes, facade, Math.max(0.05, spanFt - 0.05), eaveFt);
   const monoPitchHighAtStart = startCeil >= endCeil;
 
   // A hip roof's long-side face is a trapezoid: the ridge runs only between the
@@ -244,6 +281,29 @@ export function buildElevationModel(artifact: ElevationArtifactInput, side: 'fro
     }
     : null;
 
+  // Mirror last, in one place: everything above is computed in PLAN
+  // along-coordinates, and a face seen from outside runs the other way. Doing
+  // it here means the silhouette and the openings can never disagree about
+  // which end is which.
+  if (facade.mirrored) {
+    for (const opening of openings) opening.center = spanFt - opening.center;
+    if (hipTrapezoid) {
+      const { ridgeStartFt, ridgeEndFt } = hipTrapezoid;
+      hipTrapezoid.ridgeStartFt = spanFt - ridgeEndFt;
+      hipTrapezoid.ridgeEndFt = spanFt - ridgeStartFt;
+    }
+    if (gambrel) {
+      const { knuckleStartFt, knuckleEndFt } = gambrel;
+      gambrel.knuckleStartFt = spanFt - knuckleEndFt;
+      gambrel.knuckleEndFt = spanFt - knuckleStartFt;
+    }
+    if (barnHip) {
+      const { ridgeStartFt, ridgeEndFt } = barnHip;
+      barnHip.ridgeStartFt = spanFt - ridgeEndFt;
+      barnHip.ridgeEndFt = spanFt - ridgeStartFt;
+    }
+  }
+
   openings.sort((lhs, rhs) => lhs.center - rhs.center);
   return {
     planId: artifact.planId ?? 'plan',
@@ -255,7 +315,7 @@ export function buildElevationModel(artifact: ElevationArtifactInput, side: 'fro
     gableFacing,
     facadeWallFt,
     monoPitch,
-    monoPitchHighAtStart,
+    monoPitchHighAtStart: facade.mirrored ? !monoPitchHighAtStart : monoPitchHighAtStart,
     hipTrapezoid,
     gambrel,
     barnHip,

@@ -42,8 +42,8 @@ async function clickView(name) {
 await clickView('Plan Top');
 await shotFigure('Deterministic Render', `${planId}-1-plan.png`);
 
-// 2. Elevations (front + side), drawn from the same compiled geometry
-await shotFigure('Elevations - Front + Side', `${planId}-2-elevations.png`);
+// 2. Elevations — every facade that carries an opening, from the same geometry
+await shotFigure('Elevations - Drawing Set', `${planId}-2-elevations.png`);
 
 // 3. BIM 3D -> the WebGL canvas
 await clickView('BIM 3D');
