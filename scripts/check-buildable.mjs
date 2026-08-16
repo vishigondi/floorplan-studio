@@ -69,6 +69,50 @@ function toHome(a) {
 
 const PANEL_FIT_RULES = ['wall-module', 'wall-height', 'openings', 'floor-span'];
 
+// --- Skylark kit envelope (2026-08-15) --------------------------------------
+// We build against the open WikiHouse Skylark 150 kit rather than authoring
+// joinery. Skylark ships ONE roof archetype (R-L/R-S/R-XXS, each with a -42
+// variant), so most of this generator's 7 roof styles are not kit-buildable —
+// and the published pitch angles are not recoverable from the CNC files.
+// The invariant gated here is HONESTY, not compatibility: a plan may never
+// report `buildable` while the verified pitch set is empty. Populate
+// SKYLARK_ROOF_PITCHES_DEG from the WikiHouse block database and plans at those
+// pitches start qualifying automatically — this gate then proves the upgrade.
+const { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG, SKYLARK_MODULE_FT, SKYLARK150_BLOCKS } =
+  await import(join(root, 'lib/kit/skylark.ts'));
+
+function roofPitchDeg(artifact) {
+  const roof = artifact.roof ?? {};
+  if (roof.style === 'flat') return 0;
+  const run = Math.max(0.1, (roof.ridgeAxis === 'x' ? artifact.footprint.depthFt : artifact.footprint.widthFt) / 2);
+  return Math.atan(((roof.ridgeHeightFt ?? 0) - (roof.eaveHeightFt ?? 0)) / run) * 180 / Math.PI;
+}
+
+console.log('skylark: kit envelope + honest not-buildable marking');
+// The 4 ft grid must equal the real Skylark sheet width (1220 mm), not 1.2 m.
+check('Skylark module matches the 4 ft structural grid', Math.abs(SKYLARK_MODULE_FT - 4) < 0.01, `${SKYLARK_MODULE_FT.toFixed(3)} ft`);
+check('Skylark 150 block index is present (58 blocks)',
+  Object.values(SKYLARK150_BLOCKS).reduce((n, group) => n + group.length, 0) === 58);
+
+for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn']) {
+  const res = compileIntent(mockIntentFromBrief(parseBrief(`2 bed ${style} roof, 80x100 lot, 10 ft setbacks`)), 'skylark-test', style);
+  if (!res.ok) { check(`${style}: compiles`, false, res.errors.join('; ')); continue; }
+  const a = res.artifact;
+  const wallLengthsFt = (a.exteriorWalls ?? []).filter((w) => w.span)
+    .map((w) => Math.hypot(w.span.x2 - w.span.x1, w.span.z2 - w.span.z1));
+  const kit = assessSkylarkKit({ roofStyle: a.roof.style, roofPitchDeg: roofPitchDeg(a), wallLengthsFt });
+
+  // HONESTY INVARIANT: never claim buildable without a verified pitch set.
+  check(`${style}: never claims kit-buildable without verified Skylark pitches`,
+    SKYLARK_ROOF_PITCHES_DEG.length > 0 || kit.status !== 'buildable', kit.status);
+  // Every assessment must give the user a reason, not a bare verdict.
+  check(`${style}: kit assessment states a reason`, kit.reasons.length > 0);
+  // Roof archetypes Skylark has no blocks for must be flagged outright.
+  if (['flat', 'shed', 'hip', 'gambrel', 'barn'].includes(style)) {
+    check(`${style}: flagged not-buildable (Skylark has no such roof block)`, kit.status === 'not-buildable', kit.status);
+  }
+}
+
 // Every roof style × a representative bedroom span, single level (loft walls are
 // a tracked open class). a-frame caps at 3 beds.
 const BRIEFS = [];
