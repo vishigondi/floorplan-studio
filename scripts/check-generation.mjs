@@ -681,6 +681,69 @@ check('compiles cleanly', flatRoofLoft.ok, flatRoofLoft.errors.join('; '));
 check('no loft under a no-headroom roof', !(flatRoofLoft.artifact?.floorPanels ?? []).some((panel) => panel.floor === 1));
 check('stays single level', flatRoofLoft.artifact?.footprint?.levels !== 2);
 
+// ---------------------------------------------------------------------------
+// THE CONSTRAINT ENGINE MUST BE ABLE TO SAY NO.
+//
+// Every other check here asks "does a good plan pass?". None asked the harder
+// question: does a BROKEN plan fail? A rule that never fires is indistinguishable
+// from a rule that is always satisfied, and the whole product rests on these
+// verdicts being real. So: take a plan the engine passes, break it in the exact
+// way each rule exists to catch, and require that rule to report `fail`.
+console.log('constraint engine: a deliberately broken plan must FAIL, per rule');
+{
+  const good = compileIntent(mockIntentFromBrief(parseBrief('2 bed gable, 60x90 lot, 10 ft setbacks')), 'engine-probe', 'x');
+  check('probe plan compiles', good.ok, (good.errors ?? []).join('; '));
+  if (good.ok) {
+    const clean = reportForArtifact(good.artifact);
+    check('probe plan starts with zero fails',
+      clean.findings.filter((f) => f.status === 'fail').length === 0,
+      clean.findings.filter((f) => f.status === 'fail').map((f) => f.ruleId).join(', '));
+
+    const clone = () => JSON.parse(JSON.stringify(good.artifact));
+    const failsFor = (artifact, ruleId) => reportForArtifact(artifact).findings
+      .some((f) => f.ruleId === ruleId && f.status === 'fail');
+
+    const BREAKAGES = [
+      ['IRC-R304.1', 'a 4x4 ft bedroom (16 sqft, under the 70 sqft minimum)', (a) => {
+        const bed = a.rooms.find((r) => r.type === 'bedroom');
+        bed.bounds.w = 4; bed.bounds.d = 4; bed.w = 4; bed.d = 4;
+      }],
+      ['IRC-R304.2', 'a bedroom 3 ft across (under the 7 ft minimum dimension)', (a) => {
+        const bed = a.rooms.find((r) => r.type === 'bedroom');
+        bed.bounds.w = 3; bed.w = 3;
+      }],
+      ['IRC-R305.1', 'a 5 ft ceiling everywhere (under the 7 ft minimum)', (a) => {
+        a.roof.ridgeHeightFt = 5;
+        a.roof.eaveHeightFt = 5;
+        a.roof.planes = (a.roof.planes ?? []).map((plane) => ({
+          ...plane,
+          points: (plane.points ?? []).map((pt) => ({ ...pt, y: 5 })),
+        }));
+      }],
+      ['IRC-R310.1', 'every bedroom window removed', (a) => { a.windows = []; }],
+      ['IRC-R310.1', 'every egress window made inoperable', (a) => {
+        for (const w of a.windows ?? []) w.windowKind = 'fixed';
+      }],
+      ['WH-GRID-4FT', 'a bedroom 1.3 ft off the 4 ft structural grid', (a) => {
+        const bed = a.rooms.find((r) => r.type === 'bedroom');
+        bed.bounds.w = (bed.bounds.w ?? 12) + 1.3; bed.w = bed.bounds.w;
+      }],
+    ];
+
+    for (const [ruleId, description, breakIt] of BREAKAGES) {
+      const broken = clone();
+      breakIt(broken);
+      let caught = false;
+      try { caught = failsFor(broken, ruleId); } catch (error) {
+        check(`${ruleId} survives ${description}`, false, `engine threw: ${String(error).slice(0, 80)}`);
+        continue;
+      }
+      check(`${ruleId} FAILS on ${description}`, caught,
+        `the engine still reported no ${ruleId} failure — the rule may be vacuous`);
+    }
+  }
+}
+
 console.log('');
 if (failures) {
   console.error(`${failures} generation check(s) failed`);

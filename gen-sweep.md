@@ -120,6 +120,65 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Hunting FALSE PASSES: the engine is sound, but lofts are not (2026-08-17)
+
+The prime directive has two halves and recent fires only worked one: bad geometry
+that should be caught. This fire asked the other question — **can the constraint
+engine say no at all?** A rule that never fires is indistinguishable from a rule
+that is always satisfied, and the whole product rests on these verdicts.
+
+Method: take a plan the engine passes, break it in the exact way each rule exists
+to catch, and require that rule to report `fail`.
+
+| rule | breakage | result |
+|---|---|---|
+| IRC-R304.1 | a 4x4 ft bedroom (16 sqft) | FAILS ✓ |
+| IRC-R304.2 | a bedroom 3 ft across | FAILS ✓ |
+| IRC-R305.1 | a 5 ft ceiling everywhere | FAILS ✓ |
+| IRC-R310.1 | every bedroom window removed | FAILS ✓ |
+| IRC-R310.1 | every egress window made inoperable | FAILS ✓ |
+| WH-GRID-4FT | a bedroom 1.3 ft off the grid | FAILS ✓ |
+
+**The engine is not vacuous** — previously unverified, now permanently gated. (My
+first probe reported the baseline itself failing; that was my harness passing the
+raw artifact instead of the engine's normalised input, not a bug. Checked before
+claiming.)
+
+### But the hunt turned up three real things
+
+**1. Every loft plan ships with a `WH-GRID-4FT` FAILURE.** a-frame-with-loft and
+gable-with-loft both report *"1 of 8 physical rooms are off the 4 ft panel grid
+(e.g. Loft)"*. Non-loft plans are clean. MFG fire 6 snapped the loft BAND to a
+4 ft multiple — `band = Math.floor(rawBand / 4) * 4` — and then recentred it:
+`low = rawLow + (rawBand - band) / 2`. **The size was snapped; the origin never
+was.** A 28 ft a-frame puts an 8 ft loft at x = 10.
+
+**2. A gate gap let it ship.** The zero-constraint-fails assertion runs over
+`CASES`, and no real loft brief is in `CASES` — loft plans are exercised in a
+separate block that checks loft structure and never calls `reportForArtifact`.
+
+**3. FALSE PASS: there is no IRC-R312 guard rule in the engine.** Strip every
+fall-protection guard from a loft open ~8 ft above the floor and the code report
+is byte-identical. The compiler always builds guards and the battery checks the
+output, so compiled plans are safe — but the JSON-only import lane bypasses the
+compiler entirely, and a hand-authored loft with no guard passes the advisory
+clean.
+
+### The loft-grid fix needs a decision, not a guess
+Grid-aligning the origin is not free. Measured, per roof:
+
+| plan | headroom envelope | loft today | grid-aligned |
+|---|---|---|---|
+| a-frame 28 | 10.0–18.0 | 8 ft at x=10 | **4 ft → below MIN_LOFT_SPAN_FT (6), loft LOST** |
+| gable 28 | 5.5–22.5 | 16 ft at x=6 | 12 ft at x=8 (−25%) |
+| gambrel 28 | 8.5–19.5 | 8 ft at x=10 | **4 ft → loft LOST** |
+
+So the choice is: enforce the grid and lose a-frame/gambrel lofts, or exempt a
+loft platform from a rule written for floor-grid rooms. The second is a gate
+loosening and the guardrails forbid doing that quietly. **Left for a human call
+rather than resolved unilaterally** — a shipped feature and a manufacturability
+claim are both real, and the numbers above are what the decision turns on.
+
 ## Auditing the class: storeys and lofts were silent too (2026-08-17)
 
 Baths showed that fire 1's "carry the RAW request" fix had been applied to ONE
