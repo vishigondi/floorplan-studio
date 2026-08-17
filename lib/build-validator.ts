@@ -246,8 +246,6 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     rules.wallModule.blockers.push('No source wall graph is available for modular wall validation.');
   }
 
-  let exteriorWallPanels = 0;
-  let interiorWallPanels = 0;
   for (const wall of walls) {
     const length = wallLengthFt(wall);
     if (length < 0.05) continue;
@@ -256,10 +254,6 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     if (moduleDelta.delta > PANEL_TOLERANCE_FT) {
       rules.wallModule.blockers.push(`${label} is ${length.toFixed(2)}ft, not N x ${PANEL_WIDTH_FT}ft (nearest ${moduleDelta.count} panels is ${(moduleDelta.count * PANEL_WIDTH_FT).toFixed(2)}ft).`);
     }
-    const panelCount = Math.max(1, Math.ceil(length / PANEL_WIDTH_FT));
-    if (wall.exterior) exteriorWallPanels += panelCount;
-    else interiorWallPanels += panelCount;
-
     const inferred = inferredWallHeight(home, wall);
     const sku = nearestSku(inferred.height, WALL_HEIGHT_SKUS_FT);
     if (sku.delta > WALL_HEIGHT_TOLERANCE_FT) {
@@ -268,6 +262,78 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   }
   if (walls.length && !rules.wallModule.blockers.length) rules.wallModule.passes.push(`${walls.length} source walls align with panel multiples.`);
   if (walls.length && !rules.wallHeight.blockers.length) rules.wallHeight.passes.push(`${walls.length} source walls map to known wall height SKUs or explicit assumptions.`);
+
+  // PANELS ARE COUNTED PER WALL RUN, NOT PER SEGMENT.
+  //
+  // `sourceWalls` are the SOLID stretches BETWEEN openings, so the loop above
+  // billed no panel at all for the wall a door or window sits in: a 28x28 plan
+  // billed 24 exterior panels for a 112 ft perimeter, silently 19 ft — its
+  // 1 door + 4 windows — short, leaving a builder 4-5 panels down. Rounding each
+  // short segment up to a whole panel then inflated the interior count in the
+  // other direction. Neither number described the building.
+  //
+  // An opening does not remove wall, it needs a DIFFERENT panel — which is why
+  // the WikiHouse kit ships dedicated opening blocks (W-O-*). So: rebuild each
+  // wall RUN (its solid segments plus the openings punched through it), take
+  // ceil(run / 4) panels for it, and report how many of those carry an opening.
+  const baseWallId = (id: string | undefined) => String(id ?? '').split(':')[0];
+  const runs = new Map<string, { lengthFt: number; openings: number; exterior: boolean }>();
+  const runFor = (id: string | undefined, exterior: boolean) => {
+    const key = baseWallId(id);
+    if (!runs.has(key)) runs.set(key, { lengthFt: 0, openings: 0, exterior });
+    const run = runs.get(key) as { lengthFt: number; openings: number; exterior: boolean };
+    if (exterior) run.exterior = true;
+    return run;
+  };
+  for (const wall of walls) {
+    const length = wallLengthFt(wall);
+    if (length < 0.05) continue;
+    runFor(wall.id, Boolean(wall.exterior)).lengthFt += length;
+  }
+  for (const opening of home.sourceOpenings ?? []) {
+    const run = runs.get(baseWallId(opening.wallId));
+    if (!run) continue;
+    run.lengthFt += Number(opening.widthFt ?? 0);
+    run.openings += 1;
+  }
+
+  let exteriorWallPanels = 0;
+  let interiorWallPanels = 0;
+  let exteriorOpeningPanels = 0;
+  let interiorOpeningPanels = 0;
+  for (const run of runs.values()) {
+    const panels = Math.max(1, Math.ceil(run.lengthFt / PANEL_WIDTH_FT));
+    // An opening panel is one of the run's panels, not an extra one.
+    const openingPanels = Math.min(run.openings, panels);
+    if (run.exterior) {
+      exteriorWallPanels += panels - openingPanels;
+      exteriorOpeningPanels += openingPanels;
+    } else {
+      interiorWallPanels += panels - openingPanels;
+      interiorOpeningPanels += openingPanels;
+    }
+  }
+
+  if (exteriorOpeningPanels) {
+    addBom(bom, {
+      componentId: 'wall-ext-opening',
+      description: 'Exterior wall panel with opening (door/window), 4 ft module',
+      category: 'wall',
+      quantity: exteriorOpeningPanels,
+      unit: 'each',
+      notes: ['One per exterior opening; counted within the wall run, not in addition to it.'],
+    });
+  }
+  if (interiorOpeningPanels) {
+    addBom(bom, {
+      componentId: 'wall-int-opening',
+      description: 'Interior wall panel with opening (door), 4 ft module',
+      category: 'wall',
+      quantity: interiorOpeningPanels,
+      unit: 'each',
+      notes: ['One per interior opening; counted within the wall run, not in addition to it.'],
+    });
+  }
 
   addBom(bom, {
     componentId: 'wall-ext',

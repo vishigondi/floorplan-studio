@@ -131,7 +131,13 @@ for (const plan of PLANS) {
 console.log('controls: lot editor + brief parser');
 await page.goto(`${BASE}/?home=brief-aframe-2br`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 await page.waitForTimeout(8000);
-await page.locator('button', { hasText: /^Semantic$/ }).first().click();
+// WAIT for the control instead of assuming 8 s was enough. On a cold production
+// server this blind click intermittently timed out and took the whole run down
+// with an uncaught error — an intermittent crash reads exactly like a red gate.
+// Waiting longer masks nothing: if the button never appears, this still fails.
+const semanticToggle = page.locator('button', { hasText: /^Semantic$/ }).first();
+await semanticToggle.waitFor({ state: 'visible', timeout: 60000 });
+await semanticToggle.click();
 await page.waitForTimeout(1500);
 const setbackStatus = () => page.locator('[data-constraint-rule="ZON-SETBACK"]').first().getAttribute('data-constraint-status');
 const before = await setbackStatus();

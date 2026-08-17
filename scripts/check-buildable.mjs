@@ -150,6 +150,46 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
 // ONE definition of pitch, and it must know a mono-pitch roof from a ridged one.
 // Every local copy divided the span in half, so a shed — whose single plane
 // rises across the WHOLE span — was reported at twice its real angle.
+// THE BILL MUST COVER THE BUILDING. Wall panels were counted from `sourceWalls`,
+// which are the SOLID stretches between openings, so no panel was billed for the
+// wall a door or window sits in — a 28x28 plan billed 24 exterior panels for a
+// 112 ft perimeter, 19 ft short, leaving a builder 4-5 panels down.
+console.log('bom: wall panels cover every foot of wall run');
+{
+  const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
+  for (const brief of [
+    '2 bed gable, 60x90 lot, 10 ft setbacks',
+    '4 bed barn roof, 200x200 lot, 5 ft setbacks',
+    '1-bed gable cabin, 30x50 lot, 5 ft setbacks',
+  ]) {
+    const res = compileIntent(mockIntentFromBrief(parseBrief(brief)), 'bom-test', brief);
+    if (!res.ok) { check(`${brief}: compiles for the BOM check`, false, res.errors.join('; ')); continue; }
+    const artifact = res.artifact;
+    const home = pairedArtifactToLocalHome(artifact);
+    const bom = home.buildValidation?.bom ?? [];
+    const qty = (id) => bom.find((item) => item.componentId === id)?.quantity ?? 0;
+    const runFt = (list) => (artifact[list] ?? [])
+      .filter((wall) => wall.span)
+      .reduce((sum, wall) => sum + Math.hypot(wall.span.x2 - wall.span.x1, wall.span.z2 - wall.span.z1), 0);
+
+    for (const [label, listKey, solidId, openingId] of [
+      ['exterior', 'exteriorWalls', 'wall-ext', 'wall-ext-opening'],
+      ['interior', 'interiorWalls', 'wall-int', 'wall-int-opening'],
+    ]) {
+      const need = Math.ceil(runFt(listKey) / 4);
+      const billed = qty(solidId) + qty(openingId);
+      check(`${artifact.footprint.widthFt}x${artifact.footprint.depthFt} ${label} panels cover the run (${need})`,
+        billed === need, `billed ${billed} (${qty(solidId)} solid + ${qty(openingId)} opening) for ${runFt(listKey)} ft`);
+    }
+    // Every opening must be hosted by an opening panel, or the bill ships a
+    // solid panel where a door goes.
+    const openings = [...(artifact.doors ?? []), ...(artifact.windows ?? []), ...(artifact.openings ?? [])].filter((o) => o.span).length;
+    check(`${artifact.footprint.widthFt}x${artifact.footprint.depthFt} every opening has an opening panel (${openings})`,
+      qty('wall-ext-opening') + qty('wall-int-opening') === openings,
+      `${qty('wall-ext-opening') + qty('wall-int-opening')} opening panels for ${openings} openings`);
+  }
+}
+
 console.log('roof geometry: pitch is measured over the run the roof actually rises across');
 for (const [style, expectDeg] of [['flat', 0], ['shed', 8.1], ['gable', 23.2], ['a-frame', 50.5], ['hip', 23.2], ['gambrel', 29.7], ['barn', 29.7]]) {
   const res = compileIntent(mockIntentFromBrief(parseBrief(`2 bed ${style} roof, 80x100 lot, 10 ft setbacks`)), 'pitch-test', style);

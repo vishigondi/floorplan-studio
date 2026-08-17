@@ -120,6 +120,51 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The BOM was 19 ft short of the building (2026-08-17)
+
+Back to the prime directive on a surface never inspected: does the **bill of
+materials actually describe the plan**? It scales with size (105 → 147 → 229
+total quantity as area grows), and most lines are exact — floor cassettes
+49 = 784/16, foundation 28 = 112/4, doors and windows match the openings. Two
+lines did not:
+
+```
+wall-ext  24   (a 112 ft perimeter needs 28)
+wall-int  23   (96 ft of interior wall needs 24)
+```
+
+**The missing 19 ft is exactly the openings**: 1 door (3 ft) + 4 windows (4 ft).
+`sourceWalls` are the SOLID stretches BETWEEN openings, so the panel loop billed
+**no panel at all for the wall a door or window sits in**. A builder ordering
+from that bill is 4–5 exterior panels short. Meanwhile per-segment `ceil()`
+inflated the interior count in the other direction — 17 short segments each
+rounded up to a whole panel. Neither number described the building.
+
+**The fix follows the kit.** An opening does not remove wall, it needs a
+DIFFERENT panel — which is exactly why WikiHouse ships dedicated opening blocks
+(`W-O-*`, catalogued in the Skylark work). So panels are now counted per wall
+RUN — its solid segments plus the openings punched through it — and the bill
+reports how many of those carry an opening:
+
+| plan | exterior | interior |
+|---|---|---|
+| 28×28 | 23 solid + 5 opening = **28** for 112 ft | 18 + 6 = **24** for 96 ft |
+| 48×28 | 31 + 7 = **38** for 152 ft | 32 + 7 = **39** for 156 ft |
+
+Exact on both. `check:buildable` now asserts panels cover every foot of wall run
+and that every opening has an opening panel, across three plan sizes. Mutation
+(drop the opening widths from the run) reproduces the shipped shortfall:
+`billed 24 (19 solid + 5 opening) for 112 ft`.
+
+### A flake caught by the new discipline
+The live ladder came back red mid-fire: the interactive sweep crashed clicking a
+`Semantic` toggle after a fixed 8 s wait. I checked whether I had broken it
+(I had not — the control exists, and this fire only touched the BOM), re-ran, and
+it passed. **Flake, not regression.** Hardened anyway: it now waits for the
+control rather than assuming 8 s was enough. Waiting longer masks nothing — if
+the button never appears it still fails — but an intermittent uncaught crash
+reads exactly like a red gate, and that ambiguity is the thing to remove.
+
 ## Auditing this session's gates for the "proven to run" property (2026-08-17)
 
 Applying last fire's lesson backwards: a gate that does not complain has either
