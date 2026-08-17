@@ -345,6 +345,39 @@ for (const [i, planId] of targets.entries()) {
   process.stdout.write(`${record.shots.join('+') || 'no shots'}  views=[${record.views.join(',')}]\n`);
 }
 // ---------------------------------------------------------------------------
+// THE CLIENT PACKET MUST READ LIKE A DELIVERABLE, NOT A DATA DUMP.
+// Downloaded once, for one compiled plan: its BOM table must name components in
+// words, not print internal ids under a "Component" heading with the category
+// mislabelled as "Label".
+if (!only.length) {
+  const packetPlan = generated.find((entry) => entry.id)?.id ?? targets[0];
+  try {
+    await page.goto(`${base}/?home=${packetPlan}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.waitForTimeout(2500);
+    const exportBtn = page.getByRole('button', { name: /^Export$/ }).first();
+    if (await exportBtn.count()) { await exportBtn.click(); await page.waitForTimeout(1000); }
+    const trigger = page.locator('[data-export-client-packet]').first();
+    if (await trigger.count()) {
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 30000 }),
+        trigger.click(),
+      ]);
+      const html = readFileSync(await download.path(), 'utf8');
+      const headerRow = html.match(/<thead><tr>(.*?)<\/tr><\/thead>/)?.[1] ?? '';
+      check(packetPlan, 'packet BOM table has no mislabelled "Label" column',
+        !/>Label</.test(headerRow), headerRow.slice(0, 120));
+      const firstCells = [...html.matchAll(/<tr><td>([^<]*)<\/td>/g)].map((m) => m[1]);
+      const slugLike = firstCells.filter((cell) => /^[a-z0-9]+(-[a-z0-9]+)+$/.test(cell));
+      check(packetPlan, 'packet BOM names components in words, not slugs',
+        slugLike.length === 0, `slug-like first cells: ${slugLike.slice(0, 4).join(', ')}`);
+      check(packetPlan, 'packet BOM has rows', firstCells.length > 0);
+    }
+  } catch (error) {
+    check(packetPlan, 'client packet downloads', false, String(error).split('\n')[0].slice(0, 90));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // THE READINESS LANES MUST BE ABLE TO GO RED.
 //
 // The lanes aggregate both verdict systems into the promote/block decision, and

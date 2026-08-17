@@ -120,6 +120,52 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The client packet shipped a bill of slugs (2026-08-17)
+
+Inspected the deliverable's CONTENT, not its structure. The numbers check out —
+header `gen-002 - 28' x 28' - 784 sq ft - 2/1 - gable roof` matches the artifact,
+all 11 code rules appear, and last fire's opening panels flow straight through
+(`wall-ext-opening 5`, `wall-int-opening 6`). The table itself did not.
+
+```
+| Component  | Qty | Label   |
+| door-ext   | 1   | opening |
+| wall-ext-opening | 5 | wall  |
+```
+
+Two defects in one row builder:
+
+1. **"Component" printed `componentId`** — an internal slug — while the item's
+   `description` ("Exterior door unit", "Exterior wall panel with opening
+   (door/window), 4 ft module") was dropped entirely. The one field written for
+   humans never reached the human.
+2. **"Label" printed the category.** The code read `record.label ?? record.category`,
+   and BOM items carry **no `label` field at all**, so the fallback won every
+   time and the column was mislabelled by construction.
+
+Also fixed quietly alongside: `record.quantity ?? record.count ?? 1` invented a
+quantity of **1** for a missing count. A bill of materials that silently reads
+"1" is worse than one that admits it does not know — it now prints `—`.
+
+**Now:**
+```
+| Component                 | ID        | Qty | Unit | Category   |
+| Exterior door unit        | door-ext  | 1   | each | opening    |
+| Floor cassette, 4 ft grid | floor-std | 49  | each | floor      |
+```
+Readable for the client, traceable by id for ordering.
+
+**Gated** in the visual sweep: it downloads the packet once and asserts the table
+has no mislabelled "Label" column and that no first cell is slug-shaped.
+Mutation (restore the old table) fails with
+`slug-like first cells: door-ext, door-int, floor-std, roof-steep`.
+
+**A gate I wrote and then deleted before committing.** My first version added a
+per-plan packet check that clicked Export inside the main sweep loop — which
+opens a modal *before the 3D canvas capture* on every plan. It would have
+polluted the screenshots it shares a loop with. Removed; the single focused
+download covers it without the side effect.
+
 ## The BOM was 19 ft short of the building (2026-08-17)
 
 Back to the prime directive on a surface never inspected: does the **bill of

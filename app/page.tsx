@@ -1810,9 +1810,26 @@ function clientPacketHtml(home: DenHome, planSvg: string, groups: ValidationGrou
   const report = constraintReportHtml(home);
   const reportBody = report.slice(report.indexOf('<body>') + 6, report.indexOf('</body>'));
   const bom = home.buildValidation?.bom ?? [];
+  // The packet is what a CLIENT reads. It used to print `componentId` under a
+  // "Component" heading and `record.label ?? record.category` under "Label" —
+  // but BOM items carry `description`, never `label`, so the fallback always
+  // won and the column showed the category. The one field written for humans
+  // ("Exterior wall panel with opening (door/window), 4 ft module") was dropped
+  // entirely, leaving a bill of slugs.
   const bomRows = bom.map((item) => {
     const record = item as unknown as Record<string, unknown>;
-    return `<tr><td>${escapeHtml(String(record.componentId ?? ''))}</td><td>${escapeHtml(String(record.quantity ?? record.count ?? 1))}</td><td>${escapeHtml(String(record.label ?? record.category ?? ''))}</td></tr>`;
+    const quantity = record.quantity ?? record.count;
+    return [
+      '<tr>',
+      `<td>${escapeHtml(String(record.description ?? record.componentId ?? ''))}</td>`,
+      `<td>${escapeHtml(String(record.componentId ?? ''))}</td>`,
+      // Never invent a quantity: a bill of materials that silently reads "1" for
+      // a missing count is worse than one that admits it does not know.
+      `<td>${escapeHtml(quantity === undefined || quantity === null ? '—' : String(quantity))}</td>`,
+      `<td>${escapeHtml(String(record.unit ?? 'each'))}</td>`,
+      `<td>${escapeHtml(String(record.category ?? ''))}</td>`,
+      '</tr>',
+    ].join('');
   }).join('\n');
   const exportLane = groups.find((group) => group.id === 'export');
   return [
@@ -1830,7 +1847,7 @@ function clientPacketHtml(home: DenHome, planSvg: string, groups: ValidationGrou
     ...drawnElevationViews(home).map((view) => (
       `<section><h2>${view[0].toUpperCase()}${view.slice(1)} Elevation</h2>${elevationSvgMarkup(home, view)}</section>`
     )),
-    `<section><h2>Build Kit (${bom.length} BOM items)</h2><table><thead><tr><th>Component</th><th>Qty</th><th>Label</th></tr></thead><tbody>`, bomRows, '</tbody></table></section>',
+    `<section><h2>Build Kit (${bom.length} BOM items)</h2><table><thead><tr><th>Component</th><th>ID</th><th>Qty</th><th>Unit</th><th>Category</th></tr></thead><tbody>`, bomRows, '</tbody></table></section>',
     '<section>', reportBody, '</section>',
     '</body></html>',
   ].join('\n');
