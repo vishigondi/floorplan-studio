@@ -108,10 +108,11 @@ for (const plan of PLANS) {
   const septic = await page.locator('[data-constraint-rule="NC-SEPTIC-18E"]').count();
   note(septic === 1, 'site checks present');
   const ruleCount = await page.locator('[data-constraint-rule]').count();
-  // 11 since IRC-R312.1 (guards on elevated walking surfaces) joined the rule
-  // registry — one more card is RENDERED because a rule was added, not because
-  // this assertion was relaxed.
-  note(ruleCount === 11, `11 rule cards rendered (${ruleCount})`);
+  // 12 since ZON-HEIGHT joined the rule registry (11 was IRC-R312.1 joining, for
+  // the same reason). One more card is RENDERED because a rule was ADDED, not
+  // because this assertion was relaxed — and asserting the count is what proves
+  // a new engine rule actually reaches the UI instead of stopping at the report.
+  note(ruleCount === 12, `12 rule cards rendered (${ruleCount})`);
   const titleBlocks = await page.locator('[data-plan-title-block]').count();
   const northArrows = await page.locator('[data-north-arrow]').count();
   note(titleBlocks >= 1 && northArrows >= 1, `plan sheet annotations present (title ${titleBlocks}, north ${northArrows})`);

@@ -13,6 +13,10 @@ export interface ParsedLot {
   depthFt: number;
   setbacksFt?: { front?: number; rear?: number; left?: number; right?: number };
   maxCoverageRatio?: number;
+  /** Zoning height cap in feet. User-supplied: no jurisdiction pack can
+   *  source one (Cherokee County has no county-wide zoning ordinance), so
+   *  this is the same parameterized-per-lot shape as setbacks and coverage. */
+  maxHeightFt?: number;
 }
 
 export interface ParsedBrief {
@@ -174,6 +178,19 @@ export function parseBrief(text: string): ParsedBrief {
     if (pct !== undefined && pct > 0 && pct <= 100) {
       if (result.lot) result.lot.maxCoverageRatio = pct / 100;
       else result.unparsed.push('coverage (no lot specified — add a lot to apply it)');
+    }
+  }
+
+  // "25 ft height limit", "max height 25 ft", "height limit 25'"
+  const height = take(
+    lower.match(/(\d{1,3}(?:\.\d+)?)\s*(?:ft|foot|feet|['\u2032])?\s*(?:max(?:imum)?\s*)?(?:building\s*)?height\s*(?:limit|cap|max(?:imum)?)?/)
+      ?? lower.match(/(?:max(?:imum)?\s*)?(?:building\s*)?height\s*(?:limit|cap)?\s*(?:of|is|:)?\s*(\d{1,3}(?:\.\d+)?)\s*(?:ft|foot|feet|['\u2032])?/),
+  );
+  if (height) {
+    const ft = num(height[1]);
+    if (ft !== undefined && ft > 0) {
+      if (result.lot) result.lot.maxHeightFt = ft;
+      else result.unparsed.push('height limit (no lot specified — add a lot to apply it)');
     }
   }
 

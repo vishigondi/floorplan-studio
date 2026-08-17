@@ -268,6 +268,7 @@ export function lotFromArtifact(artifactJson: unknown): CodeAdvisoryLot | null {
     return Number.isFinite(value) && value >= 0 ? value : undefined;
   };
   const maxCoverage = Number(record.maxCoverageRatio);
+  const maxHeight = Number(record.maxHeightFt);
   return {
     widthFt,
     depthFt,
@@ -275,6 +276,9 @@ export function lotFromArtifact(artifactJson: unknown): CodeAdvisoryLot | null {
       ? { front: setback('front'), rear: setback('rear'), left: setback('left'), right: setback('right') }
       : undefined,
     maxCoverageRatio: Number.isFinite(maxCoverage) && maxCoverage > 0 && maxCoverage <= 1 ? maxCoverage : undefined,
+    // No default: an absent cap must stay absent so ZON-HEIGHT reports
+    // not-evaluated instead of grading against an invented number.
+    maxHeightFt: Number.isFinite(maxHeight) && maxHeight > 0 ? maxHeight : undefined,
   };
 }
 
@@ -492,6 +496,11 @@ export function codeAdvisoryInputFromHome(home: DenHome): CodeAdvisoryInput {
         .filter((wall) => /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`))
         .map((wall) => ({ id: wall.id, floor: wall.floor ?? 1 }))
       : undefined,
+    // Ridge height above the ground-floor level. The plan models no
+    // foundation or grade, so this is NOT a grade-datum zoning height; the
+    // rule's finding says so rather than letting the number pass as one.
+    buildingHeightFt: home.roofSemantics?.ridgeHeightFt
+      ?? (home.pairedArtifactJson as { roof?: { ridgeHeightFt?: number } } | undefined)?.roof?.ridgeHeightFt,
     lot: lotFromArtifact(home.pairedArtifactJson),
   };
 }

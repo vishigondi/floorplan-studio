@@ -147,6 +147,13 @@ function reportForArtifact(artifact) {
     footprintDepthFt: artifact.footprint?.depthFt,
     rooms,
     openings,
+    // Ridge above the ground-floor level, for ZON-HEIGHT. NOTE: this battery
+    // builds its own CodeAdvisoryInput rather than calling
+    // codeAdvisoryInputFromHome, so every field has to be mirrored here by hand
+    // — a rule wired into the app adapter alone is inert in this gate, which is
+    // exactly what the ZON-HEIGHT breakage test caught. The duplication is
+    // pre-existing and worth collapsing.
+    buildingHeightFt: artifact.roof?.ridgeHeightFt,
     lot: artifact.lot ?? null,
   });
 }
@@ -744,6 +751,9 @@ console.log('constraint engine: a deliberately broken plan must FAIL, per rule')
       ['WH-GRID-4FT', 'a bedroom 1.3 ft off the 4 ft structural grid', (a) => {
         const bed = a.rooms.find((r) => r.type === 'bedroom');
         bed.bounds.w = (bed.bounds.w ?? 12) + 1.3; bed.w = bed.bounds.w;
+      }],
+      ['ZON-HEIGHT', 'a height cap well under the ridge the plan already has', (a) => {
+        a.lot = { ...(a.lot ?? {}), widthFt: 60, depthFt: 90, maxHeightFt: 6 };
       }],
     ];
 

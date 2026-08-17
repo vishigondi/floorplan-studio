@@ -63,7 +63,7 @@ export interface GenerationIntent {
   name: string;
   footprint: { widthFt: number; depthFt: number };
   roof: { style: 'a-frame' | 'gable' | 'flat' | 'shed' | 'hip' | 'gambrel' | 'barn'; ridgeAxis: 'x' | 'z'; ridgeHeightFt: number; eaveHeightFt: number };
-  lot?: { widthFt: number; depthFt: number; setbacksFt?: { front?: number; rear?: number; left?: number; right?: number }; maxCoverageRatio?: number } | null;
+  lot?: { widthFt: number; depthFt: number; setbacksFt?: { front?: number; rear?: number; left?: number; right?: number }; maxCoverageRatio?: number; maxHeightFt?: number } | null;
   /** Brief asked for a loft. A loft level is emitted only if the roof gives headroom. */
   hasLoft?: boolean;
   /** Bedrooms the brief asked for, BEFORE any template clamp — so the compiler can

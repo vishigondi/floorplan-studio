@@ -18,6 +18,7 @@ export type CodeAdvisoryCategory =
   | 'fall-protection'
   | 'setbacks'
   | 'lot-coverage'
+  | 'building-height'
   | 'grid-compliance';
 
 export type CodeAdvisoryStatus = 'pass' | 'fail' | 'not-evaluated';
@@ -68,6 +69,13 @@ export const CODE_ADVISORY_RULES: CodeAdvisoryRule[] = [
     ruleId: 'ZON-COVERAGE',
     citation: 'Zoning (parameterized per lot) — building footprint must not exceed the maximum lot coverage ratio.',
     category: 'lot-coverage',
+  },
+  {
+    ruleId: 'ZON-HEIGHT',
+    citation: 'Zoning (parameterized per lot) — building height must not exceed the maximum permitted height. '
+      + 'Measured here from the ground-floor level to the ridge: the plan does not model foundation or grade, '
+      + 'and most ordinances measure from grade (or to mean roof height), so confirm the datum with the authority.',
+    category: 'building-height',
   },
 ];
 
@@ -122,6 +130,7 @@ export const JURISDICTION_PACKS: JurisdictionPack[] = [
       'IRC-R310.1': 'NCRC 2018 §R310.1 — Sleeping rooms require an emergency escape and rescue opening (model base: 5.7 sq ft net clear opening, 5.0 sq ft at grade floor; minimum 24 in height, 20 in width; sill height max 44 in).',
       'ZON-SETBACK': 'Cherokee County, NC has no county-wide zoning ordinance (county Ordinances & Plans page, retrieved 2026-06-11). Evaluated against user-supplied lot setbacks only.',
       'ZON-COVERAGE': 'Cherokee County, NC has no county-wide zoning ordinance; coverage limits apply only if user-supplied (e.g. covenants or watershed rules).',
+      'ZON-HEIGHT': 'Cherokee County, NC has no county-wide zoning ordinance and therefore no county height cap; height limits apply only if user-supplied (e.g. private covenants, or municipal zoning inside Murphy/Andrews town limits or their ETJ).',
     },
     zoningStatus:
       'Cherokee County has no county-wide zoning ordinance (adopted county ordinances: Animal Control 2021, Comprehensive Plan 2023, Facilities Use Policy). Setbacks are typically driven by septic permitting (15A NCAC 18E), NCDOT driveway/right-of-way rules, watershed/flood regulations, and private covenants. Verify with Cherokee County Planning, 828-837-5527.',
@@ -204,6 +213,11 @@ export interface CodeAdvisoryLot {
   setbacksFt?: { front?: number; rear?: number; left?: number; right?: number };
   /** Default 0.35 when omitted. */
   maxCoverageRatio?: number;
+  /** Maximum permitted building height in feet. NO default: unlike coverage
+   *  there is no defensible model number, and no jurisdiction pack can source
+   *  one (Cherokee County has no county-wide zoning ordinance). Omitted means
+   *  the rule reports `not-evaluated` rather than inventing a cap. */
+  maxHeightFt?: number;
 }
 
 export interface CodeAdvisoryInput {
@@ -220,6 +234,10 @@ export interface CodeAdvisoryInput {
    * positive statement that the plan models none.
    */
   guards?: Array<{ id?: string; floor?: number }>;
+  /** Ridge height above the ground-floor level, in feet. Omitted when the
+   *  source models no roof geometry — the height rule then reports
+   *  `not-evaluated` rather than treating an unknown as compliant. */
+  buildingHeightFt?: number;
   lot?: CodeAdvisoryLot | null;
 }
 
@@ -572,6 +590,36 @@ export function codeAdvisoryReport(input: CodeAdvisoryInput): CodeAdvisoryReport
     } else {
       findings.push(finding('ZON-COVERAGE', 'fail', `Lot coverage ${(coverage * 100).toFixed(1)}% exceeds the ${(maxRatio * 100).toFixed(0)}% maximum.`));
     }
+  }
+
+  // --- Building height (ZON-HEIGHT) ---
+  //
+  // Deliberately OUTSIDE the footprint-dependent branches above: height does not
+  // depend on footprint dimensions, and folding it in there would make it
+  // not-evaluated for reasons that have nothing to do with height.
+  //
+  // There is no default cap. Coverage can fall back to a defensible model ratio;
+  // a height limit cannot — it is purely local, and the one jurisdiction pack
+  // here (Cherokee County) has no county-wide zoning ordinance at all. Inventing
+  // a number would manufacture both false passes and false failures, so an
+  // unknown cap reports not-evaluated and says what to attach.
+  const maxHeightFt = lot?.maxHeightFt;
+  const buildingHeightFt = input.buildingHeightFt;
+  if (maxHeightFt === undefined || !Number.isFinite(maxHeightFt) || maxHeightFt <= 0) {
+    findings.push(finding('ZON-HEIGHT', 'not-evaluated', lot
+      ? 'No height limit supplied. Attach lot.maxHeightFt to evaluate building height.'
+      : (pack.zoningStatus ?? 'No lot specified. Attach lot { maxHeightFt } to evaluate building height.')));
+  } else if (buildingHeightFt === undefined || !Number.isFinite(buildingHeightFt) || buildingHeightFt <= 0) {
+    findings.push(finding('ZON-HEIGHT', 'not-evaluated',
+      'Plan models no roof height to compare against the limit.'));
+  } else if (buildingHeightFt <= maxHeightFt + 1e-6) {
+    findings.push(finding('ZON-HEIGHT', 'pass',
+      `Building height ${buildingHeightFt.toFixed(1)} ft (ground floor to ridge) is within the ${maxHeightFt.toFixed(1)} ft limit. `
+      + 'Measured from the ground-floor level, not grade — confirm the datum with the authority.'));
+  } else {
+    findings.push(finding('ZON-HEIGHT', 'fail',
+      `Building height ${buildingHeightFt.toFixed(1)} ft (ground floor to ridge) exceeds the ${maxHeightFt.toFixed(1)} ft limit `
+      + `by ${(buildingHeightFt - maxHeightFt).toFixed(1)} ft.`));
   }
 
   // --- Jurisdiction site advisories (never decidable from plan JSON) ---

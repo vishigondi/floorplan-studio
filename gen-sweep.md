@@ -120,6 +120,58 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## ZON-HEIGHT: the zoning envelope was missing a leg (2026-08-17)
+
+Investigating the loft/grid trade turned up that **no height rule existed** — the
+engine modelled setback and coverage and had no notion of building height at all,
+while height is the third leg of every basic zoning envelope and the thing a
+taller ridge would run into. Added it.
+
+### Sourcing, which is the whole difficulty
+There is no number to cite. The one jurisdiction pack here is Cherokee County,
+NC, which **has no county-wide zoning ordinance** — the existing ZON citations
+already say so. So `ZON-HEIGHT` is parameterized per lot exactly like setbacks
+and coverage: user-supplied or nothing.
+
+Deliberately **no default cap**. Coverage can fall back to a defensible model
+ratio (0.35); a height limit cannot — it is purely local, and inventing one
+manufactures both false passes and false failures. An absent limit reports
+`not-evaluated` and says what to attach. That is asserted, and mutation-tested:
+adding `?? 35` to the lookup turns the not-evaluated case into a pass and the
+battery fails.
+
+### Honesty about the datum
+The plan models no foundation or grade, so the number is ridge height above the
+**ground-floor level**, while most ordinances measure from grade (or to mean roof
+height). Both the citation and every passing finding say so, and a gate asserts
+the passing detail still contains "not grade" — otherwise the number quietly
+starts reading as a zoning height it is not.
+
+Brief parsing follows the existing idiom ("25 ft height limit", "max height 30
+ft"), including the no-lot path: `height limit (no lot specified — add a lot to
+apply it)` goes to `unparsed` rather than being dropped. "7 ft ceiling height"
+correctly does NOT match — it lands in `unparsed` instead.
+
+### Two gates caught me, which is the point of them
+1. **check:generation** — "every registry rule has a breakage test" failed
+   immediately: `no breakage proves these can fail: ZON-HEIGHT`. The
+   anti-vacuity rule doing exactly its job on the first new rule since it was
+   written.
+2. Adding that breakage test then failed *itself* — the rule was **inert on that
+   path**. `check-generation.mjs` builds its own `CodeAdvisoryInput` by hand
+   instead of calling `codeAdvisoryInputFromHome`, so a field wired into the app
+   adapter alone never reaches the gate. Mirrored it there, and left a note: that
+   duplication is a live violation of "one source of truth" and worth collapsing.
+3. **The interactive sweep** then failed with `11 rule cards rendered (12)` —
+   which is the assertion proving a new engine rule actually reaches the UI
+   rather than stopping at the report. Raised to 12 because a rule was ADDED.
+   The arithmetic checks out exactly: 9 registry rules + 3 NC site advisories.
+
+### Mutation testing
+Rule always passes -> fail case + overage-message case both break. Default cap
+invented -> not-evaluated case breaks. Datum caveat dropped -> datum assertion
+breaks. Each restores green.
+
 ## The loft/grid trade was a false dilemma — and I had the numbers wrong (2026-08-17)
 
 I have been carrying this to the user as a binary: every loft plan ships a

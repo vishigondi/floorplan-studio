@@ -133,6 +133,30 @@ console.log('fixture: no lot');
 const noLot = codeAdvisoryReport({ planId: 'fixture-no-lot', footprintWidthFt: 24, footprintDepthFt: 32, rooms: [], openings: [] });
 check('setbacks not-evaluated without lot', statusOf(noLot, 'ZON-SETBACK'), 'not-evaluated');
 check('coverage not-evaluated without lot', statusOf(noLot, 'ZON-COVERAGE'), 'not-evaluated');
+check('height not-evaluated without lot', statusOf(noLot, 'ZON-HEIGHT'), 'not-evaluated');
+
+// --- Part 1d2: building height (ZON-HEIGHT) ---------------------------------
+// All three states, because a rule that can only ever reach one of them is
+// decoration. There is deliberately NO default cap: coverage can fall back to a
+// model ratio, a height limit cannot (it is purely local, and the one pack here
+// has no zoning ordinance at all), so an absent limit must report not-evaluated
+// rather than grade against an invented number.
+console.log('fixture: building height');
+const heightBase = { planId: 'fixture-height', footprintWidthFt: 24, footprintDepthFt: 32, rooms: [], openings: [] };
+const heightOk = codeAdvisoryReport({ ...heightBase, buildingHeightFt: 14, lot: { ...goodLot, maxHeightFt: 30 } });
+const heightOver = codeAdvisoryReport({ ...heightBase, buildingHeightFt: 14, lot: { ...goodLot, maxHeightFt: 12 } });
+const heightNoCap = codeAdvisoryReport({ ...heightBase, buildingHeightFt: 14, lot: goodLot });
+const heightNoRoof = codeAdvisoryReport({ ...heightBase, lot: { ...goodLot, maxHeightFt: 30 } });
+check('height 14ft under a 30ft cap', statusOf(heightOk, 'ZON-HEIGHT'), 'pass');
+check('height 14ft over a 12ft cap', statusOf(heightOver, 'ZON-HEIGHT'), 'fail');
+check('height not-evaluated with no cap supplied', statusOf(heightNoCap, 'ZON-HEIGHT'), 'not-evaluated');
+check('height not-evaluated when the plan models no roof', statusOf(heightNoRoof, 'ZON-HEIGHT'), 'not-evaluated');
+// The number is measured floor-to-ridge, not from grade. If the finding ever
+// stops saying so it starts reading as a zoning height it is not.
+check('a passing height finding states its datum',
+  (heightOk.findings.find((f) => f.ruleId === 'ZON-HEIGHT')?.detail ?? '').includes('not grade'), true);
+check('an over-cap height reports the overage',
+  (heightOver.findings.find((f) => f.ruleId === 'ZON-HEIGHT')?.detail ?? '').includes('by 2.0 ft'), true);
 
 // --- Part 1e: Cherokee County NC jurisdiction pack ----------------------------
 console.log('fixture: nc-cherokee-county jurisdiction pack');
@@ -262,6 +286,13 @@ for (const relativePath of PLANS) {
       // R305 needs roof-derived ceiling profiles, which only the app adapter
       // computes; offline it must simply never fail. In-app evaluation is
       // covered by the headless sweep.
+      // ZON-HEIGHT is not-evaluated unless the brief supplied a cap, and these
+      // briefs do not. Its pass/fail/not-evaluated behaviour is asserted
+      // outright in Part 1d2 rather than here.
+      if (rule.ruleId === 'ZON-HEIGHT') {
+        check(`${artifact.planId}: ${rule.ruleId} never fails without a supplied cap`, ['pass', 'not-evaluated'].includes(statusOf(report, rule.ruleId)), true);
+        continue;
+      }
       if (rule.ruleId === 'IRC-R305.1') {
         check(`${artifact.planId}: ${rule.ruleId} never fails offline`, ['pass', 'not-evaluated'].includes(statusOf(report, rule.ruleId)), true);
         continue;
@@ -271,11 +302,12 @@ for (const relativePath of PLANS) {
   }
 }
 
-// 8 since IRC-R312.1 (guards on elevated walking surfaces) joined the registry:
-// stripping every guard from a loft open ~8 ft above the floor previously left
-// the report byte-identical. Expected value raised because a rule was ADDED, not
-// because one was relaxed.
-check('rule registry has 8 rules', CODE_ADVISORY_RULES.length, 8);
+// 9 since ZON-HEIGHT joined the registry: the engine modelled setback and
+// coverage but had no notion of building height at all, while every real
+// jurisdiction caps it. Expected value raised because a rule was ADDED, not
+// because one was relaxed. (8 was itself IRC-R312.1 joining, for the same
+// reason: stripping every guard from a loft left the report byte-identical.)
+check('rule registry has 9 rules', CODE_ADVISORY_RULES.length, 9);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);
