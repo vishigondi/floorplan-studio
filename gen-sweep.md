@@ -120,6 +120,44 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Readiness lanes CAN go red — and I nearly shipped a gate that never ran (2026-08-17)
+
+The lanes aggregate both verdict systems into the promote/block decision, and
+aggregation is exactly where a blocker gets quietly downgraded on its way to the
+UI. Every plan the sweep visits is healthy, so a green run only ever proved that
+good plans look good.
+
+**Empirically: the mechanism works.** Strip the wall graph from a plan and the
+design lane turns `blocked` (via `liveGeometryAudit`'s "missing source wall
+graph"). `readinessLanes` itself is a sound 14-line rollup — blockers → blocked,
+warnings → warning, else pass.
+
+**Two deliberate downgrades found, both correct.** `buildValidation.blockers`
+are routed through `warn()`, and a `blocked` issue outside the `design` channel
+becomes a warning. Both are intentional and documented in the group's own action
+text ("brochure-ready semantic plans are not blocked by panel-module
+constraints"). Not defects — recorded so they are not "fixed" later by someone
+reading the variable name.
+
+### The part worth writing down: I nearly reported a gate that never executed
+I added the lane-redness check just before `sweep.json` is written — which is
+**after `await browser.close()`**. The run crashed on `page.goto` against a dead
+browser. I ran it, grepped for `FAIL`, got **zero**, and read that as a pass.
+
+The crash produced no FAIL lines *because it never reached any assertion.* This
+is the precise failure mode I have been hunting all session — coverage that
+silently is not there — and I committed it, then misread the evidence, in the
+same iteration. What caught it was mutation-testing: inverting the assertion
+should have produced a failure message and instead produced a stack trace at
+`visual-sweep.mjs:363`.
+
+**Rule reinforced: a passing gate must be proven to RUN, not merely to not
+complain.** Exit code and absence-of-FAIL are not the same as executed.
+
+Fixed by moving the check before the browser closes. Now mutation-proven in both
+directions — inverted it fails with the real lane statuses
+(`design:pass design:blocked design:blocked …`), restored it passes.
+
 ## The standards validator had NO battery — and the reason was structural (2026-08-17)
 
 `validateStandards` is the product's **second verdict system**: it grades the

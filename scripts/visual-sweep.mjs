@@ -338,6 +338,43 @@ for (const [i, planId] of targets.entries()) {
   records.push(record);
   process.stdout.write(`${record.shots.join('+') || 'no shots'}  views=[${record.views.join(',')}]\n`);
 }
+// ---------------------------------------------------------------------------
+// THE READINESS LANES MUST BE ABLE TO GO RED.
+//
+// The lanes aggregate both verdict systems into the promote/block decision, and
+// aggregation is exactly where a blocker gets quietly downgraded on its way to
+// the UI. Every plan we sweep is healthy, so a green run proves only that good
+// plans look good. This deliberately breaks one and requires the design lane to
+// turn `blocked` — then puts it back.
+if (!only.length) {
+  const probeId = generated[0]?.id ?? targets[0];
+  const dir = join(root, 'public', 'data', 'den-image-loop', probeId, 'paired');
+  const file = existsSync(dir) ? readdirSyncSafe(dir).find((name) => name.endsWith('.paired.json')) : null;
+  if (file) {
+    const path = join(dir, file);
+    const original = readFileSync(path, 'utf8');
+    try {
+      const broken = JSON.parse(original);
+      broken.exteriorWalls = [];
+      broken.interiorWalls = [];
+      writeFileSync(path, `${JSON.stringify(broken, null, 2)}\n`);
+      await page.goto(`${base}/?home=${probeId}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForTimeout(3000);
+      const reviewToggle = page.getByRole('button', { name: /review tools/i }).first();
+      if (await reviewToggle.count()) { await reviewToggle.click(); await page.waitForTimeout(1200); }
+      const statuses = await page.locator('[data-validation-lane]').evaluateAll((nodes) => nodes.map((node) => ({
+        lane: node.getAttribute('data-validation-lane'),
+        status: node.getAttribute('data-validation-status') ?? '',
+      })));
+      check(probeId, 'a plan with no wall graph turns the design lane red',
+        statuses.some((entry) => entry.lane === 'design' && entry.status === 'blocked'),
+        statuses.map((entry) => `${entry.lane}:${entry.status}`).join(' ') || 'no lane elements found');
+    } finally {
+      writeFileSync(path, original);
+    }
+  }
+}
+
 await browser.close();
 
 writeFileSync(join(outDir, 'sweep.json'), JSON.stringify({ records, findings, generated }, null, 2));
