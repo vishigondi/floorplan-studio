@@ -77,6 +77,10 @@ export interface GenerationIntent {
   requestedMaxSqft?: number;
   /** Brief asked for a home the open WikiHouse kit can actually build. */
   kitBuildable?: boolean;
+  /** Storeys the brief asked for, RAW. The generator builds one storey plus an
+   *  optional loft, so anything more must be refused rather than quietly
+   *  delivered as a bungalow. */
+  requestedLevels?: number;
   /** The roof style the brief asked for, BEFORE any flatten to a buildable
    * template — so the compiler can refuse (rather than silently substitute an
    * a-frame for) a style it does not implement. */
@@ -919,9 +923,11 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
   // authored room, so it never participates in the level-0 overlap/footprint
   // checks). Single-level plans are untouched — this block only runs when a
   // loft was requested AND the roof gives headroom.
+  let loftBuilt = false;
   if (intent.hasLoft) {
     const loft = buildLoft(roof, widthFt, depthFt);
     if (loft) {
+      loftBuilt = true;
       const { bounds } = loft;
       (artifact.footprint as Record<string, unknown>).levels = 2;
       (artifact.floorPanels as unknown[]).push({
@@ -1003,6 +1009,33 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     }
   }
 
+  // --- Program reconciliation, after the loft is (or is not) built ----------
+  // Both of these were PARSED and CONSUMED by the brief reader — so they never
+  // reached the `unparsed` echo either — and then nothing honoured them and
+  // nothing said so. A token the parser claims to understand and the compiler
+  // ignores is worse than one it admits it cannot read.
+  const builtLevels = loftBuilt ? 2 : 1;
+
+  // A storey count is a different building, not a degraded one: refuse, the way
+  // an over-cap bedroom count is refused, rather than shipping a bungalow.
+  if (typeof intent.requestedLevels === 'number' && intent.requestedLevels > builtLevels) {
+    return {
+      ok: false,
+      errors: [
+        `requested ${intent.requestedLevels} storeys; this generator builds a single storey plus an optional loft `
+        + `(ask for "with loft" on an a-frame, gable, gambrel or barn roof). It has no multi-storey template.`,
+      ],
+    };
+  }
+
+  // A loft the roof cannot host is a valid plan minus one feature — surface it.
+  if (intent.hasLoft && builtLevels < 2) {
+    notes.push(
+      `requested a loft; built none — a ${roof.style} roof leaves no band with the headroom IRC R305 requires `
+      + `for a habitable loft. An a-frame, gable, gambrel or barn roof can host one.`,
+    );
+  }
+
   return { ok: true, errors: [], notes: notes.length ? notes : undefined, artifact };
 }
 
@@ -1049,7 +1082,7 @@ function gableRidgeFt(
   return brief.hasLoft ? 20 : 14;
 }
 
-export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; roofStyle?: string; maxSqft?: number; hasLoft?: boolean; kitBuildable?: boolean; lot?: GenerationIntent['lot'] }): GenerationIntent {
+export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; roofStyle?: string; maxSqft?: number; hasLoft?: boolean; kitBuildable?: boolean; levels?: number; lot?: GenerationIntent['lot'] }): GenerationIntent {
   const bedrooms = Math.max(1, Math.min(4, brief.bedrooms ?? 2));
   const style: 'a-frame' | 'gable' | 'flat' | 'shed' | 'hip' | 'gambrel' | 'barn' = brief.roofStyle === 'gable' ? 'gable'
     : brief.roofStyle === 'flat' ? 'flat'
@@ -1301,6 +1334,7 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
     // instead of silently shipping a footprint larger than the user allowed.
     requestedMaxSqft: brief.maxSqft,
     kitBuildable: brief.kitBuildable,
+    requestedLevels: brief.levels,
     // Carry the RAW requested roof style so compile can refuse an unimplemented
     // style instead of silently substituting the a-frame flattened above.
     requestedRoofStyle: brief.roofStyle,

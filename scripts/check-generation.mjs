@@ -186,6 +186,16 @@ const CASES = [
   // width-edge bedrooms R305 headroom).
   { name: '4-bed gable', brief: '4 bed gable, 80x100 lot, 10 ft setbacks', bedrooms: 4, style: 'gable', hasLot: true, expectWidth: 48 },
   { name: '4-bed a-frame refused (eave too low for 4 across)', brief: '4 bed a-frame, 80x100 lot, 10 ft setbacks', expectCompileError: /a-frame.*4|4 .*a-frame|headroom|builds at most/i },
+  // A storey count the generator cannot build is a DIFFERENT BUILDING, not a
+  // degraded one — refuse, as an over-cap bedroom count is refused. "2 story"
+  // used to parse, be consumed (so it never reached the `unparsed` echo either),
+  // and then quietly ship a bungalow.
+  { name: '2 storeys refused (no multi-storey template)', brief: '2 story gable, 60x90 lot, 10 ft setbacks', expectCompileError: /requested 2 storeys.*single storey plus an optional loft/i },
+  { name: '3 storeys refused', brief: 'three story gable, 80x100 lot, 10 ft setbacks', expectCompileError: /requested 3 storeys/i },
+  // ...but a single-storey request, and a storey count a loft satisfies, must build.
+  { name: 'loft requested on a flat roof is dropped, and said', brief: '2 bed flat roof with loft, 60x90 lot, 10 ft setbacks', bedrooms: 2, style: 'flat', hasLot: true, expectWidth: 28 },
+  { name: 'single level builds', brief: 'single level gable, 60x90 lot, 10 ft setbacks', bedrooms: 2, style: 'gable', hasLot: true, expectWidth: 28 },
+
   // PROGRAM HONESTY, the whole class: ANY bath count the plan cannot deliver must
   // be surfaced. The raw request used to be clamped to MAX_TEMPLATE_BATHS before
   // the compiler saw it, so "3 bath" compared 2 against 2 and said nothing —
@@ -373,6 +383,16 @@ for (const testCase of CASES) {
         (artifact.elevations ?? []).map((e) => e.view).join(', '),
       );
     }
+  }
+
+  // A requested loft the roof cannot host is a valid plan minus a feature — but
+  // it must SAY so. flat/shed/hip used to drop the loft in silence.
+  if (/with loft/i.test(testCase.brief)) {
+    const levels = artifact.footprint.levels ?? 1;
+    const said = (compiled.notes || []).some((note) => /requested a loft; built none/.test(note));
+    check('a dropped loft is surfaced (not silent)', levels >= 2 || said,
+      `levels ${levels}, notes ${JSON.stringify(compiled.notes || [])}`);
+    check('a built loft is not falsely reported as dropped', levels < 2 || !said);
   }
 
   const badCallouts = artifact.rooms.filter((room, index) => room.calloutNumber !== index + 1);

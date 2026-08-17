@@ -120,6 +120,45 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Auditing the class: storeys and lofts were silent too (2026-08-17)
+
+Baths showed that fire 1's "carry the RAW request" fix had been applied to ONE
+dimension, not adopted as a rule. So I audited every program dimension a brief
+can express, driving each at a value the generator cannot deliver.
+
+| dimension | asked | built | before |
+|---|---|---|---|
+| bedrooms | 5 | — | refuses, clear message ✓ |
+| baths | 3 / 4 / 2-on-1-bed | 2 / 2 / 1 | fixed last fire |
+| maxSqft | ≤700 | 672 | honoured ✓ |
+| roof style | "mansard" | a-frame | `unparsed: ["mansard roof"]` → echoed ✓ |
+| footprint | "20 ft wide" | 28 | `unparsed` → echoed ✓ |
+| **storeys** | **2 / 3** | **1** | **SILENT** |
+| **loft** | **on flat/shed/hip** | **none** | **SILENT** |
+
+**The two failures share a shape that is worse than an unrecognised token.** The
+parser RECOGNISED "2 story" and "with loft" and CONSUMED them — so they never
+reached the `unparsed` echo that would have surfaced them — and then nothing
+downstream honoured them and nothing said so. An unreadable token is handled
+honestly here; a token the parser claims and the compiler ignores is not.
+
+**Storeys → REFUSE.** A storey count is a different building, not a degraded one,
+so it follows the bedroom precedent rather than the bath one:
+`requested 2 storeys; this generator builds a single storey plus an optional loft
+(ask for "with loft" on an a-frame, gable, gambrel or barn roof). It has no
+multi-storey template.` A "2 story a-frame with loft" satisfies the request and
+builds, and "single level" is untouched.
+
+**Dropped loft → NOTE.** A plan minus a loft is still a good plan:
+`requested a loft; built none — a flat roof leaves no band with the headroom IRC
+R305 requires for a habitable loft.` The a-frame case still builds its loft and
+is not falsely reported as dropped.
+
+**Gates:** refusal cases for 2 and 3 storeys, a build case for "single level",
+and a per-case loft check that fires on any brief containing "with loft" —
+asserting both that a dropped loft is surfaced AND that a built one is not
+falsely reported dropped. Mutation-tested both ways.
+
 ## Fresh hunt: bath counts silently clamped, and honesty notes thrown away (2026-08-17)
 
 Backlog empty, so back to the prime directive: drive the generator at inputs the
