@@ -579,10 +579,16 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     for (const planId of args.plans) {
       const option = promotedOption(manifest, planId);
-      if (!option?.deterministicRenderUrl) {
-        results.push({ planId, status: 'skipped', reason: 'missing deterministicRenderUrl' });
+      if (!option) {
+        results.push({ planId, status: 'skipped', reason: 'no paired option in the manifest' });
         continue;
       }
+      // The manifest field means "a stored render EXISTS here", so a plan that
+      // has never been rendered legitimately has none — it is not a reason to
+      // skip, it is the reason to run. Derive the path (the naming every
+      // non-archived plan already uses) and record the claim after writing.
+      const renderUrl = option.deterministicRenderUrl ?? `paired/${planId}-${option.id}.render.svg`;
+      const claimRenderUrl = !option.deterministicRenderUrl;
       const url = `${baseUrl}/?home=${encodeURIComponent(planId)}`;
       const pairedJsonPath = option.pairedJsonUrl ? resolve(LOOP_ROOT, planId, option.pairedJsonUrl) : null;
       const pairedArtifact = pairedJsonPath ? await readJson(pairedJsonPath) : null;
@@ -1599,9 +1605,15 @@ async function main() {
       if (!svg.includes('data-drawing-layer="wall"')) {
         throw new Error(`${planId}: live deterministic SVG has no wall primitives`);
       }
-      const outPath = resolve(LOOP_ROOT, planId, option.deterministicRenderUrl);
+      const outPath = resolve(LOOP_ROOT, planId, renderUrl);
       await mkdir(dirname(outPath), { recursive: true });
       await writeFile(outPath, normalizeSvg(svg, planId, option.id));
+      // Only NOW is the claim true. Written after the bytes, never before, so a
+      // renderer that dies leaves no promise of a file it did not produce.
+      if (claimRenderUrl) {
+        option.deterministicRenderUrl = renderUrl;
+        await writeJson(MANIFEST_PATH, manifest);
+      }
       if (pairedJsonPath && pairedArtifact?.patchState?.requiresRenderRegeneration) {
         pairedArtifact.patchState = {
           ...pairedArtifact.patchState,

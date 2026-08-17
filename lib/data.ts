@@ -1667,6 +1667,15 @@ function sourceSpaceFaces(
   return [...roomFaces, ...explicitFaces];
 }
 
+// The plan store is served by a route handler, NOT as a static asset under
+// `public/`. Next enumerates `public/` at BUILD time, so a plan written after
+// the build 404s forever in production — generation appends to the manifest
+// (a file that already existed, so the feed lists the plan) and then writes a
+// paired JSON the app cannot fetch. The feed advertised generated plans that
+// could never load. Reading through /api/plan-file removes the divergence:
+// same bytes off disk in dev and production.
+const PLAN_STORE = '/api/plan-file';
+
 function artifactInfo(planId: string, option: ProposalAvailability): PairedPlanArtifactInfo {
   // Sidecar URLs come only from explicit manifest keys. Guessing them from the
   // paired JSON path 404s for compiled plans, and those 404s wedge Chromium's
@@ -1677,16 +1686,16 @@ function artifactInfo(planId: string, option: ProposalAvailability): PairedPlanA
     proposalId: option.id,
     artifactVersion: option.artifactVersion ?? 'paired_gpt_floorplan_v1',
     sourceKind: option.sourceKind ?? null,
-    sourceImageUrl: option.imageUrl ? `/data/den-image-loop/${planId}/${option.imageUrl}` : '',
-    deterministicRenderUrl: option.deterministicRenderUrl ? `/data/den-image-loop/${planId}/${option.deterministicRenderUrl}` : undefined,
-    lookRenderUrl: option.lookRenderUrl ? `/data/den-image-loop/${planId}/${option.lookRenderUrl}` : undefined,
+    sourceImageUrl: option.imageUrl ? `${PLAN_STORE}/${planId}/${option.imageUrl}` : '',
+    deterministicRenderUrl: option.deterministicRenderUrl ? `${PLAN_STORE}/${planId}/${option.deterministicRenderUrl}` : undefined,
+    lookRenderUrl: option.lookRenderUrl ? `${PLAN_STORE}/${planId}/${option.lookRenderUrl}` : undefined,
     lookRenderLook: option.lookRenderLook,
     lookRenderExpectedStructure: option.lookRenderExpectedStructure,
-    pairedJsonUrl: `/data/den-image-loop/${planId}/${option.pairedJsonUrl}`,
-    drawingStyleProfileUrl: drawingStyleProfileUrl ? `/data/den-image-loop/${planId}/${drawingStyleProfileUrl}` : undefined,
-    validationUrl: option.pairedValidationUrl ? `/data/den-image-loop/${planId}/${option.pairedValidationUrl}` : undefined,
-    visualReviewUrl: option.pairedVisualReviewUrl ? `/data/den-image-loop/${planId}/${option.pairedVisualReviewUrl}` : undefined,
-    visualDriftUrl: option.pairedVisualDriftUrl ? `/data/den-image-loop/${planId}/${option.pairedVisualDriftUrl}` : undefined,
+    pairedJsonUrl: `${PLAN_STORE}/${planId}/${option.pairedJsonUrl}`,
+    drawingStyleProfileUrl: drawingStyleProfileUrl ? `${PLAN_STORE}/${planId}/${drawingStyleProfileUrl}` : undefined,
+    validationUrl: option.pairedValidationUrl ? `${PLAN_STORE}/${planId}/${option.pairedValidationUrl}` : undefined,
+    visualReviewUrl: option.pairedVisualReviewUrl ? `${PLAN_STORE}/${planId}/${option.pairedVisualReviewUrl}` : undefined,
+    visualDriftUrl: option.pairedVisualDriftUrl ? `${PLAN_STORE}/${planId}/${option.pairedVisualDriftUrl}` : undefined,
     promotionEligible: option.promotionEligible === true,
     reviewStatus: option.pairedReviewStatus ?? null,
     blockers: option.blockers ?? [],
@@ -2035,11 +2044,11 @@ function reviewableLatestOptions(manifest: ProposalManifest | null): Array<{ pla
 }
 
 async function loadPromotedPairedHomes(): Promise<DenHome[]> {
-  const manifestRes = await fetch(`/data/den-image-loop/proposal-manifest.json?t=${Date.now()}`, { cache: 'no-store' });
+  const manifestRes = await fetch(`${PLAN_STORE}/proposal-manifest.json?t=${Date.now()}`, { cache: 'no-store' });
   pairedManifest = manifestRes.ok ? await manifestRes.json() : null;
 
   try {
-    const queueRes = await fetch(`/data/den-image-loop/paired-generation-queue.json?t=${Date.now()}`, { cache: 'no-store' });
+    const queueRes = await fetch(`${PLAN_STORE}/paired-generation-queue.json?t=${Date.now()}`, { cache: 'no-store' });
     pairedGenerationQueue = queueRes.ok ? await queueRes.json() : null;
   } catch {
     pairedGenerationQueue = null;
@@ -2055,14 +2064,14 @@ async function loadPromotedPairedHomes(): Promise<DenHome[]> {
   for (const { planId, option } of selectedOptions) {
     try {
       if (!option.pairedJsonUrl) continue;
-      const artifactRes = await fetch(`/data/den-image-loop/${planId}/${option.pairedJsonUrl}?t=${Date.now()}`, { cache: 'no-store' });
+      const artifactRes = await fetch(`${PLAN_STORE}/${planId}/${option.pairedJsonUrl}?t=${Date.now()}`, { cache: 'no-store' });
       if (!artifactRes.ok) continue;
       const artifact = await artifactRes.json() as PairedArtifact;
       const home = pairedToDenHome(artifact, option);
       const drawingStyleProfileUrl = option.pairedDrawingStyleProfileUrl;
       if (drawingStyleProfileUrl) {
         try {
-          const styleRes = await fetch(`/data/den-image-loop/${planId}/${drawingStyleProfileUrl}?t=${Date.now()}`, { cache: 'no-store' });
+          const styleRes = await fetch(`${PLAN_STORE}/${planId}/${drawingStyleProfileUrl}?t=${Date.now()}`, { cache: 'no-store' });
           if (styleRes.ok) home.drawingStyleProfile = await styleRes.json() as DrawingStyleProfile;
         } catch {
           // Drawing style sidecars are optional for stale/archived artifacts.
@@ -2070,7 +2079,7 @@ async function loadPromotedPairedHomes(): Promise<DenHome[]> {
       }
       if (option.pairedVisualDriftUrl && home.pairedArtifactInfo) {
         try {
-          const driftRes = await fetch(`/data/den-image-loop/${planId}/${option.pairedVisualDriftUrl}?t=${Date.now()}`, { cache: 'no-store' });
+          const driftRes = await fetch(`${PLAN_STORE}/${planId}/${option.pairedVisualDriftUrl}?t=${Date.now()}`, { cache: 'no-store' });
           if (driftRes.ok) home.pairedArtifactInfo.visualDrift = await driftRes.json();
         } catch {
           // Visual drift remains optional evidence; validation will warn if missing.

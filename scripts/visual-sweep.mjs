@@ -303,6 +303,26 @@ if (wantGenerated) {
     if (id) { generated.push({ id, brief }); console.log(`  ${id.padEnd(10)} <- ${brief}`); }
     else console.log(`  REFUSED    <- ${brief}: ${body.error ?? res.status}`);
   }
+
+  // The stored deterministic render is produced by a DETACHED child after the
+  // API responds, so nothing above proves it ever arrives — and for a long
+  // while it never did: the child was handed a 127.0.0.1 origin that Next
+  // blocks for dev-origin data fetches, loaded a page with zero plans, and
+  // timed out with its stdio pointed at /dev/null. Every generated plan served
+  // a 404 into an <img> and into the brochure export, silently. The offline
+  // batteries cannot see this (throwaway gen-* plans are deleted before the
+  // ladder runs), so the assertion has to live here, against the real API.
+  console.log('waiting for detached render backfill...');
+  for (const plan of generated) {
+    const url = `${base}/api/plan-file/${plan.id}/paired/${plan.id}-proposal-paired-v1.render.svg`;
+    let status = 0;
+    for (let i = 0; i < 30; i += 1) {
+      status = await fetch(url).then((r) => r.status).catch(() => 0);
+      if (status === 200) break;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    check(plan.id, 'detached render backfill lands', status === 200, `HTTP ${status} after 60s at ${url}`);
+  }
 }
 
 const only = onlyIds;

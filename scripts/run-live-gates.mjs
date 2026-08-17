@@ -121,12 +121,20 @@ const sweep = run('npm', ['run', 'verify'], { env });
 // The quick set covers a compiled multi-level plan, a compiled single-level one
 // and a traced one; `npm run check:visual` sweeps the whole matrix.
 const visual = run('npm', ['run', 'check:visual:quick'], { env: { ...env, SWEEP_BASE: ORIGIN } });
+// The stored render is produced by a DETACHED child after the API responds, so
+// it is invisible to every offline battery (throwaway gen-* are deleted before
+// the ladder) and to the quick sweep (`--only` skips the generated lane
+// entirely). It silently never landed at all until 2026-08-17. One generated
+// plan, asserted end to end, then deleted.
+const backfill = run('npm', ['run', 'check:backfill'], { env: { ...env, BACKFILL_URL: ORIGIN } });
 
 shutdown();
 
-const failed = (qa.status ?? 1) !== 0 || (sweep.status ?? 1) !== 0 || (visual.status ?? 1) !== 0;
+const failed = (qa.status ?? 1) !== 0 || (sweep.status ?? 1) !== 0
+  || (visual.status ?? 1) !== 0 || (backfill.status ?? 1) !== 0;
 if (failed) {
-  console.error(`[live-gates] FAILED — qa:brochure exit ${qa.status}, sweep exit ${sweep.status}, visual exit ${visual.status}`);
+  console.error(`[live-gates] FAILED — qa:brochure exit ${qa.status}, sweep exit ${sweep.status}, `
+    + `visual exit ${visual.status}, backfill exit ${backfill.status}`);
   process.exit(1);
 }
 console.log('[live-gates] all live gates green');

@@ -8,7 +8,7 @@
 //
 // Usage: node scripts/check-drawing-standards.mjs (npm run check:drawing)
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -75,6 +75,30 @@ for (const planId of PLANS) {
     check(`${side} elevation openings all map to artifact openings (${model.openings.length})`, honest);
     check(`${side} elevation openings stay under the ridge`, model.openings.every((o) => o.headFt <= model.ridgeFt + 1e-6));
   }
+}
+
+// EVERY option in the manifest, not just the five graded above: a stored-render
+// URL is a claim that bytes exist at that path, and the app feeds it straight
+// into an <img> and into the brochure export. The generate route used to write
+// the claim at manifest time while a detached child was still producing the
+// file — and that child was being handed a 127.0.0.1 origin Next blocks, so it
+// timed out and the render NEVER landed. Every generated plan permanently
+// advertised a 404 and nothing said a word. The claim is now written only after
+// the bytes; this is what keeps it honest.
+console.log('\nstored-render claims are backed by bytes (all manifest options)');
+{
+  let claims = 0;
+  for (const [planId, options] of Object.entries(manifest.plans ?? {})) {
+    for (const option of options ?? []) {
+      if (!option.deterministicRenderUrl) continue;
+      claims += 1;
+      check(`${planId} ${option.id}: stored render exists`,
+        existsSync(join(root, 'public/data/den-image-loop', planId, option.deterministicRenderUrl)),
+        option.deterministicRenderUrl);
+    }
+  }
+  // A sweep over zero claims would pass while asserting nothing.
+  check('the manifest actually carries stored-render claims', claims > 0, `${claims}`);
 }
 
 console.log('');

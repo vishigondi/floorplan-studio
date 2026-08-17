@@ -9,6 +9,7 @@
 // Budget: at most 5 live OpenAI calls (artifacts/generation-calls.json).
 
 import { spawn } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
@@ -216,7 +217,12 @@ export async function POST(request: Request) {
     latestPairedArtifact: true,
     latestGptPairedArtifact: false,
     pairedJsonUrl: `paired/${planId}-proposal-paired-v1.paired.json`,
-    deterministicRenderUrl: `paired/${planId}-proposal-paired-v1.render.svg`,
+    // NO deterministicRenderUrl here. The render is produced asynchronously
+    // below, so declaring it now claims a file that does not exist yet — and
+    // if the renderer fails, never will. The field means "a stored render IS
+    // here"; the renderer writes it once the bytes land. Until then the app's
+    // existing no-stored-render branches tell the truth instead of serving a
+    // 404 into an <img> and an export.
     promotionEligible: false,
     legacyParserReady: false,
     archived: false,
@@ -237,15 +243,26 @@ export async function POST(request: Request) {
     // only a configured internal origin or the loopback port we serve on.
     const requestUrl = new URL(request.url);
     const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(requestUrl.hostname);
+    // `localhost`, NOT `127.0.0.1`. The hostname is already validated as
+    // loopback, so this stays inside the SSRF guard — but Next blocks client
+    // data fetches from a dev origin outside `allowedDevOrigins`, and
+    // 127.0.0.1 is outside it. The renderer loaded a page with zero plans and
+    // timed out, so EVERY generated plan's render silently never landed.
     const origin = process.env.INTERNAL_RENDER_ORIGIN
-      ?? (loopback ? `http://127.0.0.1:${requestUrl.port || '3000'}` : null);
+      ?? (loopback ? `http://localhost:${requestUrl.port || '3000'}` : null);
     if (origin) {
+      // Fire-and-forget, but never fail INVISIBLY: with stdio ignored, the
+      // timeout above produced no trace anywhere. Send it to a log instead.
+      const logPath = path.join(root, 'artifacts', 'render-backfill.log');
+      await mkdir(path.dirname(logPath), { recursive: true });
+      const log = openSync(logPath, 'a');
       const child = spawn(
         process.execPath,
         ['scripts/regenerate-paired-renders.mjs', '--plans', planId, '--url', origin],
-        { cwd: root, detached: true, stdio: 'ignore' },
+        { cwd: root, detached: true, stdio: ['ignore', log, log] },
       );
       child.unref();
+      closeSync(log);
     }
   } catch {
     // Render backfill can be run manually via npm run render:paired.

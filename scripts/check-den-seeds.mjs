@@ -214,7 +214,14 @@ assert(!dataModuleSource.includes('pairedGeometryAudit:'), 'paired conversion sh
 assert(!typesSource.includes('abstractLens') && !typesSource.includes('abstractLenses') && !typesSource.includes('dualLoop'), 'DenHome/types should not retain abstract lens or dual-loop research fields');
 assert(!dataModuleSource.includes('abstractLens') && !dataModuleSource.includes('abstractLenses') && !dataModuleSource.includes('dualLoop'), 'paired data conversion should not carry abstract lens or dual-loop research artifacts');
 assert(!appPageSource.includes('ProductPerspectiveView') && !appPageSource.includes('data-perspective-transform'), 'product 3D should not use the old CSS perspective fallback');
-assert(buildValidatorSource.includes('PANEL_WIDTH_FT = 1.2 * FT_PER_M'), 'build validator should use 1.2m panel module');
+// The Skylark sheet is 2440x1220 mm (lib/kit/skylark.ts, measured from the CNC
+// layer name) and 1220 mm = 4.003 ft, so the structural grid is 4 ft — the rule
+// the rest of the product gates on as WH-GRID-4FT. This assertion demanded the
+// literal `1.2 * FT_PER_M`, the wrong figure that 9fb3825 corrected in the
+// validator, so it has failed on every run since — unnoticed, because this
+// battery (`npm run paired:smoke`) is NOT in the gate ladder and nothing runs
+// it. Six more assertions here are stale for the same reason; see gen-sweep.md.
+assert(buildValidatorSource.includes('PANEL_WIDTH_FT = 4'), 'build validator should use the 4 ft (1220 mm sheet) panel module');
 assert(buildValidatorSource.includes('WALL_HEIGHT_SKUS_FT') && buildValidatorSource.includes('2.4 * FT_PER_M') && buildValidatorSource.includes('3.0 * FT_PER_M'), 'build validator should enforce 2.4m/3.0m wall height SKUs');
 assert(buildValidatorSource.includes('MAX_JOIST_SPAN_FT') && buildValidatorSource.includes('ROOF_PITCH_SKUS_DEG'), 'build validator should cover floor span and roof pitch constraints');
 assert(buildValidatorSource.includes('fitsOnePanel') && buildValidatorSource.includes('alignsToJoints'), 'build validator should check opening fit/joint alignment');

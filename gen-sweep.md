@@ -120,6 +120,93 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Generated plans never worked in production, and nothing said so (2026-08-17)
+
+I picked up "fresh plans 404 on a `.render.svg` they don't have yet" expecting a
+timing wrinkle. It was not transient. **The render never arrived at all** — not
+after 60s, not ever — and pulling that thread found three more defects stacked
+behind it, ending in one that made the product's headline feature non-functional
+in production.
+
+### 1. The render was never produced (dev)
+`/api/generate-plan` spawns a detached child to capture the stored SVG and hands
+it an origin built from the request. That origin was `127.0.0.1`, and Next blocks
+client data fetches from a dev origin outside `allowedDevOrigins` — the same trap
+that cost me a sweep earlier today. The renderer loaded a page with **zero
+plans** and timed out. One character isolates it: same command, `localhost`,
+writes the file. The hostname is already validated as loopback, so the SSRF guard
+is untouched.
+
+### 2. The failure was invisible by construction
+The child ran with `stdio: 'ignore'` inside a `try {} catch {}` whose catch is a
+comment. A 30s timeout, every single time, and **no trace anywhere**. That is why
+this survived: not subtlety, just a muted channel. Its output now goes to
+`artifacts/render-backfill.log` — which is how I diagnosed everything below.
+
+### 3. The manifest claimed the render before it existed
+`deterministicRenderUrl` was written at manifest time, ~10s before the bytes.
+The field is the app's "a stored render EXISTS here" signal: it feeds an `<img>`
+and the brochure export. So the product advertised an asset it did not have and,
+once (1) failed, never would. The renderer now derives the path itself and
+**writes the claim only after the file lands** — with the honest consequence that
+a fresh plan briefly reports "no stored render", which it genuinely doesn't have.
+
+### 4. The one that mattered: `public/` is enumerated at BUILD time
+With (1)-(3) fixed the gate still failed under `next start`, and the child log
+said `page.goto` timed out. Not the host — a fresh plan simply could not load.
+
+Next serves `public/` from a build-time snapshot. Measured directly:
+- a file **added** after the build → **404, permanently**
+- an existing file **modified** after the build → fresh content
+
+Generation does both. It appends to `proposal-manifest.json` (pre-existing, so
+the feed lists the new plan) and writes a new `<plan>.paired.json` (**unservable**).
+**Every generated plan appeared in the production feed and none of them could be
+opened.** The deterministic-render capture was simply the first thing to notice,
+by hanging.
+
+Fixed by serving the store through `/api/plan-file/[...path]` — bytes off disk
+per request, identical in dev and production. All 13 URL sites were in one file
+(`lib/data.ts`), so it is one constant. Containment is checked against the
+store's **real** path, because the store is a symlink into a sibling checkout;
+a cwd-prefix test would reject every legitimate read. Traversal probes
+(`%2e%2e`, encoded separators) return 400/404, legitimate reads 200.
+
+Result in production: paired JSON serves 200, the render lands in **2s**, and the
+generated plan sweeps **18 assertions, 0 failures** with a correct drawing —
+title block, north arrow, scale bar, chained dimensions, fixtures spread.
+
+### The gate, and where it had to live
+The first version went into `check-den-seeds.mjs` — which turns out **not to be
+in the gate ladder at all**, and has been failing for a long time unnoticed. Its
+`PANEL_WIDTH_FT = 1.2 * FT_PER_M` assertion still demanded the 1.2 m figure that
+commit `9fb3825` corrected: the real Skylark sheet is 2440x1220 mm and
+1220 mm = 4.003 ft, so the 4 ft grid (WH-GRID-4FT) is right and the assertion was
+stale. I fixed that one. **Six more are stale** — 4 brochure-QA gallery
+assertions, a review-tabs assertion, and two data ones (`manifest plan count 32
+does not match 35`, `brief-aframe-2br missing validation URL`). Left for the user
+to weigh: that battery is 182 brittle source-text `includes()` checks, and the
+last two are real data questions, not string rot.
+
+The invariant then went where it runs: whole-manifest "every stored-render claim
+is backed by bytes" in `check:drawing` (20 claims swept), plus a new live
+`check:backfill` in the ladder. It could not go in the sweep alone —
+`check:visual:quick` passes `--only`, which skips the generated lane entirely, so
+the assertion I added there **never executed**. I caught that only because I
+grepped the live log for it instead of reading "all live gates green".
+
+Mutation-tested, each independently: restore `127.0.0.1` -> backfill FAILs;
+re-add the premature claim -> honesty check FAILs; delete a claimed render ->
+drawing gate FAILs. All restore green, and the gate cleans up its throwaway plan
+in a `finally` so a failure never leaves the store dirty.
+
+### The recurring tell
+Three times today a check "passed" by not running: a gate after `browser.close()`,
+two `timeout`-prefixed verifications on a macOS box with no `timeout`, and now an
+assertion behind an `--only` flag. Same signature every time — **green, with no
+evidence the code executed**. Counting executions is the only defence that has
+actually worked.
+
 ## Visual sweep clean; I killed a sibling project's dev server (2026-08-17)
 
 ### The visual review (the point of the fire)

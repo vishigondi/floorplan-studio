@@ -42,6 +42,7 @@
     "qa:brochure": "node scripts/brochure-visual-qa.mjs",
     "start": "next start",
     "lint": "eslint",
+    "check:backfill": "node scripts/check-render-backfill.mjs",
     "check:visual": "node scripts/visual-sweep.mjs",
     "check:visual:quick": "node scripts/visual-sweep.mjs --only loft-showcase,gen-001,a-frame-22",
     "check:ifc": "node scripts/check-ifc.mjs",
