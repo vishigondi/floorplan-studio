@@ -12,6 +12,7 @@
 // Writes PNGs + sweep.json to .qa-shots/sweep/ (gitignored scratch).
 
 import { chromium } from 'playwright';
+import { assessSkylarkKitForPlan } from '../lib/kit/skylark.ts';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync as readdirSyncSafe, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -159,6 +160,18 @@ async function sweepPlan(page, planId) {
       check(planId, 'stacked levels share one drawing frame',
         frames.every((f) => f.w === base.w && f.d === base.d && f.x === base.x),
         frames.map((f) => `L${f.floor} ${f.w}x${f.d}@${f.x}`).join('  '));
+    }
+
+    // 2c. THE OPEN-KIT VERDICT IS VISIBLE and matches the compiled artifact. The
+    //     assessment was gated offline for a whole fire while showing nowhere,
+    //     so the one question a WikiHouse customer has had no on-screen answer.
+    const artifactForKit = artifactFor(planId);
+    if (artifactForKit?.roof && artifactForKit.footprint) {
+      const shown = await page.locator('[data-kit-status]').first().getAttribute('data-kit-status').catch(() => null);
+      record.kitStatus = shown;
+      const expected = assessSkylarkKitForPlan(artifactForKit).status;
+      check(planId, 'open-kit verdict is shown', Boolean(shown), 'no [data-kit-status] on the page');
+      check(planId, `open-kit verdict matches the artifact (${expected})`, shown === expected, `screen says ${shown}`);
     }
 
     // 3. The 3D model.

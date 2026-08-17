@@ -120,6 +120,34 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The open-kit verdict is now VISIBLE (2026-08-16)
+
+The Skylark chain was complete except for the part that matters to a person:
+pitches measured, kit homes reachable, the assessment gated in two batteries —
+and **nothing on screen said whether your plan could be cut from stock blocks**.
+The one question a WikiHouse customer has had no on-screen answer.
+
+- **`assessSkylarkKitForPlan(plan)`** in `lib/kit/skylark.ts` — one adapter from
+  a compiled artifact to a verdict, taking pitch from `roof-geometry` rather than
+  recomputing it. Screen, batteries and any future export ask the same question
+  of the same geometry.
+- **On the plan card** (the summary a customer sees, NOT behind Review Tools):
+  `wikihouse kit: buildable` in green, `not-buildable` in amber, with the reason
+  in the tooltip. My first attempt put it in `PairedStatusPanel` — the sweep
+  caught that immediately (`no [data-kit-status] on the page`) because that panel
+  only renders inside Review Tools, which is collapsed by default. A verdict
+  nobody can see is the defect being fixed, not a fix.
+- **In the manufacturing lane** as a WARNING, never a blocker: a plan the Skylark
+  blocks cannot cut is still a real, code-checked house — it just is not this kit.
+- **Gate:** the visual sweep asserts the badge EXISTS and MATCHES the verdict
+  computed offline from the artifact, on every plan swept. Mutation (remove the
+  badge) fails with `open-kit verdict is shown: no [data-kit-status] on the page`.
+
+Verified in the browser: `2 bed skylark gable` → **buildable** (green);
+`2 bed a-frame` → **not-buildable** (amber). Also corrected a stale claim in the
+`skylark.ts` header still saying the pitch angles "are not recoverable from
+nested cut sheets" — they were measured a few commits earlier.
+
 ## Kit-buildable homes are now REACHABLE (2026-08-16)
 
 Measuring the pitches answered "can the kit build this?" — and the answer for

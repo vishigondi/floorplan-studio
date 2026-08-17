@@ -8,11 +8,15 @@
  *
  * EVERYTHING IN THIS FILE IS OBSERVED FROM THE PUBLISHED REPO. Where a value is
  * NOT verifiable from those files it is left empty and the assessment degrades
- * honestly — we never guess a manufacturing number. In particular the roof
- * PITCH ANGLES are not recoverable from nested cut sheets; they live in the
- * WikiHouse block database (Airtable). Until they are sourced, no plan may
- * claim to be Skylark-buildable.
+ * honestly — we never guess a manufacturing number.
+ *
+ * The roof PITCH ANGLES were the last unsourced value, and they are now
+ * MEASURED: they are absent from the nested cut sheets (flat parts) but present
+ * in the detailed 3DM assemblies, which scripts/measure-skylark-pitch.py reads
+ * from a pinned commit. See SKYLARK_ROOF_BLOCKS for the per-block evidence.
  */
+
+import { roofPitchDeg } from '../roof-geometry.ts';
 
 /** Sheet stock named by the CNC layer `0_SHEET_SPRUCEPLY_2440X1220X18`. */
 export const SKYLARK_SHEET_MM = { length: 2440, width: 1220, thickness: 18 } as const;
@@ -156,4 +160,38 @@ export function assessSkylarkKit(input: SkylarkKitInput): SkylarkKitAssessment {
   if (offModule.length) return { status: 'not-buildable', reasons };
   reasons.push('Roof pitch and wall modules match Skylark 150 blocks.');
   return { status: 'buildable', reasons };
+}
+
+/** A compiled plan, in the shape this module needs to judge it. */
+export interface KitPlanLike {
+  roofStyle?: string;
+  roof?: { style?: string; ridgeAxis?: 'x' | 'z'; ridgeHeightFt?: number; eaveHeightFt?: number };
+  footprint?: { widthFt?: number; depthFt?: number };
+  exteriorWalls?: Array<{ span?: { x1: number; z1: number; x2: number; z2: number } }>;
+}
+
+/**
+ * Assess a compiled plan against the kit.
+ *
+ * One adapter, so the screen, the batteries and any export all ask the same
+ * question of the same geometry — pitch included, which comes from the single
+ * definition in roof-geometry rather than being recomputed per caller.
+ */
+export function assessSkylarkKitForPlan(plan: KitPlanLike): SkylarkKitAssessment {
+  const roofStyle = plan.roof?.style ?? plan.roofStyle ?? 'gable';
+  const widthFt = Number(plan.footprint?.widthFt ?? 0);
+  const depthFt = Number(plan.footprint?.depthFt ?? 0);
+  const pitch = roofPitchDeg(
+    {
+      style: roofStyle,
+      ridgeAxis: plan.roof?.ridgeAxis ?? 'z',
+      ridgeHeightFt: Number(plan.roof?.ridgeHeightFt ?? 0),
+      eaveHeightFt: Number(plan.roof?.eaveHeightFt ?? 0),
+    },
+    { widthFt, depthFt },
+  );
+  const wallLengthsFt = (plan.exteriorWalls ?? [])
+    .filter((wall) => wall.span)
+    .map((wall) => Math.hypot(wall.span!.x2 - wall.span!.x1, wall.span!.z2 - wall.span!.z1));
+  return assessSkylarkKit({ roofStyle, roofPitchDeg: pitch, wallLengthsFt });
 }
