@@ -174,6 +174,22 @@ async function sweepPlan(page, planId) {
       check(planId, `open-kit verdict matches the artifact (${expected})`, shown === expected, `screen says ${shown}`);
     }
 
+    // 2d. THE IFC EXPORT ROUTE. The writer is round-tripped offline by
+    //     check:ifc, but the ROUTE is what a user clicks — and it broke on
+    //     exactly this: Next bundled web-ifc and its WASM stopped resolving,
+    //     returning a 500 that no offline battery could see.
+    if (artifactForKit) {
+      const res = await fetch(`${base}/api/export-ifc?planId=${encodeURIComponent(planId)}`).catch(() => null);
+      const body = res && res.ok ? await res.text() : '';
+      record.ifcBytes = body.length;
+      check(planId, 'IFC export route responds 200', Boolean(res?.ok), `status ${res?.status ?? 'no response'}`);
+      check(planId, 'IFC export is a STEP file with entities',
+        body.startsWith('ISO-10303-21') && /#\d+=IFCWALL\(/.test(body),
+        `${body.length} bytes`);
+      check(planId, 'IFC export declares what it omits',
+        Boolean(res?.headers.get('x-ifc-coverage')), 'no X-Ifc-Coverage header');
+    }
+
     // 3. The 3D model.
     const bim = page.getByRole('button', { name: 'BIM 3D', exact: true }).first();
     if (await bim.count()) {

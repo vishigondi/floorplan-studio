@@ -10,10 +10,13 @@ export interface ExperimentalIfcExport {
 
 export function exportExperimentalIfc(home: DenHome): ExperimentalIfcExport {
   const semanticBim = semanticBimFromHome(home);
+  // IFC STEP is now REAL — /api/export-ifc writes IfcProject/Site/Building/
+  // Storey plus walls and a slab as extruded solids, round-tripped through
+  // web-ifc's own parser by check:ifc. What remains is coverage, not existence,
+  // and the warning names it instead of implying a complete model.
   const blockers = [
-    'web-ifc is installed, but full IFC STEP entity writing is intentionally gated behind semantic_bim_v1 validation.',
-    'This export is a readable IFC placeholder plus the complete semantic_bim_v1 JSON payload.',
-    'Before enabling production IFC, map elements to real IfcProject/IfcSite/IfcBuilding/IfcStorey/IfcWall/IfcSlab/IfcSpace entities and validate in a BIM checker.',
+    'IFC STEP export covers the spatial hierarchy, walls and the floor slab. Roof planes, window/door openings, fixtures and IfcSpace are NOT written yet.',
+    'This JSON payload is the complete semantic_bim_v1 model; the IFC file is a structural subset of it.',
   ];
   const ifcText = [
     'ISO-10303-21;',
@@ -24,7 +27,7 @@ export function exportExperimentalIfc(home: DenHome): ExperimentalIfcExport {
     'ENDSEC;',
     'DATA;',
     `/* semantic_bim_v1 element count: ${semanticBim.elements.length} */`,
-    `/* Full deterministic BIM JSON is exported separately in the product packet. */`,
+    `/* This is the JSON-handoff envelope. For a real IFC model use /api/export-ifc?planId=... */`,
     'ENDSEC;',
     'END-ISO-10303-21;',
   ].join('\n');

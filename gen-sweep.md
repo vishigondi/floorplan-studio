@@ -120,6 +120,49 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## IFC export is REAL (2026-08-16)
+
+The "Export Experimental IFC STEP" button wrote an ISO-10303-21 envelope with an
+**empty DATA section** — a file that opens as nothing. It was honest in its
+blockers, but an export that contains no building is not an export.
+
+**Now:** `lib/bim/write-ifc.ts` writes IFC4 with the spatial hierarchy every BIM
+tool needs (Project → Site → Building → Storey), walls and a floor slab as
+extruded solids, related to the storey by IfcRelContainedInSpatialStructure.
+Served by `GET /api/export-ifc?planId=` — generated SERVER-side, so web-ifc's
+~3 MB WASM never reaches the client bundle.
+
+Verified end to end, not by inspection: the served bytes reopen through
+**web-ifc's own parser** as IFC4, with 12 walls / 1 slab / 1 storey, and
+**16 geometry meshes tessellate**. Dimensions match the plan — a 28×28 ft plan
+with 8 ft walls measures 28.5 × 8.0 × 28.5 ft in the file.
+
+**A bug my own battery missed.** `tsc` flagged `IfcSIUnit` taking 3 arguments,
+not 4. I had passed IFC4's optional `Dimensions` first, shifting every slot, and
+the file shipped `IFCSIUNIT(*,$,.LENGTHUNIT.,$)` — **a length unit with no
+name**, so nothing downstream knew the coordinates were metres. Entity counts
+and geometry extents are unitless, so every check I had written sailed past it.
+`check:ifc` now asserts the length unit is METRE and that every declared unit
+has a name.
+
+**A vacuous assertion of my own, caught by mutation.** "products are contained in
+the storey" only checked that the relationship EXISTS. Mutating the writer to
+relate nothing still passed — every wall orphaned, which many viewers silently
+drop. It now counts `RelatedElements` against walls + slabs; the mutation fails
+with `0 related, expected 16`.
+
+**The route broke in a way no offline battery could see.** Next bundled web-ifc
+into the server chunk and its WASM stopped resolving (`ENOENT
+vendor-chunks/web-ifc-node.wasm`) — a 500 on every click while `check:ifc` stayed
+green, because the battery imports the library directly. Fixed with
+`serverExternalPackages: ["web-ifc"]`, and the live sweep now fetches the ROUTE
+and asserts 200 + STEP entities + the coverage header. Removing the config line
+reproduces the 500 and fails the gate.
+
+**Coverage is declared, not implied.** The result carries what was written and
+what was not (roof planes, openings, fixtures, IfcSpace); the route returns it in
+an `X-Ifc-Coverage` header and the button reads "Export IFC STEP (walls + slab)".
+
 ## The open-kit verdict is now VISIBLE (2026-08-16)
 
 The Skylark chain was complete except for the part that matters to a person:

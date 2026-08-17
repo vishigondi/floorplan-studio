@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "prepare": "git config core.hooksPath .githooks || true",
     "verify": "node scripts/final-interactive-sweep.mjs",
-    "gates": "npm run lint && npm run check:clip && npm run check:elevations && npm run check:code && npm run check:brief && npm run check:generation && npm run check:buildable && npm run check:drawing && npm run check:lookrender && npm run build",
+    "gates": "npm run lint && npm run check:clip && npm run check:elevations && npm run check:code && npm run check:brief && npm run check:generation && npm run check:buildable && npm run check:ifc && npm run check:drawing && npm run check:lookrender && npm run build",
     "gates:live": "node scripts/run-live-gates.mjs",
     "gates:all": "npm run gates && npm run gates:live",
     "check:brief": "node scripts/check-brief.mjs",
@@ -43,7 +43,8 @@
     "start": "next start",
     "lint": "eslint",
     "check:visual": "node scripts/visual-sweep.mjs",
-    "check:visual:quick": "node scripts/visual-sweep.mjs --only loft-showcase,gen-001,a-frame-22"
+    "check:visual:quick": "node scripts/visual-sweep.mjs --only loft-showcase,gen-001,a-frame-22",
+    "check:ifc": "node scripts/check-ifc.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

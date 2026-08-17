@@ -3008,7 +3008,11 @@ function WorkflowModal({
                 <button type="button" onClick={onExportPacket} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Brochure Packet JSON</button>
                 <button type="button" onClick={() => downloadText(`${home.id}-${home.pairedProposalId ?? 'draft'}-brochure.html`, brochureHtmlForHome(home, groups, currentCanvasImage(true), localVisualAssetAttributions(), currentSourceImage(home), currentDeterministicSvg()), 'text/html')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export HTML Brochure</button>
                 <div className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Experimental export</div>
-                <button type="button" onClick={() => downloadText(`${home.id}-${home.pairedProposalId ?? 'draft'}-experimental.ifc`, exportExperimentalIfc(home).ifcText, 'application/x-step')} className="w-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">Export Experimental IFC STEP</button>
+                {/* Real IFC4 now, generated server-side (web-ifc's WASM stays out
+                    of the client bundle). Still a SUBSET — walls, slab and the
+                    spatial hierarchy — so the label says so rather than implying
+                    a complete model. */}
+                <a href={`/api/export-ifc?planId=${encodeURIComponent(home.id)}`} download={`${home.id}.ifc`} data-export-ifc className="block w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-center text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export IFC STEP (walls + slab)</a>
                 <div className="text-[10px] leading-snug text-amber-700">IFC STEP is a handoff placeholder until full web-ifc/fragments entity writing is enabled. Semantic BIM JSON is the stable BIM export.</div>
                 <div className="pt-3 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Plan status</div>
                 <div className="text-[10px] leading-snug text-stone-400">Where this plan sits in your workflow (saved in this browser). Draft &gt; review &gt; promoted &gt; exported.</div>
