@@ -187,9 +187,18 @@ export async function POST(request: Request) {
 
   const pairedDir = path.join(loopDir, planId, 'paired');
   await mkdir(pairedDir, { recursive: true });
+  // PERSIST the program-reconciliation notes into the artifact. They were
+  // returned in the API response and nowhere else — and the UI navigates away on
+  // success, so the one person who could see them never did, and anyone opening
+  // the stored plan later saw a brief asking for 3 baths beside a 2-bath plan
+  // with no explanation. An honesty note that does not survive the write is not
+  // honesty.
+  const artifactWithNotes = compiled.notes?.length
+    ? { ...compiled.artifact, notes: compiled.notes }
+    : compiled.artifact;
   await writeFile(
     path.join(pairedDir, `${planId}-proposal-paired-v1.paired.json`),
-    `${JSON.stringify(compiled.artifact, null, 2)}\n`,
+    `${JSON.stringify(artifactWithNotes, null, 2)}\n`,
   );
   manifest.plans[planId] = [{
     id: 'proposal-paired-v1',

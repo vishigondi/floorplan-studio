@@ -287,6 +287,21 @@ function PairedStatusPanel({ home, renderedBounds }: { home: DenHome | null; ren
 }
 
 /**
+ * Program-reconciliation notes recorded on the artifact: where the built plan
+ * differs from the brief that asked for it, and why.
+ *
+ * These were computed at generation, returned in the API response, and then
+ * lost — the generate flow navigates straight to the plan, so nobody ever read
+ * them, and a stored plan showed "3 bath" in its brief beside two bathrooms with
+ * no explanation. Input honesty (P5) has to survive the write and the reload.
+ */
+function planNotes(home: DenHome | null): string[] {
+  if (!home) return [];
+  const raw = rawObject(home.pairedArtifactJson) as unknown as { notes?: unknown } | null;
+  return Array.isArray(raw?.notes) ? raw.notes.filter((note): note is string => typeof note === 'string') : [];
+}
+
+/**
  * Can this plan be built from the open WikiHouse kit?
  *
  * The verdict already existed and was gated, but nothing showed it — so the one
@@ -5472,6 +5487,19 @@ export default function Home() {
                     <div className="border-t border-stone-200 pt-1" data-kit-status={kit.status} title={kit.reasons.join(' ')}>
                       <span className="text-stone-400">wikihouse kit: </span>
                       <span className={`font-medium ${tone}`}>{kit.status}</span>
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  // Where the plan differs from its brief, said out loud on the
+                  // plan itself — not only to whoever happened to POST it.
+                  const notes = planNotes(displayHome).filter((note) => /requested .* built/.test(note));
+                  if (!notes.length) return null;
+                  return (
+                    <div className="border-t border-stone-200 pt-1" data-plan-notes={notes.length}>
+                      {notes.map((note) => (
+                        <div key={note} className="leading-snug text-amber-700">{note}</div>
+                      ))}
                     </div>
                   );
                 })()}

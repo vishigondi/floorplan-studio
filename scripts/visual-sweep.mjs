@@ -190,6 +190,24 @@ async function sweepPlan(page, planId) {
         Boolean(res?.headers.get('x-ifc-coverage')), 'no X-Ifc-Coverage header');
     }
 
+    // 2e. PROGRAM RECONCILIATION REACHES THE VIEWER. Notes were computed at
+    //     generation, returned in the API response, and dropped: the generate
+    //     flow navigates straight to the plan, so a stored plan showed a brief
+    //     asking for 4 baths beside two bathrooms with no explanation.
+    if (artifactForKit) {
+      const recorded = (artifactForKit.notes ?? []).filter((note) => /requested .* built/.test(note));
+      const shown = await page.locator('[data-plan-notes]').count();
+      check(planId, 'program-reconciliation notes are shown when recorded',
+        recorded.length === 0 || shown > 0,
+        `${recorded.length} recorded, ${shown} shown`);
+      // Only read it if it is actually there: querying a missing locator burns a
+      // 30 s timeout and reports a confusing second failure on top of the real one.
+      if (recorded.length && shown > 0) {
+        const text = await page.locator('[data-plan-notes]').first().innerText();
+        check(planId, 'the shown note states the mismatch', /requested .* built/.test(text), text.slice(0, 80));
+      }
+    }
+
     // 3. The 3D model.
     const bim = page.getByRole('button', { name: 'BIM 3D', exact: true }).first();
     if (await bim.count()) {

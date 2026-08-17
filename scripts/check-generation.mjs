@@ -186,6 +186,13 @@ const CASES = [
   // width-edge bedrooms R305 headroom).
   { name: '4-bed gable', brief: '4 bed gable, 80x100 lot, 10 ft setbacks', bedrooms: 4, style: 'gable', hasLot: true, expectWidth: 48 },
   { name: '4-bed a-frame refused (eave too low for 4 across)', brief: '4 bed a-frame, 80x100 lot, 10 ft setbacks', expectCompileError: /a-frame.*4|4 .*a-frame|headroom|builds at most/i },
+  // PROGRAM HONESTY, the whole class: ANY bath count the plan cannot deliver must
+  // be surfaced. The raw request used to be clamped to MAX_TEMPLATE_BATHS before
+  // the compiler saw it, so "3 bath" compared 2 against 2 and said nothing —
+  // only the 2-baths-do-not-fit case was ever covered.
+  { name: '3 baths exceeds the template maximum', brief: '3 bed 3 bath hip roof, 80x100 lot, 10 ft setbacks', bedrooms: 3, style: 'hip', hasLot: true, expectBaths: 2, expectBathNote: true },
+  { name: '4 baths exceeds the template maximum', brief: '2 bed 4 bath gable, 80x100 lot, 10 ft setbacks', bedrooms: 2, style: 'gable', hasLot: true, expectBaths: 2, expectBathNote: true },
+  { name: '1-bed programs are single-bath', brief: '1 bed 2 bath gable, 60x90 lot, 10 ft setbacks', bedrooms: 1, style: 'gable', hasLot: true, expectBaths: 1, expectBathNote: true },
   { name: '5-bed exceeds template ceiling', brief: '5 bed 3 bath gable, 2400 sqft, 80x120 lot, 10 ft setbacks', expectCompileError: /builds at most 4|requested 5 bedrooms/i },
 
   // Coverage honesty: a footprint that fits the setback envelope but exceeds the
@@ -275,6 +282,19 @@ for (const testCase of CASES) {
   if (testCase.expectBathNote) {
     // A dropped 2nd bath must be SURFACED (no silent program mismatch) — same
     // input-honesty class as the bedroom over-cap refusal.
+    // ...and the reason must be the real one. "Enlarge the footprint" is false
+    // advice when the request simply exceeds what any template offers.
+    {
+      const note = (compiled.notes || []).find((entry) => /baths; built/.test(entry));
+      const asked = testCase.brief.match(/(\d+)\s*bath/i);
+      if (note && asked) {
+        const requested = Number(asked[1]);
+        const expectReason = requested > 2 ? /largest template provides/i
+          : testCase.bedrooms === 1 ? /single-bedroom programs are single-bath/i
+            : /footprint fits this size\/lot/i;
+        check(`bath downgrade names the true reason (asked ${requested})`, expectReason.test(note), note);
+      }
+    }
     check('bath downgrade surfaced as a note (not silent)',
       (compiled.notes || []).some((note) => /bath/i.test(note)),
       JSON.stringify(compiled.notes) || 'no notes');

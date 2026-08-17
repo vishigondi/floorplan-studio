@@ -499,11 +499,16 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
   // surfaced — never silently delivered as if the brief were honored.
   if (typeof intent.requestedBaths === 'number') {
     const builtBaths = rooms.filter((room) => room.type === 'bathroom').length;
+    const builtBedrooms = rooms.filter((room) => room.type === 'bedroom').length;
     if (builtBaths < intent.requestedBaths) {
-      notes.push(
-        `requested ${intent.requestedBaths} baths; built ${builtBaths} — only a single-bath footprint `
-        + `fits this size/lot. Enlarge the footprint for a second bath.`,
-      );
+      // Say WHY, and say the true reason: "enlarge the footprint" is useless
+      // advice when the request is simply beyond what any template offers.
+      const because = intent.requestedBaths > MAX_TEMPLATE_BATHS
+        ? `the largest template provides ${MAX_TEMPLATE_BATHS} baths`
+        : builtBedrooms === 1
+          ? 'single-bedroom programs are single-bath'
+          : 'only a single-bath footprint fits this size/lot — enlarge the footprint for a second bath';
+      notes.push(`requested ${intent.requestedBaths} baths; built ${builtBaths} — ${because}.`);
     }
   }
 
@@ -1287,7 +1292,11 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
     requestedBedrooms: brief.bedrooms,
     // Carry the intended bath count so compile can SURFACE a downgrade (e.g. a
     // 2nd bath that the size/lot-constrained footprint couldn't host).
-    requestedBaths: bathsRequested,
+    // RAW, unclamped — `bathsRequested` above is already capped at
+    // MAX_TEMPLATE_BATHS and forced to 1 for single-bedroom programs, so passing
+    // it here made the honesty check compare 2 against 2 and stay silent while
+    // "3 bath" quietly shipped 2. Same shape as the bedroom clamp fixed earlier.
+    requestedBaths: typeof brief.baths === 'number' ? Math.round(brief.baths) : undefined,
     // Carry the ≤ sqft cap so compile can refuse a cap no template can meet,
     // instead of silently shipping a footprint larger than the user allowed.
     requestedMaxSqft: brief.maxSqft,

@@ -120,6 +120,58 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Fresh hunt: bath counts silently clamped, and honesty notes thrown away (2026-08-17)
+
+Backlog empty, so back to the prime directive: drive the generator at inputs the
+matrix does not cover and INSPECT the output. Thirteen briefs — extreme aspect
+ratios, minimum lots, sub-300 sqft, 4-bed-plus-loft, odd phrasing. Rooms inside
+the footprint, fixtures inside their rooms, openings inside the envelope: **0
+issues**, and every refusal specific ("footprint 20x24 ft exceeds the buildable
+envelope 10x90 ft"). Then two real defects, one behind the other.
+
+### Defect 1 — bath counts above the template cap are silently clamped
+`3 bed 3 bath` builds **2 baths**. `2 bed 4 bath` builds **2**. `1 bed 2 bath`
+builds **1**. In every case: **no note, no refusal.** The plan misrepresents its
+own brief — the exact class fires 1-4 were about.
+
+**Root cause, and it is a repeat.** `bathsRequested` is clamped to
+`MAX_TEMPLATE_BATHS` (and forced to 1 for 1-bed programs) at intent construction,
+and that CLAMPED value was passed as `requestedBaths`. So the honesty check
+compared 2 against 2 and stayed quiet. The field's own doc comment says "Baths
+the brief asked for, BEFORE any fit downgrade" — the code contradicted its
+documented contract. This is precisely the bedroom bug from fire 1, whose fix
+("carry the RAW request unclamped") was never applied to baths.
+
+Fixed by carrying the raw request, and the note now states the TRUE reason —
+"the largest template provides 2 baths" / "single-bedroom programs are
+single-bath" / "only a single-bath footprint fits this size/lot". The old text
+advised enlarging the footprint, which is false advice when no template offers a
+third bath.
+
+### Defect 2 — the note was computed, returned, and thrown away
+Worse than defect 1, and only visible by driving the real surface. The note WAS
+produced and WAS returned by `/api/generate-plan`... and then lost:
+
+- the artifact written to disk had **no `notes` field at all**, and
+- the generate flow does `window.location.href = body.url`, **navigating away
+  from the response** — so the one person who could have seen it did not.
+
+A stored plan therefore showed `brief: "2 bed 4 bath …"` beside two bathrooms
+with no explanation, forever. An honesty note that does not survive the write is
+not honesty. Notes are now **persisted into the artifact** and **rendered on the
+plan card** in amber, under the kit verdict.
+
+### Gates
+`check:generation` covers the whole class (3-bath, 4-bath, 1-bed-2-bath) and
+asserts the note names the true reason, not boilerplate. The live sweep asserts
+that a plan whose artifact records a mismatch actually SHOWS it. Mutation-tested
+three ways: re-clamp the raw request → the notes vanish; make every reason
+boilerplate → the reason assertion fails; hide the note block → the sweep fails.
+
+Also fixed a wart in my own gate: the follow-up text assertion queried a missing
+locator and burned a 30 s timeout, reporting a confusing second failure on top of
+the real one.
+
 ## outpost-medium's overlap diagnosed at source: a lost rotation (2026-08-17)
 
 The drift gate flagged `fx-bed10` / `fx-bedroom10-wardrobe` overlapping by
