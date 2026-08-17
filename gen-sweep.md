@@ -120,6 +120,57 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## A hip-height guard rail was billed as 14 sheets of interior wall (2026-08-17)
+
+The gable finding ended on "surfaces that are not walls-in-the-model never reach
+the bill". Checking the other direction — what the BOM counts that it should not
+— found the inverse defect, and this one is fixable without touching geometry.
+
+`build-validator.ts` never referenced `wallKind`. Loft **fall-protection guards**
+are walls in the semantic graph (that is exactly how IRC R312.1 finds them), so
+the panel loop billed them as full-height interior wall panels:
+
+| | before | after |
+|---|---|---|
+| `wall-int` | 32 | **18** |
+| `guard-rail` | — | **14** |
+
+loft-showcase's two 28 ft guards were **14 of its 32 interior wall panels**. A
+builder reading that bill orders 14 sheets of interior wall for a hip-height
+rail. They now bill on their own line, with the guard length and the R312.1
+citation in the notes. `gen-001` (no loft) is byte-identical — the control case.
+
+Also corrected the assumption string the validator publishes: it still said
+"4 ft structural grid ≈ 1.2 m sheet", the same wrong figure `9fb3825` removed
+from the constant and that `paired:smoke` was still asserting this morning. It
+now reads "= the 1220 mm Skylark sheet, 4.003 ft", which is the measured number.
+
+### Nearly shipped a vacuous assertion
+My first version of the second gate was:
+```js
+check(..., bomQty('wall-int') < bomQty('wall-int') + bomQty('guard-rail'))
+```
+which is true by arithmetic whether or not the fix exists. Replaced with a
+behavioural one: re-run the validator on a copy whose guards are **disguised as
+ordinary interior walls**, and require the interior panel count to RISE. That
+version fails the moment guards stop being excluded.
+
+### Mutation testing, including one invalid mutation
+- revert the exclusion -> both loft assertions fail
+- keep the guard line but ALSO count them as walls -> the disguise assertion fails
+- wrong quantity (+1) -> the quantity assertion fails
+- emit the line on unguarded plans -> the no-spurious-line assertion fails
+
+That last one **passed at first**, and it was the mutation that was wrong, not the
+assertion: `addBom` filters `quantity > 0`, so forcing the `if` true still emits
+nothing. Re-ran it with `Math.max(1, ...)` and it failed correctly. Worth noting
+because "mutation passed" reads as "gate is vacuous" and here it meant "your
+mutation was inert" — the same class of mistake as a check that never runs.
+
+### Still open
+The gable omission is unchanged and still wants the scope decision. This fire
+fixed what the BOM over-counts; what it under-counts needs the geometry call.
+
 ## Full visual sweep after the data-path migration; found an unmodelled gable (2026-08-17)
 
 Today rerouted **every** plan-data fetch through `/api/plan-file`, and only the

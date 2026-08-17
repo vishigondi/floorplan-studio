@@ -227,7 +227,7 @@ function statusFrom(blockers: string[], warnings: string[]): BuildValidationRepo
 
 export function validateBuildability(home: DenHome): BuildValidationReport {
   const assumptions = [
-    `panel module: ${PANEL_WIDTH_FT.toFixed(2)}ft (4 ft structural grid ≈ 1.2 m sheet)`,
+    `panel module: ${PANEL_WIDTH_FT.toFixed(2)}ft (4 ft structural grid = the 1220 mm Skylark sheet, 4.003 ft)`,
     `wall height SKUs: ${WALL_HEIGHT_SKUS_FT.map((sku) => `${sku.toFixed(2)}ft`).join(', ')}`,
     `maximum simple floor joist span: ${MAX_JOIST_SPAN_FT}ft`,
   ];
@@ -285,9 +285,19 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     if (exterior) run.exterior = true;
     return run;
   };
+  // A LOW GUARD RAIL IS NOT A WALL PANEL. The loft's fall-protection guards are
+  // walls in the semantic graph (that is how IRC R312.1 finds them), and this
+  // loop billed them as full-height interior panels: loft-showcase's two 28 ft
+  // guards contributed 14 of its 32 `wall-int` panels — a builder ordering
+  // 14 sheets of interior wall for a hip-height rail. They are counted below on
+  // their own line instead.
+  const isGuardRail = (wall: { wallKind?: string; id?: string }) =>
+    /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`);
+  let guardRailFt = 0;
   for (const wall of walls) {
     const length = wallLengthFt(wall);
     if (length < 0.05) continue;
+    if (isGuardRail(wall)) { guardRailFt += length; continue; }
     runFor(wall.id, Boolean(wall.exterior)).lengthFt += length;
   }
   for (const opening of home.sourceOpenings ?? []) {
@@ -332,6 +342,17 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
       quantity: interiorOpeningPanels,
       unit: 'each',
       notes: ['One per interior opening; counted within the wall run, not in addition to it.'],
+    });
+  }
+
+  if (guardRailFt > 0) {
+    addBom(bom, {
+      componentId: 'guard-rail',
+      description: 'Loft guard rail, 4 ft module',
+      category: 'structural',
+      quantity: Math.ceil(guardRailFt / PANEL_WIDTH_FT),
+      unit: 'each',
+      notes: [`${guardRailFt.toFixed(1)} ft of fall-protection guard (IRC R312.1); not billed as wall panels.`],
     });
   }
 

@@ -280,6 +280,43 @@ for (const brief of BRIEFS) {
   // warning (CNC-cut to the design), which does not block.
   check(`${brief} — plan not blocked (buildable)`, report.status !== 'blocked', (report.blockers ?? []).slice(0, 1).join(''));
   check(`${brief} — roof pitch never blocks (stock or CNC-cut)`, ruleStatus['roof-pitch'] && ruleStatus['roof-pitch'].status !== 'blocked', ruleStatus['roof-pitch'] ? ruleStatus['roof-pitch'].status : 'rule missing');
+
+  // A LOW GUARD RAIL IS NOT A WALL PANEL. Loft guards are walls in the semantic
+  // graph (that is how IRC R312.1 finds them) and were billed as full-height
+  // interior panels — loft-showcase's two 28 ft guards were 14 of its 32
+  // `wall-int`, i.e. 14 sheets of interior wall ordered for a hip-height rail.
+  // Both directions are asserted: a loft plan must bill them separately, and a
+  // single-storey plan must not invent the line.
+  const bomQty = (id) => (report.bom ?? []).find((item) => item.componentId === id)?.quantity ?? 0;
+  const hasLoft = (res.artifact.rooms ?? []).some((room) => (room.levelIndex ?? 0) >= 1);
+  const guardFt = [...(res.artifact.interiorWalls ?? []), ...(res.artifact.exteriorWalls ?? [])]
+    .filter((wall) => /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`))
+    .reduce((sum, wall) => sum + Math.hypot(
+      (wall.span?.x2 ?? 0) - (wall.span?.x1 ?? 0),
+      (wall.span?.z2 ?? 0) - (wall.span?.z1 ?? 0),
+    ), 0);
+  if (hasLoft && guardFt > 0) {
+    check(`${brief} — loft guard rails are billed on their own line`,
+      bomQty('guard-rail') === Math.ceil(guardFt / 4), `${bomQty('guard-rail')} vs ${Math.ceil(guardFt / 4)} expected from ${guardFt.toFixed(1)} ft`);
+    // The whole point: that quantity must have LEFT the interior wall count.
+    // Asserted by re-running the validator on a copy whose guards are disguised
+    // as ordinary interior walls — the interior panel count must then RISE.
+    // (`wall-int < wall-int + guard-rail` would be true by arithmetic alone.)
+    const disguised = JSON.parse(JSON.stringify(res.artifact));
+    for (const wall of disguised.interiorWalls ?? []) {
+      if (/guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`)) {
+        wall.wallKind = 'solidInterior';
+        wall.id = String(wall.id ?? '').replace(/guard|rail/gi, 'plain');
+      }
+    }
+    const disguisedReport = validateBuildability(toHome(disguised));
+    const disguisedInt = (disguisedReport.bom ?? []).find((item) => item.componentId === 'wall-int')?.quantity ?? 0;
+    check(`${brief} — guard length is not also counted as interior wall panels`,
+      disguisedInt > bomQty('wall-int'),
+      `disguised-as-wall gives ${disguisedInt}, real ${bomQty('wall-int')} — guards were never excluded`);
+  } else {
+    check(`${brief} — no guard-rail line without a guarded loft`, bomQty('guard-rail') === 0, `${bomQty('guard-rail')}`);
+  }
 }
 
 if (failures) {
