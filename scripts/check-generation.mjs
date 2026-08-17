@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
-const { codeAdvisoryReport } = await import(join(root, 'lib/standards/code-advisory.ts'));
+const { codeAdvisoryReport, CODE_ADVISORY_RULES } = await import(join(root, 'lib/standards/code-advisory.ts'));
 const { ceilingHeightAt, ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelope-clip.ts'));
 const ceilingPlanes = (artifact) => ceilingPlanesFromRoofPoints(artifact.roof?.planes ?? []);
 const { headroomOverFt, requiredHeadroomFt } = await import(join(root, 'lib/generate/place-fixtures.ts'));
@@ -735,11 +735,28 @@ console.log('constraint engine: a deliberately broken plan must FAIL, per rule')
         a.interiorWalls = (a.interiorWalls ?? []).filter((w) => !isGuard(w));
         a.exteriorWalls = (a.exteriorWalls ?? []).filter((w) => !isGuard(w));
       }, '2 bed a-frame with loft, 40x60 lot, 5 ft setbacks'],
+      ['ZON-SETBACK', 'a lot too small for the footprint once setbacks are taken', (a) => {
+        a.lot = { widthFt: 30, depthFt: 30, setbacksFt: { front: 10, rear: 10, left: 10, right: 10 } };
+      }],
+      ['ZON-COVERAGE', 'a 10% coverage cap the footprint blows through', (a) => {
+        a.lot = { ...(a.lot ?? {}), widthFt: 60, depthFt: 90, maxCoverageRatio: 0.1 };
+      }],
       ['WH-GRID-4FT', 'a bedroom 1.3 ft off the 4 ft structural grid', (a) => {
         const bed = a.rooms.find((r) => r.type === 'bedroom');
         bed.bounds.w = (bed.bounds.w ?? 12) + 1.3; bed.w = bed.bounds.w;
       }],
     ];
+
+    // COVERAGE MUST NOT ROT. Every rule in the registry needs at least one
+    // breakage here, or a rule added later is silently never tested for whether
+    // it can fail — which is the whole point of this block. (The NC site
+    // advisories are deliberately excluded: they are hardcoded `not-evaluated`
+    // because septic, flood and town-limits data is not derivable from a floor
+    // plan, and check:code pins them there.)
+    const covered = new Set(BREAKAGES.map(([ruleId]) => ruleId));
+    const uncovered = CODE_ADVISORY_RULES.map((rule) => rule.ruleId).filter((id) => !covered.has(id));
+    check('every registry rule has a breakage test', uncovered.length === 0,
+      `no breakage proves these can fail: ${uncovered.join(', ')}`);
 
     for (const [ruleId, description, breakIt, altBrief] of BREAKAGES) {
       const source = altBrief

@@ -120,6 +120,41 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Anti-vacuity coverage completed, and made self-enforcing (2026-08-17)
+
+### The NC jurisdiction rules: no defect, and already protected
+`NC-SEPTIC-18E`, `NC-FLOOD-SFHA` and `NC-TOWN-LIMITS` are hardcoded
+`status: 'not-evaluated'`, unconditionally — they can never pass and never fail.
+I went looking for a defect and did not find one: **that is the honest status.**
+Septic separations need soil/well/stream data, flood status needs the parcel's
+FIRM panel, town limits needs the parcel's jurisdiction — none of it derivable
+from a floor plan, and each detail string says so and names who to ask.
+
+And the honesty is already gated: `check:code` asserts all three exist AND are
+`not-evaluated`. **Verified rather than assumed** — flipping them to `pass`
+fails with `site advisories present: expected true, got false`. Reported as
+clean rather than manufacturing work.
+
+### Completing the breakage set
+Last fire's anti-vacuity block covered six rules; `ZON-SETBACK` and
+`ZON-COVERAGE` were never breakage-tested. Added:
+
+- **ZON-SETBACK** — a 30x30 lot with 10 ft setbacks under a 28 ft footprint → FAILS
+- **ZON-COVERAGE** — a 10% coverage cap the footprint blows through → FAILS
+
+All **8** registry rules now have a breakage proving they can say no.
+
+### Making the coverage self-enforcing
+Complete coverage today rots the moment someone adds rule nine. So the block now
+asserts **every rule in `CODE_ADVISORY_RULES` has at least one breakage test**,
+with the NC site advisories deliberately excluded and the reason written down.
+Mutation-tested by adding a `FAKE-NEW-RULE` to the registry:
+`no breakage proves these can fail: FAKE-NEW-RULE`.
+
+That closes the loop on the vacuous-coverage class this session kept hitting — a
+gate that silently stops covering things is the failure mode, so now the coverage
+itself is gated.
+
 ## IRC-R312.1 added: the guardless-loft false pass is closed (2026-08-17)
 
 The false pass from last fire, fixed. Stripping every fall-protection guard from
