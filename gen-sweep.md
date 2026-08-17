@@ -120,6 +120,62 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Next.js 16.1.6 -> 16.3.0: 7 vulnerabilities -> 0 (2026-08-17)
+
+### Correcting my own number first
+Last entry I reported "6 high-severity advisories". That was the npm audit
+SUMMARY, which counts **packages**. The `next` package alone carried **28
+advisories** — multiple middleware/proxy bypasses, SSRF in rewrites and in
+Server Actions on custom servers, several DoS paths, cache poisoning, XSS via
+CSP nonces. Materially worse than I described.
+
+### The upgrade
+`fixAvailable` said 16.3.1 (`isSemVerMajor: false`). It would not install:
+this environment's npm has a **registry date cutoff of 2026-08-10**, and 16.3.1
+was published 2026-08-13. **16.3.0** (2026-08-03) is the newest installable, so
+that is what we are on. Then `npm audit fix` (non-force) cleared the three
+remaining transitive leaves.
+
+| | before | after |
+|---|---|---|
+| vulnerabilities | 7 (6 high, 1 low) | **0** |
+| `next` advisories | 28 | 0 |
+| also cleared | postcss (XSS), sharp (libvips CVEs), nanoid, brace-expansion, js-yaml, @babel/core | — |
+
+### Verification, including a mistake in it
+`gates` (lint + 9 batteries + clean build) and `gates:live` green; all 18 plans
+sweep with 0 assertion failures on 16.3.0.
+
+**My first pixel comparison was invalid and I nearly reported it as evidence.**
+I copied `.qa-shots/sweep` as the "before" baseline — but that directory held
+captures of MIXED VINTAGE accumulated across several earlier iterations, and the
+most recent live run had refreshed only 8 of 52 files. The first diff therefore
+compared 44 stale files against themselves and printed a reassuring wall of
+"identical". Re-running the full sweep and diffing properly gave 21 differences,
+and every one is explained:
+
+- **1.05–1.13% at bbox (1391,10,1591,168)** on most 3D captures — cropped and
+  looked at: it is the info card showing **the kit badge I added two iterations
+  ago**. Those baselines predate it.
+- **0.09–0.12% at bbox (0,1042,46,1115)** on two elevations — cropped: the
+  **Next dev-tools "N" indicator**, whose rendering shifted between versions.
+  Dev-mode chrome, not app content.
+- **gen-002 / gen-003** — different briefs reusing the same generated IDs
+  between runs. Not comparable at all.
+
+The genuinely valid pairs (baselines captured on 16.1.6 *after* all my changes:
+`a-frame-22`, `gen-001`, `loft-showcase` — plan and 3D) are **pixel-identical**
+on 16.3.0.
+
+### Two things found on the way
+- **The sweep could silently shrink its own coverage.** On a cold dev server the
+  feed had not rendered within its fixed 2.2 s wait, so it found zero stored
+  plans, swept only the 12 it generated itself, and reported success. It now
+  WAITS for the feed and exits non-zero rather than passing over a shrunken set.
+- **Next 16.3 writes a block into `AGENTS.md`** on `next dev`
+  (`generate-agent-files.js`). Committed with the upgrade, per its own note that
+  removing it just re-creates the diff.
+
 ## Dependency audit: three unused @thatopen packages removed (2026-08-17)
 
 Long-standing backlog item — five `@thatopen/*` packages, unclear how many were

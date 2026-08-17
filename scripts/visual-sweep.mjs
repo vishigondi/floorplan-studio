@@ -292,9 +292,20 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, de
 const stored = wantStored && !only.length
   ? await (async () => {
     await page.goto(`${base}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForTimeout(2200);
+    // WAIT for the feed, do not guess at it. A fixed sleep on a cold dev server
+    // finds zero cards, and the sweep then quietly covers only the plans it
+    // generated itself while still reporting success — coverage shrinking in
+    // silence is the failure mode this whole harness exists to prevent.
+    await page.locator('[data-feed-plan-id]').first().waitFor({ state: 'attached', timeout: 60000 })
+      .catch(() => {});
     const ids = await page.locator('[data-feed-plan-id]').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-feed-plan-id')).filter(Boolean));
-    return [...new Set(ids)].filter((id) => !generated.some((g) => g.id === id)).sort();
+    const found = [...new Set(ids)].filter((id) => !generated.some((g) => g.id === id)).sort();
+    if (!found.length) {
+      console.error('[visual-sweep] the feed listed no stored plans — refusing to report a pass over a shrunken set.');
+      await browser.close();
+      process.exit(2);
+    }
+    return found;
   })()
   : [];
 

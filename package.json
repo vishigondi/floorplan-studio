@@ -54,7 +54,7 @@
     "@thatopen/fragments": "3.4.5",
     "@types/three": "^0.183.1",
     "camera-controls": "3.1.2",
-    "next": "16.1.6",
+    "next": "16.3.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "three": "^0.183.2",
