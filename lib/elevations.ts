@@ -193,10 +193,29 @@ export function buildElevationModel(artifact: ElevationArtifactInput, side: Elev
     : Math.max(0.6, facadeCeiling(planes, facade, spanFt / 2, eaveFt));
 
   const openings: ElevationOpening[] = [];
+  // An opening belongs to ONE facade — the nearest one. Testing each facade
+  // independently against the tolerance lets a short opening in a corner fall
+  // within reach of two of them and be drawn twice, once on each elevation.
+  // Traced artifacts inset openings by up to ~1.2 ft, so the tolerance has to
+  // stay generous; exclusivity is what keeps that generosity safe.
+  const facadeDistanceFt = (span: { x1: number; z1: number; x2: number; z2: number }, view: ElevationView) => {
+    const other = facadeFor(view, widthFt, depthFt);
+    const [c1, c2] = other.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+    return Math.max(Math.abs(c1 - other.atFt), Math.abs(c2 - other.atFt));
+  };
   const onFacade = (span?: { x1: number; z1: number; x2: number; z2: number }) => {
     if (!span) return false;
-    const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
-    return Math.max(Math.abs(c1 - facade.atFt), Math.abs(c2 - facade.atFt)) < FACADE_TOLERANCE_FT;
+    const here = facadeDistanceFt(span, side);
+    if (!(here < FACADE_TOLERANCE_FT)) return false;
+    // Ties resolve in a fixed order, so the same plan always draws identically.
+    const ORDER: ElevationView[] = ['front', 'rear', 'side', 'right'];
+    let best: ElevationView = ORDER[0];
+    let bestDistance = Infinity;
+    for (const view of ORDER) {
+      const distance = facadeDistanceFt(span, view);
+      if (distance < bestDistance - 1e-9) { bestDistance = distance; best = view; }
+    }
+    return best === side;
   };
   const alongCoords = (span: { x1: number; z1: number; x2: number; z2: number }): [number, number] =>
     facade.axis === 'z' ? [span.x1, span.x2] : [span.z1, span.z2];
@@ -234,7 +253,7 @@ export function buildElevationModel(artifact: ElevationArtifactInput, side: Elev
     // below half a foot of viable pane, nothing is drawn.
     let sill = base + 3.15;
     const maxHead = limit - 0.15;
-    let head = Math.min(sill + 2.4, maxHead);
+    const head = Math.min(sill + 2.4, maxHead);
     if (head - sill < 1.0) sill = Math.max(base + 0.3, head - 2.4);
     if (head - sill < 0.5) continue;
     openings.push({

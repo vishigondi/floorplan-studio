@@ -54,11 +54,11 @@ const BRIEFS = [
   '3 bed 2 bath hip roof, 80x100 lot, 10 ft setbacks',
 ];
 
-let failures = 0;
+// `findings` is the ONLY record of failure — a second counter alongside it can
+// disagree with the exit code, which is how a red gate reports green.
 const findings = [];
 function check(planId, label, ok, detail = '') {
   if (!ok) {
-    failures += 1;
     findings.push({ planId, label, detail });
     console.error(`  FAIL [${planId}] ${label}${detail ? `: ${detail}` : ''}`);
   }

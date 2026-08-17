@@ -6,6 +6,10 @@ import type {
   DenHome,
   SourceWallSegment,
 } from './types';
+// Relative WITH extension: the offline gate batteries load this through raw
+// Node, which cannot resolve extensionless value imports (`./types` above is
+// erased at compile time, so it is exempt).
+import { roofPitchDeg as sharedRoofPitchDeg } from './roof-geometry.ts';
 
 const FT_PER_M = 3.280839895;
 // The planner's structural module is a 4 ft grid (≈ 1.22 m) — every room, wall,
@@ -201,12 +205,18 @@ function componentForRoof(home: DenHome, pitchDeg: number): string {
 }
 
 function roofPitchDeg(home: DenHome): number {
-  if (home.roofStyle === 'flat') return 0;
-  const ridge = home.roofSemantics?.ridgeHeightFt ?? home.height;
-  const eave = home.roofSemantics?.eaveHeightFt ?? Math.max(7, home.height * 0.45);
-  const axis = home.roofSemantics?.ridgeAxis ?? 'x';
-  const run = Math.max(0.1, (axis === 'x' ? home.footprint.depth : home.footprint.width) / 2);
-  return Math.atan(Math.max(0, ridge - eave) / run) * 180 / Math.PI;
+  // Resolve this home's roof, then hand the geometry to the ONE definition of
+  // pitch (lib/roof-geometry.ts) — a local copy is how a shed came to be
+  // reported at twice its real angle.
+  return sharedRoofPitchDeg(
+    {
+      style: home.roofStyle ?? 'gable',
+      ridgeAxis: home.roofSemantics?.ridgeAxis ?? 'x',
+      ridgeHeightFt: home.roofSemantics?.ridgeHeightFt ?? home.height,
+      eaveHeightFt: home.roofSemantics?.eaveHeightFt ?? Math.max(7, home.height * 0.45),
+    },
+    { widthFt: home.footprint.width, depthFt: home.footprint.depth },
+  );
 }
 
 function statusFrom(blockers: string[], warnings: string[]): BuildValidationReport['status'] {

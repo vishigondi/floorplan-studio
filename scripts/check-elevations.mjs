@@ -223,8 +223,30 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
         model.openings.some((drawn) => drawn.id === opening.id),
         `${home[0]} draws [${model.openings.map((o) => o.id).join(', ')}]`,
       );
+      // ...and on NO other. The drawing tolerance is deliberately generous (1.6 ft,
+      // for traced insets); testing each facade independently would let a short
+      // corner opening be drawn twice, on two different elevations.
+      const drawnOn = VIEWS.filter((view) => buildElevationModel(artifact, view).openings.some((d) => d.id === opening.id));
+      check(
+        `${beds}-bed ${style}: ${opening.id} is drawn exactly once`,
+        drawnOn.length === 1,
+        `drawn on ${drawnOn.join(', ') || 'nothing'}`,
+      );
     }
   }
+}
+
+console.log('universal: a short corner opening is drawn once, not on both facades');
+{
+  const cornerArtifact = {
+    planId: 'corner-test',
+    footprint: { widthFt: 28, depthFt: 28 },
+    roof: { style: 'gable', ridgeAxis: 'z', ridgeHeightFt: 14, eaveHeightFt: 8, overhangFt: 1, planes: [] },
+    windows: [{ id: 'win-corner', span: { x1: 0, z1: 0, x2: 0, z2: 1.5 } }],
+    doors: [],
+  };
+  const drawnOn = VIEWS.filter((view) => buildElevationModel(cornerArtifact, view).openings.some((o) => o.id === 'win-corner'));
+  check('a 1.5 ft opening in the corner is drawn on exactly one facade', drawnOn.length === 1, `drawn on ${drawnOn.join(', ') || 'nothing'}`);
 }
 
 if (failures) {

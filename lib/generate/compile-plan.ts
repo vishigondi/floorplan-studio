@@ -19,6 +19,7 @@ import { ceilingPlanesFromRoofPoints } from '../bim/envelope-clip.ts';
 // The kit is discrete: its pitches are measured from the real Skylark blocks,
 // so a "buildable from the kit" request constrains geometry, not marketing.
 import { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG } from '../kit/skylark.ts';
+import { ridgeHeightForPitchFt, roofPitchDeg } from '../roof-geometry.ts';
 
 export interface IntentRoom {
   id: string;
@@ -454,8 +455,7 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
   // block set can cut is the same silent-mismatch class as clamping a bedroom
   // count. The kit module decides — never a second copy of its rules here.
   if (intent.kitBuildable) {
-    const run = Math.max(0.1, (intent.roof.ridgeAxis === 'x' ? depthFt : widthFt) / 2);
-    const pitchDeg = Math.atan((intent.roof.ridgeHeightFt - intent.roof.eaveHeightFt) / run) * 180 / Math.PI;
+    const pitchDeg = roofPitchDeg(intent.roof, { widthFt, depthFt });
     const kit = assessSkylarkKit({ roofStyle: intent.roof.style, roofPitchDeg: pitchDeg });
     if (kit.status !== 'buildable') {
       errors.push(
@@ -1035,7 +1035,11 @@ function gableRidgeFt(
 ): number {
   if (style === 'a-frame') return 18;
   if (brief.kitBuildable && KIT_PITCH_DEG > 0) {
-    return 8 + Math.tan((KIT_PITCH_DEG * Math.PI) / 180) * (widthFt / 2);
+    return ridgeHeightForPitchFt(
+      { style, ridgeAxis: 'z', ridgeHeightFt: 0, eaveHeightFt: 8 },
+      { widthFt, depthFt: widthFt },
+      KIT_PITCH_DEG,
+    );
   }
   return brief.hasLoft ? 20 : 14;
 }

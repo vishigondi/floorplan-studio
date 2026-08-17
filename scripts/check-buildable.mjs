@@ -82,12 +82,18 @@ const PANEL_FIT_RULES = ['wall-module', 'wall-height', 'openings', 'floor-span']
 const { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG, SKYLARK_ROOF_BLOCKS, SKYLARK_MODULE_FT, SKYLARK150_BLOCKS } =
   await import(join(root, 'lib/kit/skylark.ts'));
 
-function roofPitchDeg(artifact) {
-  const roof = artifact.roof ?? {};
-  if (roof.style === 'flat') return 0;
-  const run = Math.max(0.1, (roof.ridgeAxis === 'x' ? artifact.footprint.depthFt : artifact.footprint.widthFt) / 2);
-  return Math.atan(((roof.ridgeHeightFt ?? 0) - (roof.eaveHeightFt ?? 0)) / run) * 180 / Math.PI;
-}
+// The battery must measure pitch the way the product does, or it grades a
+// different building than the one that ships.
+const { roofPitchDeg: sharedRoofPitchDeg, roofRunFt } = await import(join(root, 'lib/roof-geometry.ts'));
+const roofPitchDeg = (artifact) => sharedRoofPitchDeg(
+  {
+    style: artifact.roof?.style ?? 'gable',
+    ridgeAxis: artifact.roof?.ridgeAxis ?? 'z',
+    ridgeHeightFt: artifact.roof?.ridgeHeightFt ?? 0,
+    eaveHeightFt: artifact.roof?.eaveHeightFt ?? 0,
+  },
+  { widthFt: artifact.footprint.widthFt, depthFt: artifact.footprint.depthFt },
+);
 
 console.log('skylark: kit envelope + honest not-buildable marking');
 // The 4 ft grid must equal the real Skylark sheet width (1220 mm), not 1.2 m.
@@ -141,6 +147,22 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
 // A kit REQUEST must produce a kit-buildable home or an honest refusal. Sourcing
 // the pitches is only worth anything if a customer can act on them: asking for a
 // WikiHouse home has to yield geometry the blocks can actually cut.
+// ONE definition of pitch, and it must know a mono-pitch roof from a ridged one.
+// Every local copy divided the span in half, so a shed — whose single plane
+// rises across the WHOLE span — was reported at twice its real angle.
+console.log('roof geometry: pitch is measured over the run the roof actually rises across');
+for (const [style, expectDeg] of [['flat', 0], ['shed', 8.1], ['gable', 23.2], ['a-frame', 50.5], ['hip', 23.2], ['gambrel', 29.7], ['barn', 29.7]]) {
+  const res = compileIntent(mockIntentFromBrief(parseBrief(`2 bed ${style} roof, 80x100 lot, 10 ft setbacks`)), 'pitch-test', style);
+  if (!res.ok) { check(`${style}: compiles for the pitch check`, false, res.errors.join('; ')); continue; }
+  const a = res.artifact;
+  const got = roofPitchDeg(a);
+  check(`${style}: pitch is ${expectDeg}°`, Math.abs(got - expectDeg) < 0.15, `${got.toFixed(2)}°`);
+  const across = a.roof.ridgeAxis === 'x' ? a.footprint.depthFt : a.footprint.widthFt;
+  check(`${style}: rise is measured over the ${style === 'shed' ? 'whole' : 'half'} span`,
+    Math.abs(roofRunFt(a.roof, { widthFt: a.footprint.widthFt, depthFt: a.footprint.depthFt })
+      - (style === 'shed' ? across : across / 2)) < 1e-9);
+}
+
 console.log('skylark: a kit request yields a kit-buildable plan, or refuses');
 {
   const kitBrief = (text) => compileIntent(mockIntentFromBrief(parseBrief(text)), 'kit-test', text);

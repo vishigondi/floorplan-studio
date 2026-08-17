@@ -221,7 +221,7 @@ function windowGlassExtent(element: SemanticBimElement, model: SemanticBimModel)
   const fullHeightGlass = /full.?height|folding|glass.?wall|glaz/.test(windowText);
   const guardGlazing = /guard|rail|low/.test(windowText);
   let sill = guardGlazing ? y1 + 0.35 : fullHeightGlass ? y1 + 0.3 : y1 + 3.15;
-  let glassHeight = guardGlazing ? 1.1 : fullHeightGlass ? Math.max(2.8, Math.min(4.8, height)) : Math.max(2.4, Math.min(4.6, height));
+  const glassHeight = guardGlazing ? 1.1 : fullHeightGlass ? Math.max(2.8, Math.min(4.8, height)) : Math.max(2.4, Math.min(4.6, height));
   const planes = modelCeilingPlanes(model);
   if (planes.length) {
     let roofLimit = Infinity;

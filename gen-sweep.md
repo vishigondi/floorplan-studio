@@ -25,6 +25,59 @@ reliably produce sound, correctly code-checked plans you'd hand to an architect.
    traced plans + gen-001 untouched; keep every data-* hook; delete throwaway
    gen-* after each fire.
 
+## Code review — four real defects, three of them mine (2026-08-16)
+
+Full review pass: `tsc`, `eslint`, the whole gate ladder, then reading every line
+changed this session, then auditing the wider tree for the classes these fires
+keep surfacing.
+
+### 1. Roof pitch was written out by hand FOUR times, and the copies were wrong
+`lib/build-validator.ts`, `lib/generate/compile-plan.ts`, `scripts/check-buildable.mjs`
+and the inverse in the kit-gable ridge each encoded the ridge↔pitch relationship.
+They had already drifted (some clamped a negative rise, some did not) — and every
+one of them **divided the span in half**. That is right for a ridged roof and
+wrong for a shed, whose single plane rises across the WHOLE span:
+
+> a 28 ft shed going 8 ft → 12 ft was reported at **15.9°**. It is **8.1°**.
+
+That number is in this very log twice, from earlier fires, stated as fact.
+Fixed with `lib/roof-geometry.ts` — one `roofRunFt` / `roofPitchDeg` /
+`ridgeHeightForPitchFt`, used by all four callers (P7). Only the shed's number
+changes; every other style is identical. `check:buildable` now asserts the pitch
+of all seven styles AND that the run is the whole span for a shed, half for the
+rest; mutating the run back to half-span fails with `shed: pitch is 8.1°: 15.95°`.
+
+### 2. An opening could be drawn on TWO elevations at once
+The drawing tolerance is deliberately generous (1.6 ft, because traced artifacts
+inset openings by up to ~1.2 ft). Each facade was tested against it independently,
+so an opening shorter than ~3.2 ft sitting in a corner is within reach of two
+facades and gets drawn on both. Verified: a 1.5 ft window at (0,0) drew on
+`front, side`. Compiled openings are 2.5–4 ft so they never tripped it; traced
+plans can. Facade assignment is now EXCLUSIVE — nearest facade wins, ties in a
+fixed order — and `check:elevations` asserts every opening is drawn exactly once
+(105 assertions) plus a direct corner case. Mutation-tested.
+
+### 3. `npm run lint` was not in the gate ladder
+Two `prefer-const` **errors** and 29 warnings were sitting in the tree, entirely
+ungated — `gates` ran the batteries and the build, never eslint. Errors fixed
+(both pre-existing, `d4eeddb`), and `lint` is now the first step of `gates`.
+
+### 4. My visual sweep had two notions of failure
+`visual-sweep.mjs` incremented a `failures` counter AND pushed to `findings`, but
+the exit code read only `findings`. Two counters that can disagree is how a red
+gate reports green. The counter is gone; `findings` is the single record.
+
+### Validated, not just re-run
+- `tsc --noEmit` clean; `eslint` 0 errors; `gates` + `gates:live` green.
+- **Determinism**: 6 briefs × 5 compiles each — byte-identical artifacts every
+  time (the fixture ordering and tie-breaks introduced this session are stable).
+- **Pathological inputs**: no planes, fixture larger than its room, zero-size
+  room, empty set, unknown room, no candidates, degenerate rects, a room with no
+  exterior wall — all degrade sensibly, nothing throws.
+- **No swallowed errors** (`catch {}`) and no TODO/FIXME/HACK anywhere in
+  `lib/`, `app/`, `components/`.
+- Mutation-tested every invariant added this session.
+
 ## Kit-buildable homes are now REACHABLE (2026-08-16)
 
 Measuring the pitches answered "can the kit build this?" — and the answer for
