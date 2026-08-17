@@ -120,6 +120,45 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The packet's code report is faithful — and a gate I wrote for it was vacuous (2026-08-17)
+
+Finished the deliverable pass on the section a client most needs to trust: the
+code report. Computed the engine's verdict independently for the same artifact
+and compared it with the downloaded packet:
+
+```
+ENGINE  summary {"pass":20,"fail":1,"notEvaluated":3}  24 findings
+PACKET  20 pass / 1 fail / 3 not evaluated             24 rows
+per-rule counts: identical, including the new IRC-R312.1
+citation: "NCRC 2018 §R304.1 …" (jurisdiction pack, not the generic IRC text)
+```
+
+**Exact match. No defect.** The packet reports the engine rather than
+re-deriving, and it honestly prints the loft plan's `WH-GRID-4FT` **failure** to
+the client instead of hiding it.
+
+### The gate I added for it did nothing
+I gated that fidelity — summary must equal the engine's, and every failing rule
+must appear in the table — then mutation-tested by making the packet filter out
+its fail rows. **It passed.** Exit 0.
+
+The reason: the sweep downloaded the packet for `generated[0]`, a plain a-frame
+with **zero failing rules**. The loop over failing findings iterated an empty set
+and asserted nothing. The summary check still matched, because the summary is
+computed from `report.summary` and is unaffected by dropping rows — so a packet
+showing "1 fail" in its summary and no fail row anywhere passed cleanly.
+
+That is the same vacuous-coverage trap this session keeps surfacing, this time in
+a gate written *specifically to catch a hidden failure*. The fix is to pick the
+packet plan deliberately: scan the swept plans and prefer one whose engine report
+actually contains a failure. Assertion count went 226 → 227, and the mutation now
+fails with `packet shows the WH-GRID-4FT failure: rule missing from the packet
+table`.
+
+**The lesson generalises:** an assertion that loops over a filtered set proves
+nothing unless the set is non-empty on the data it runs against. Choosing the
+fixture is part of writing the gate.
+
 ## The client packet shipped a bill of slugs (2026-08-17)
 
 Inspected the deliverable's CONTENT, not its structure. The numbers check out —

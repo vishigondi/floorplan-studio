@@ -13,6 +13,8 @@
 
 import { chromium } from 'playwright';
 import { assessSkylarkKitForPlan } from '../lib/kit/skylark.ts';
+import { pairedArtifactToLocalHome } from '../lib/data.ts';
+import { codeAdvisoryReportForHome } from '../lib/standards/floorplan-standards.ts';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync as readdirSyncSafe, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -350,7 +352,21 @@ for (const [i, planId] of targets.entries()) {
 // words, not print internal ids under a "Component" heading with the category
 // mislabelled as "Label".
 if (!only.length) {
-  const packetPlan = generated.find((entry) => entry.id)?.id ?? targets[0];
+  // Pick a plan that HAS a failing rule where one exists. Downloading the packet
+  // for a spotless plan makes the "failures reach the client" assertion vacuous —
+  // it loops over an empty set and proves nothing, which is how a packet that
+  // filtered out its fail rows first slipped past this gate.
+  const packetPlan = (() => {
+    for (const candidate of targets) {
+      const artifact = artifactFor(candidate);
+      if (!artifact) continue;
+      try {
+        const report = codeAdvisoryReportForHome(pairedArtifactToLocalHome(artifact));
+        if (report.findings.some((finding) => finding.status === 'fail')) return candidate;
+      } catch { /* fall through to the default */ }
+    }
+    return generated.find((entry) => entry.id)?.id ?? targets[0];
+  })();
   try {
     await page.goto(`${base}/?home=${packetPlan}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(2500);
@@ -371,6 +387,27 @@ if (!only.length) {
       check(packetPlan, 'packet BOM names components in words, not slugs',
         slugLike.length === 0, `slug-like first cells: ${slugLike.slice(0, 4).join(', ')}`);
       check(packetPlan, 'packet BOM has rows', firstCells.length > 0);
+
+      // THE CODE REPORT A CLIENT READS MUST BE THE ENGINE'S, NOT A RE-DERIVATION.
+      // A packet that quietly recomputes (or rounds, or filters) its pass/fail
+      // counts would tell a client the plan is cleaner than the product believes.
+      const artifact = artifactFor(packetPlan);
+      if (artifact) {
+        const engine = codeAdvisoryReportForHome(pairedArtifactToLocalHome(artifact));
+        const printed = html.match(/Summary: (\d+) pass \/ (\d+) fail \/ (\d+) not evaluated/);
+        check(packetPlan, 'packet prints a code-report summary', Boolean(printed));
+        if (printed) {
+          const [, pass, fail, notEvaluated] = printed.map(Number);
+          check(packetPlan, `packet summary matches the engine (${engine.summary.pass}/${engine.summary.fail}/${engine.summary.notEvaluated})`,
+            pass === engine.summary.pass && fail === engine.summary.fail && notEvaluated === engine.summary.notEvaluated,
+            `packet says ${pass}/${fail}/${notEvaluated}`);
+        }
+        // A failing rule must reach the client, not be filtered out of the table.
+        for (const finding of engine.findings.filter((entry) => entry.status === 'fail')) {
+          check(packetPlan, `packet shows the ${finding.ruleId} failure`,
+            html.includes(finding.ruleId), 'rule missing from the packet table');
+        }
+      }
     }
   } catch (error) {
     check(packetPlan, 'client packet downloads', false, String(error).split('\n')[0].slice(0, 90));
