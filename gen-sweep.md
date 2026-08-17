@@ -120,6 +120,61 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The loft/grid trade was a false dilemma — and I had the numbers wrong (2026-08-17)
+
+I have been carrying this to the user as a binary: every loft plan ships a
+`WH-GRID-4FT` failure, and you can either enforce the grid (loft shrinks below
+`MIN_LOFT_SPAN_FT = 6`, feature lost) or exempt the loft platform (a gate
+loosening). Before asking anyone to choose between two bad options I went to
+check for a third. **There is one, and it is better than both.**
+
+### First, a correction: my reimplementation lied
+I recomputed the loft band in a probe and got a headroom envelope of `[6.5,21.5]`
+with grid-aligned placements available — which would have meant no dilemma at
+all. It disagreed with the real output (`x=10 w=8`), so I instrumented the actual
+`buildLoft` instead of trusting my copy. My `target` was wrong: it is
+`LOFT_BASE_FT + MIN_LOFT_HEADROOM_FT` = **13 ft**, not 9. Real values:
+
+| plan    | eave | ridge | headroom envelope | band | loft |
+|---------|------|-------|-------------------|------|------|
+| a-frame | 1    | 18    | [10, 18] (8 wide)  | 8    | x=10 w=8 |
+| gambrel | 8    | 16    | [8.5, 19.5] (11)   | 8    | x=10 w=8 |
+
+With the roof held fixed the original framing was right: an 8 ft band needs a
+multiple-of-4 origin, and neither envelope admits one (a-frame has **zero** slack
+— the envelope is exactly the band; gambrel misses by 0.5 ft). The only
+grid-aligned option is a 4 ft loft, below the minimum.
+
+### The roof is not fixed
+`buildLoft` derives the band from the roof, so the roof is the free variable
+nobody was varying. Sweeping ridge height through the **real** function:
+
+- **a-frame**: ridge 18 -> **21 ft (+3.00)** gives loft `x=8 w=12`
+- **gambrel**: ridge 16 -> **16.5 ft (+0.50)** gives loft `x=8 w=12`
+
+The loft comes out **grid-aligned AND 12 ft instead of 8** — 50% larger, not
+smaller. The trade I kept describing (grid compliance costs you the loft) is
+backwards: a roof that can actually carry a panel-buildable loft gives a *better*
+loft. The gambrel needs six inches.
+
+There is also a latent inconsistency worth naming: a grid-aligned span must be a
+multiple of 4, so `MIN_LOFT_SPAN_FT = 6` is not achievable on-grid at all. If
+lofts must be grid-aligned the real minimum is **8**.
+
+### Not implemented — this is a design decision
+Raising ridge heights changes every shipped loft design, so it is the user's
+call, not mine. No product code changed in this fire. Worth knowing when
+deciding: **no height rule exists** — the zoning pack is setback and coverage
+only, so nothing in the gate ladder would object to a taller ridge. That is
+itself a gap, since real jurisdictions cap building height and the product does
+not model one.
+
+### Method note
+This is the second time today that reasoning from a reimplementation produced a
+confident wrong answer (the first was assuming `next start` bound IPv4-only and
+that `localhost` was unreachable — both hosts served fine). Instrumenting the
+real function took two minutes and overturned the conclusion both times.
+
 ## Swept the whole dead-gate class instead of finding a third one by accident (2026-08-17)
 
 Two fires in a row turned up checks that were green because they never ran. That
