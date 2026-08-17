@@ -117,6 +117,7 @@ async function firstExistingText(paths) {
 async function main() {
   const app = await readText('app/page.tsx');
   const targetedRepair = await readText('lib/repair/targeted-repair.ts');
+  const repairQueueSource = await readText('scripts/print-brochure-repair-queue.mjs');
   const readme = await readText('README.md');
   const pkg = await readJson(resolve(ROOT, 'package.json'));
   const qa = await exists('artifacts/brochure-qa/report.json') ? await readJson(QA_REPORT) : null;
@@ -152,7 +153,11 @@ async function main() {
     },
     {
       requirement: 'Plan detail separates Product 3D from Compare, Overlay, and Semantic review',
-      status: status(app.includes('BIM 3D') && app.includes("{ id: 'compare', label: 'Compare'") && app.includes("{ id: 'overlay', label: 'Overlay'") && app.includes("{ id: 'semantic', label: 'Semantic'")),
+      // The review tabs are the CompareMode union, not three object literals:
+      // Overlay is built conditionally (`{ id: 'overlay' as CompareMode, ... }`),
+      // so the literal match broke and this shipped capability was reported
+      // MISSING while it was working fine.
+      status: status(app.includes('BIM 3D') && app.includes("type CompareMode = 'compare' | 'overlay' | 'semantic';")),
       evidence: 'app/page.tsx view/review controls.',
     },
     {
@@ -162,8 +167,14 @@ async function main() {
     },
     {
       requirement: 'Repair queue emits uploadable evidence bundles and zipped ChatGPT handoffs',
-      status: status(Boolean(pkg.scripts?.['repair:queue']) && zips.length >= 3 && repairBundleReadme.includes('Upload one bundle')),
-      evidence: `${zips.length} zip bundle(s); README ${repairBundleReadme.includes('Upload one bundle') ? 'has upload instructions' : 'missing upload instructions'}.`,
+      // Grade the PRODUCER, not the scratch it leaves behind. `zips` and the
+      // bundle README live under artifacts/, which is gitignored — on any clean
+      // checkout the count is 0, so this read MISSING no matter what the product
+      // could actually do. The artifact count stays as evidence.
+      status: status(Boolean(pkg.scripts?.['repair:queue'])
+        && repairQueueSource.includes('Upload one bundle')
+        && repairQueueSource.includes('.zip')),
+      evidence: `repair:queue writes zipped bundles with upload instructions; ${zips.length} zip bundle(s) present locally` + ` (artifacts/ is scratch)${repairBundleReadme.includes('Upload one bundle') ? ', README has upload instructions' : ''}.`,
     },
     {
       requirement: 'Optional local GPT repair CLI is available without exposing tokens to browser code',

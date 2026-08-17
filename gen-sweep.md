@@ -120,6 +120,55 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Swept the whole dead-gate class instead of finding a third one by accident (2026-08-17)
+
+Two fires in a row turned up checks that were green because they never ran. That
+is a class, not a coincidence, so this fire enumerated it: resolve every npm
+script reachable from `gates` / `gates:live` (following `npm run` chains, plus
+the ones `run-live-gates.mjs` spawns directly), and diff that against every
+battery-shaped file in `scripts/`.
+
+**17 batteries. 14 in the ladder. 3 outside it.** All three now accounted for:
+
+- **`paired:geometry`** — real referential-integrity coverage over the promoted
+  paired artifacts (stable ids, wall hosting, room references, pixel-vs-feet
+  coordinates), **passing**, and simply never run. Wired into `gates`. Mutation:
+  point a door at a nonexistent wall -> `doors door-l1-east-entry-swing
+  references missing wall`. The traced artifact restored **byte-identical**
+  (sha256 verified before and after).
+- **`goal:audit`** — correctly OUT of the ladder: it tracks product goals, and a
+  roadmap tracker in a commit gate would block commits on unbuilt features. But
+  it was lying in the other direction (below).
+- **`qa-shots.mjs`** — correctly out. Its own header and `.gitignore` both say
+  "scratch, not a gate". No change.
+
+### The goal audit was reporting shipped features as missing
+It exited 1 with two "missing" items, and **both were detection defects, not
+gaps**:
+
+1. *"Plan detail separates Product 3D from Compare, Overlay, and Semantic
+   review"* — detected with the same brittle `{ id: 'overlay', label: 'Overlay'`
+   literal that had rotted in `paired:smoke`. Overlay is built conditionally, so
+   the literal missed it. Now keyed to the `CompareMode` union.
+2. *"Repair queue emits uploadable evidence bundles and zipped ChatGPT
+   handoffs"* — gated on `zips.length >= 3` and a README, both under
+   `artifacts/`, which is **gitignored**. On any clean checkout that count is 0,
+   so this goal read MISSING forever regardless of what the product could do. It
+   now grades the **producer** (`repair:queue` writes zipped bundles with upload
+   instructions) and keeps the artifact count as evidence rather than criterion.
+
+Audit now reports **complete**, and mutation-tested both ways: strip the
+CompareMode union -> item 1 MISSING; remove the upload instructions from the
+queue script -> item 2 MISSING.
+
+### What the three findings have in common
+A gate after `browser.close()`, an assertion behind `--only`, a `timeout` that
+does not exist on macOS, a battery outside the ladder, and an audit keyed to
+scratch — five variants of one failure: **the check did not observe what it
+claimed to observe, and said nothing about it.** Enumerating reachability caught
+the remaining ones in a single pass, which is cheaper than meeting them one at a
+time. Worth re-running whenever a battery is added.
+
 ## A whole battery was outside the ladder, and had rotted (2026-08-17)
 
 `scripts/check-den-seeds.mjs` (`npm run paired:smoke`) is 182 assertions over the
