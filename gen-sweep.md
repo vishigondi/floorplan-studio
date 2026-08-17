@@ -25,6 +25,54 @@ reliably produce sound, correctly code-checked plans you'd hand to an architect.
    traced plans + gen-001 untouched; keep every data-* hook; delete throwaway
    gen-* after each fire.
 
+## Skylark roof pitches — MEASURED, blocker cleared (2026-08-16)
+
+The backlog item that gated everything: with `SKYLARK_ROOF_PITCHES_DEG` empty,
+**no plan could ever claim kit-buildable**. The angles are not in the DXF cut
+sheets (flat nested parts) and the repo states them nowhere, so the honest state
+was `unverified` — but that is a dead end, not an answer.
+
+**Method (reproducible: `scripts/measure-skylark-pitch.py`).** The detailed 3DM
+assemblies DO carry the geometry. Download the six roof blocks from a pinned
+commit (`6581cc1d`), read every Brep edge, keep the straight ones over 150 mm
+running in the building's XZ section plane, and bin them by angle weighted by
+length. A roof block's dominant non-vertical angle IS its pitch.
+
+| block | span | rise | pitch | share of in-plane edge |
+|---|---|---|---|---|
+| R-L | 5839 mm | 560 | **0°** | 71.4% at 0°, 24.3% at 1° (drainage fall) |
+| R-S | 4639 mm | 534 | **0°** | 70.9% at 0°, 24.3% at 1° |
+| R-XXS | 720 mm | 382 | **0°** | 100% at 0° |
+| R-L-42 | 3548 mm | 3558 | **42.0°** | 85.6% |
+| R-S-42 | 3034 mm | 2937 | **42.0°** | 82.2% |
+| R-XXS-42 | 2377 mm | 2278 | **42.0°** | 83.3% |
+
+**Skylark 150 ships exactly two roof archetypes: flat (0°, with a 1° fall) and
+42°.** The `-42` in the block name is the pitch in degrees — now evidenced, not
+inferred from a filename.
+
+**A previous assumption was wrong.** `UNSUPPORTED_ROOF_STYLES` listed `flat`:
+we had assumed the kit had no flat-roof blocks. R-L/R-S/R-XXS measure 0° — they
+ARE the flat-roof blocks. Corrected.
+
+**What this means for the generator** (the honest, unwelcome part): of our seven
+roof styles only **flat (0°) is kit-buildable**. a-frame is 50.5°, gable 23.2°,
+gambrel/barn 29.7°, shed 15.9° — none is 42°, and shed/hip/gambrel/barn have no
+blocks at any angle. So the kit answer today is "one style of seven".
+
+**Gate asserts MORE (the whole truth table, not just honesty).** `check:buildable`
+now proves, per style, the verdict AND the reason: flat → buildable; a-frame and
+gable → not-buildable *because the pitch is not one of the Skylark pitches*;
+shed/hip/gambrel/barn → not-buildable *for want of blocks*. Plus: the pitch set
+must equal the set in the measured block table, every measured pitch must be
+carried by ≥70% of its block's edge length, all six blocks must be present, and
+**a 42° on-module gable must come back buildable** — otherwise the pitch set is
+dead letters and `buildable` is unreachable, which is a bug wearing honesty's
+coat. Mutating a constant (42→45, or one block's pitch 42→30) fails the gate.
+
+**No WikiHouse files are vendored** (1.2 GB, CC BY-SA 4.0) — only measurements of
+them, with the pinned commit recorded so anyone can re-run the script.
+
 ## Skylark v1.0 — inspected the real repo (2026-08-15)
 
 Cloned `wikihouseproject/Skylark` (1.2 GB) and read the actual data, not the

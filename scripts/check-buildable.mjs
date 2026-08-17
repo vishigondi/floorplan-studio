@@ -69,16 +69,17 @@ function toHome(a) {
 
 const PANEL_FIT_RULES = ['wall-module', 'wall-height', 'openings', 'floor-span'];
 
-// --- Skylark kit envelope (2026-08-15) --------------------------------------
+// --- Skylark kit envelope (pitches measured 2026-08-16) ----------------------
 // We build against the open WikiHouse Skylark 150 kit rather than authoring
-// joinery. Skylark ships ONE roof archetype (R-L/R-S/R-XXS, each with a -42
-// variant), so most of this generator's 7 roof styles are not kit-buildable —
-// and the published pitch angles are not recoverable from the CNC files.
-// The invariant gated here is HONESTY, not compatibility: a plan may never
-// report `buildable` while the verified pitch set is empty. Populate
-// SKYLARK_ROOF_PITCHES_DEG from the WikiHouse block database and plans at those
-// pitches start qualifying automatically — this gate then proves the upgrade.
-const { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG, SKYLARK_MODULE_FT, SKYLARK150_BLOCKS } =
+// joinery. The kit's roof pitches are now MEASURED from the real 3DM assemblies
+// (scripts/measure-skylark-pitch.py, pinned commit): TWO archetypes, a flat roof
+// at 0° (R-L/R-S/R-XXS, carrying a 1° fall) and a 42° pitched roof (the -42
+// variants). Nothing else, at any angle.
+//
+// This gate proves the whole truth table, not just honesty: which styles the kit
+// can build, which it cannot, and WHY — so neither the constants nor the
+// assessment can drift from the measurements without failing here.
+const { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG, SKYLARK_ROOF_BLOCKS, SKYLARK_MODULE_FT, SKYLARK150_BLOCKS } =
   await import(join(root, 'lib/kit/skylark.ts'));
 
 function roofPitchDeg(artifact) {
@@ -94,6 +95,31 @@ check('Skylark module matches the 4 ft structural grid', Math.abs(SKYLARK_MODULE
 check('Skylark 150 block index is present (58 blocks)',
   Object.values(SKYLARK150_BLOCKS).reduce((n, group) => n + group.length, 0) === 58);
 
+// The constants must not drift from the measurements they came from.
+check('Skylark pitch set matches the measured blocks',
+  JSON.stringify([...SKYLARK_ROOF_PITCHES_DEG].sort((x, y) => x - y))
+  === JSON.stringify([...new Set(SKYLARK_ROOF_BLOCKS.map((b) => b.pitchDeg))].sort((x, y) => x - y)),
+  `${SKYLARK_ROOF_PITCHES_DEG.join(',')} vs blocks ${SKYLARK_ROOF_BLOCKS.map((b) => b.pitchDeg).join(',')}`);
+check('every measured pitch is evidenced by a majority of the block\'s edge length',
+  SKYLARK_ROOF_BLOCKS.every((b) => b.pitchSharePct >= 70),
+  SKYLARK_ROOF_BLOCKS.map((b) => `${b.block} ${b.pitchSharePct}%`).join(', '));
+check('all six Skylark 150 roof blocks are measured', SKYLARK_ROOF_BLOCKS.length === 6);
+
+// What the kit can and cannot build, per style, with the reason. Expected values
+// come from the measurements, so a wrong constant fails rather than passes.
+//   flat  0.0° -> matches the flat blocks
+//   a-frame 50.5°, gable 23.2° -> archetype exists, pitch does not
+//   shed/hip/gambrel/barn -> no blocks at any angle
+const KIT_EXPECTATIONS = {
+  flat: { status: 'buildable', because: /pitch and wall modules match/i },
+  'a-frame': { status: 'not-buildable', because: /not one of the Skylark pitches/i },
+  gable: { status: 'not-buildable', because: /not one of the Skylark pitches/i },
+  shed: { status: 'not-buildable', because: /no shed roof blocks/i },
+  hip: { status: 'not-buildable', because: /no hip roof blocks/i },
+  gambrel: { status: 'not-buildable', because: /no gambrel roof blocks/i },
+  barn: { status: 'not-buildable', because: /no barn roof blocks/i },
+};
+
 for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn']) {
   const res = compileIntent(mockIntentFromBrief(parseBrief(`2 bed ${style} roof, 80x100 lot, 10 ft setbacks`)), 'skylark-test', style);
   if (!res.ok) { check(`${style}: compiles`, false, res.errors.join('; ')); continue; }
@@ -101,16 +127,24 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
   const wallLengthsFt = (a.exteriorWalls ?? []).filter((w) => w.span)
     .map((w) => Math.hypot(w.span.x2 - w.span.x1, w.span.z2 - w.span.z1));
   const kit = assessSkylarkKit({ roofStyle: a.roof.style, roofPitchDeg: roofPitchDeg(a), wallLengthsFt });
+  const want = KIT_EXPECTATIONS[style];
 
-  // HONESTY INVARIANT: never claim buildable without a verified pitch set.
-  check(`${style}: never claims kit-buildable without verified Skylark pitches`,
-    SKYLARK_ROOF_PITCHES_DEG.length > 0 || kit.status !== 'buildable', kit.status);
   // Every assessment must give the user a reason, not a bare verdict.
   check(`${style}: kit assessment states a reason`, kit.reasons.length > 0);
-  // Roof archetypes Skylark has no blocks for must be flagged outright.
-  if (['flat', 'shed', 'hip', 'gambrel', 'barn'].includes(style)) {
-    check(`${style}: flagged not-buildable (Skylark has no such roof block)`, kit.status === 'not-buildable', kit.status);
-  }
+  check(`${style}: kit verdict is ${want.status}`, kit.status === want.status, `${kit.status} — ${kit.reasons.join(' ')}`);
+  check(`${style}: verdict is explained`, kit.reasons.some((r) => want.because.test(r)), kit.reasons.join(' | '));
+  // A plan the kit cannot build must never be silently sold as buildable.
+  check(`${style}: never claims buildable on an unmeasured pitch set`,
+    SKYLARK_ROOF_PITCHES_DEG.length > 0 || kit.status !== 'buildable', kit.status);
+}
+
+// The pitch the kit DOES ship must qualify — otherwise the whole set is dead
+// letters and 'buildable' is unreachable, which is not honesty, just a bug.
+{
+  const at42 = assessSkylarkKit({ roofStyle: 'gable', roofPitchDeg: 42, wallLengthsFt: [28, 28] });
+  check('a 42° gable on-module IS kit-buildable', at42.status === 'buildable', `${at42.status} — ${at42.reasons.join(' ')}`);
+  const offModule = assessSkylarkKit({ roofStyle: 'gable', roofPitchDeg: 42, wallLengthsFt: [27.3] });
+  check('a 42° gable off-module is not', offModule.status === 'not-buildable', offModule.status);
 }
 
 // Every roof style × a representative bedroom span, single level (loft walls are
