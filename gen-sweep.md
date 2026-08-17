@@ -120,6 +120,41 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## CORRECTION + finding: the plans we ship are in ANOTHER repo (2026-08-17)
+
+Immediately after committing the regeneration I checked what the commit actually
+contained. **It did not contain the regenerated plan** — and it could not.
+
+`public/data/den-image-loop` is a **committed symlink** to an absolute path in a
+sibling checkout:
+
+```
+public/data/den-image-loop -> /…/projects/dev-compiler/data/den-reference-set/image-loop
+```
+
+So:
+- The regenerated `loft-showcase` artifact and its render are real and versioned
+  — by **dev-compiler**, not by this repo. My planner commit carried the drift
+  baseline and this log, nothing else. The commit message implied otherwise; this
+  entry is the correction.
+- **`check:drift`'s baseline is versioned here while the artifacts it grades are
+  versioned there.** They can diverge, and nothing would notice.
+- The symlink is **absolute and machine-specific**. On any other machine it
+  dangles and the app has no plans at all.
+
+**What I did about it.** The gate now refuses to report a vacuous pass: if the
+plan store is unreadable or contains no served plans it FAILS with a message
+naming the symlink, rather than "clean" over zero plans. Mutation-tested by
+pointing `LOOP_DIR` at a missing directory.
+
+**What I did NOT do.** I left the regenerated artifact **uncommitted** in
+dev-compiler. That repo has **59 dirty files** of unrelated work in progress
+(CLAUDE.md, README.md, package.json, manifest.json…), and committing into
+someone else's in-flight tree — or worse, `git add -A` there — is not mine to
+do. It needs a human decision, and the two-repo split is a structural question
+(vendor the reference set? git submodule? relative symlink?) rather than a fix I
+should pick unilaterally.
+
 ## The ratchet pays out: loft-showcase regenerated, 49 -> 43 (2026-08-17)
 
 The drift gate's whole point is to turn invisible debt into a number that can

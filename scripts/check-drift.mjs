@@ -13,6 +13,11 @@
 // rather than something our compiler produced. What the ratchet forbids is
 // drift that is NEW, and exemptions that have quietly stopped being needed.
 //
+// NOTE ON WHERE THE DATA LIVES: public/data/den-image-loop is a committed
+// symlink to /…/dev-compiler/data/den-reference-set/image-loop. The artifacts
+// are versioned by THAT repo, this baseline by this one — they can drift apart,
+// and a regeneration lands in the other checkout, not in a planner commit.
+//
 // Usage: node scripts/check-drift.mjs (npm run check:drift)
 //        node scripts/check-drift.mjs --write   (re-record the baseline)
 
@@ -112,7 +117,24 @@ function violations(artifact) {
   return found.sort();
 }
 
-const plans = servedPlans();
+// The plans live OUTSIDE this repo: public/data/den-image-loop is a committed
+// symlink to an absolute path in a sibling project. So this battery's baseline
+// is versioned here while the artifacts it grades are versioned there, and on a
+// machine where that path does not exist the symlink simply dangles. Say that
+// out loud rather than reporting a vacuous pass over zero plans.
+let plans;
+try {
+  plans = servedPlans();
+} catch (error) {
+  console.error(`  FAIL cannot read ${LOOP_DIR} — the plan store is a symlink to another checkout; `
+    + `this gate needs it present. (${String(error).split('\n')[0]})`);
+  process.exit(1);
+}
+if (!plans.length) {
+  console.error(`  FAIL no served plans found under ${LOOP_DIR} — the plan-store symlink is empty or dangling, `
+    + `so a "clean" result here would mean nothing was checked.`);
+  process.exit(1);
+}
 console.log(`drift: ${plans.length} served plan(s) against today's invariants\n`);
 
 const actual = {};
