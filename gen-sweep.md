@@ -120,6 +120,52 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## check:drift — the invariants now grade the plans we SHIP (2026-08-16)
+
+Every battery compiles a fresh plan and grades the result, so all of them only
+ever measure what the compiler does TODAY. The plans the app actually serves are
+stored JSON, written by whatever the compiler was on the day they were made.
+**Fixing the compiler does not fix them, and nothing noticed.**
+
+Measured against today's invariants, **all six served plans violate them** —
+49 violations total:
+
+| plan | lane | violations |
+|---|---|---|
+| a-frame-22 | traced | 16 (fixture headroom) |
+| a-frame-bunk | traced | 9 (fixture headroom) |
+| brief-aframe-2br | compiled | 8 (fixture headroom) |
+| gen-001 | compiled | 8 (fixture headroom) |
+| loft-showcase | compiled | 6 (fixture headroom) |
+| outpost-medium | traced | 2 (fixture overlap) |
+
+`gen-001` and `loft-showcase` carry **the exact numbers the envelope-placement
+fires fixed** — a kitchen counter under 2.36 ft of ceiling, a sofa under 3.83 ft.
+Those fires fixed the compiler; the shipped artifacts kept the defect.
+
+**The gate is a RATCHET, not a pass/fail on absolutes**, because some of this
+drift genuinely cannot be fixed: `gen-001`'s JSON is frozen by project guardrail,
+and a traced plan records a drawing someone made rather than something our
+compiler produced. `scripts/drift-baseline.json` records accepted drift **as
+stable violation keys** (not a count — a count silently accepts a new defect the
+moment an old one is fixed), each with a real reason. The gate fails on:
+1. **new** drift in a shipped artifact,
+2. an exemption that is **no longer needed** (fixed but still baselined, which
+   would silently re-authorise the defect if it came back),
+3. an exemption with **no justification** (`TODO` is not a reason).
+
+All three mutation-tested.
+
+**Caught while building it:** the baseline first went in `artifacts/`, which is
+entirely gitignored scratch — a ratchet whose baseline is not committed is not a
+ratchet. Moved beside its battery in `scripts/`.
+
+**Honest debt this makes visible:** `brief-aframe-2br` and `loft-showcase` are
+NOT frozen by any guardrail. They should be REGENERATED so the shipped plans meet
+the current bar, rather than exempted forever. Their baseline entries say exactly
+that. `outpost-medium`'s `fx-bed10/fx-bedroom10-wardrobe` overlap (4.57 x 1.85 ft)
+looks like a genuine tracing error worth chasing at source.
+
 ## IFC export is REAL (2026-08-16)
 
 The "Export Experimental IFC STEP" button wrote an ISO-10303-21 envelope with an

@@ -1,0 +1,84 @@
+{
+  "note": "Accepted drift in SHIPPED artifacts, as stable violation keys. Every entry needs a real reason. The gate fails on NEW drift and on exemptions that are no longer needed, so this list can only shrink without a deliberate, reviewed change.",
+  "plans": {
+    "a-frame-22": {
+      "reason": "TRACED plan (project guardrail: traced artifacts are never edited). Its fixtures record a real source drawing, so a headroom violation here judges that drawing, not our compiler. Recording them keeps the count honest and catches any NEW drift if the trace is ever re-imported.",
+      "accepted": [
+        "fixture-headroom:fx-l0-bath-vanity-sink",
+        "fixture-headroom:fx-l0-kitchen-south-counter-run",
+        "fixture-headroom:fx-l0-kitchen-south-sink",
+        "fixture-headroom:fx-l1-bath-shower",
+        "fixture-headroom:fx-l1-stair-treads",
+        "fixture-overlap:fx-l0-bedroom-bed|fx-l1-bedroom-bed",
+        "fixture-overlap:fx-l0-kitchen-south-counter-run|fx-l0-kitchen-south-sink",
+        "fixture-overlap:fx-l0-stair-treads-arrow|fx-l1-bath-shower",
+        "fixture-overlap:fx-l0-stair-treads-arrow|fx-l1-bath-toilet",
+        "fixture-overlap:fx-l0-stair-treads-arrow|fx-l1-bath-vanity-sink",
+        "fixture-overlap:fx-l0-stair-treads-arrow|fx-l1-stair-treads",
+        "fixture-overlap:fx-l1-bath-shower|fx-l1-bath-toilet",
+        "fixture-overlap:fx-l1-bath-toilet|fx-l1-bath-vanity-sink",
+        "fixture-overlap:fx-l1-stair-treads|fx-l1-bath-shower",
+        "fixture-overlap:fx-l1-stair-treads|fx-l1-bath-toilet",
+        "fixture-overlap:fx-l1-stair-treads|fx-l1-bath-vanity-sink"
+      ]
+    },
+    "a-frame-bunk": {
+      "reason": "TRACED plan (project guardrail: never edited). Same as a-frame-22 \u2014 the loft kitchenette headroom is what the source drawing shows; our generated-fixture rule does not govern a traced building.",
+      "accepted": [
+        "fixture-headroom:fx-l1-kitchenette-counter-run",
+        "fixture-headroom:fx-l1-kitchenette-sink",
+        "fixture-headroom:fx-l1-kitchenette-two-burner-cooktop",
+        "fixture-headroom:fx-l1-loft-access-ladder",
+        "fixture-headroom:fx-l2-loft-access-ladder",
+        "fixture-overlap:furn-l2-loft-bed|furn-l2-loft-bed-pillows",
+        "fixture-overlap:fx-l1-kitchenette-counter-run|fx-l1-kitchenette-sink",
+        "fixture-overlap:fx-l1-kitchenette-counter-run|fx-l1-kitchenette-two-burner-cooktop",
+        "fixture-overlap:fx-l1-loft-access-ladder|fx-l2-loft-access-ladder"
+      ]
+    },
+    "brief-aframe-2br": {
+      "reason": "COMPILED by an older compiler, before envelope-aware fixture placement. Not frozen by guardrail \u2014 this SHOULD be regenerated so the shipped plan meets the current bar. Baselined only to make the debt visible and ratcheted; regenerating it is tracked as the next step, not a permanent exemption.",
+      "accepted": [
+        "fixture-headroom:fx-bath-toilet",
+        "fixture-headroom:fx-bath-vanity",
+        "fixture-headroom:fx-bed1-wardrobe",
+        "fixture-headroom:fx-bed2-wardrobe",
+        "fixture-headroom:fx-kitchen-counter",
+        "fixture-headroom:fx-kitchen-range",
+        "fixture-headroom:fx-kitchen-sink",
+        "fixture-overlap:fx-kitchen-counter|fx-kitchen-sink"
+      ]
+    },
+    "gen-001": {
+      "reason": "FROZEN by project guardrail: \"Keep gen-001; its stored render may be regenerated, its JSON not.\" It was generated before envelope-aware fixture placement, so it carries exactly the defects those fires fixed. It cannot be regenerated without breaking the guardrail, so the drift is recorded instead.",
+      "accepted": [
+        "fixture-headroom:fx-bath-toilet",
+        "fixture-headroom:fx-bath-vanity",
+        "fixture-headroom:fx-bed1-wardrobe",
+        "fixture-headroom:fx-kitchen-counter",
+        "fixture-headroom:fx-kitchen-range",
+        "fixture-headroom:fx-kitchen-sink",
+        "fixture-headroom:fx-living-sofa",
+        "fixture-overlap:fx-kitchen-counter|fx-kitchen-sink"
+      ]
+    },
+    "loft-showcase": {
+      "reason": "COMPILED before envelope-aware fixture placement (it predates the loft-guard fire too). Not frozen by guardrail \u2014 like brief-aframe-2br this should be regenerated rather than exempted; baselined to make the debt visible until then.",
+      "accepted": [
+        "fixture-headroom:fx-bed1-wardrobe",
+        "fixture-headroom:fx-kitchen-counter",
+        "fixture-headroom:fx-kitchen-range",
+        "fixture-headroom:fx-kitchen-sink",
+        "fixture-headroom:fx-living-sofa",
+        "fixture-overlap:fx-kitchen-counter|fx-kitchen-sink"
+      ]
+    },
+    "outpost-medium": {
+      "reason": "TRACED plan (project guardrail: never edited). The fx-stoop/fx-entry-storage overlap is 0.08x0.09 ft, right at the 0.06 ft clearance epsilon. The fx-bed10/fx-bedroom10-wardrobe overlap (4.57x1.85 ft) is large and looks like a real tracing error worth investigating at source \u2014 logged, not silently tolerated.",
+      "accepted": [
+        "fixture-overlap:fx-bed10|fx-bedroom10-wardrobe",
+        "fixture-overlap:fx-stoop|fx-entry-storage"
+      ]
+    }
+  }
+}
