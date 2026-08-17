@@ -120,6 +120,67 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Over half the bill of materials was ungated; the loft deck was missing (2026-08-17)
+
+After the guard-rail over-count, the obvious question: what else in the BOM is
+never checked? Counted it — **`floor-std`, `floor-deck`, `roof-steep`,
+`roof-flat`, `door-ext`, `door-int`, `window-std` appeared in ZERO gate files.**
+Only the wall lines were asserted, and those only because earlier fires touched
+them. A wrong quantity in any of the rest ships in silence, exactly the way the
+guard rails did.
+
+Verified them against geometry before gating, which is how the next defect
+surfaced.
+
+### A loft is a floor deck, and it was not on the bill
+`floor-std` was `ceil(width/4) x ceil(depth/4)` — the footprint, once. So a
+single-storey 28x28 and the same plan with an 8x28 loft both billed **49**
+cassettes: two different buildings, one number, and no loft deck at all. The
+artifact models the loft as its own floor panel (`floor-1`, "LOFT LEVEL"), so
+nothing was missing except the sum.
+
+| plan | before | after | |
+|---|---|---|---|
+| loft-showcase | 49 | **63** | 49 + 14 loft |
+| a-frame-22 | 54 | **90** | 45 + 45 |
+| a-frame-bunk | 16 | **28** | 16 + 12 |
+| gen-001, outpost-medium, brief-aframe-2br | — | unchanged | single level |
+
+### The first fix was wrong, and the traced plans caught it
+Summing `floorPanels` entries gave a-frame-22 **180** — "4 floor levels:
+36x20ft" four times. Traced plans describe the same two storeys **twice**
+(`floor-0`/`floor-1` AND `level-main`/`level-loft`), so it billed four decks for
+a two-storey house. Now deduplicated by level index, largest footprint wins, and
+a fixture asserts a-frame-22 still has duplicate entries so the dedup keeps being
+exercised.
+
+### The battery was grading a copy again
+Gating doors turned 62 assertions red: `door-ext` 0 against a plan with one
+exterior door. **The product was fine.** The raw artifact carries
+`roomIds: undefined`; the shipped adapter derives
+`["exterior","room-living"]`, while the battery's hand-rolled `toHome` passes
+`[undefined]` through, so every exterior door read as interior *in the battery*.
+BOM assertions now grade `pairedArtifactToLocalHome`, and pass.
+
+### A bigger divergence, deliberately not bundled
+Swapping the battery wholesale to the shipped adapter turns **93** assertions
+red, and this one is NOT a battery artifact. The shipped adapter splits exterior
+walls into solid **segments between openings** (`ext-n:seg-1/2/3`) — precisely
+the shape the validator's run-rebuilding logic was written for after the 19 ft
+opening shortfall. The hand-rolled adapter passes whole walls (`ext-n` = 28 ft),
+so that logic has never been exercised by this battery, and `wall-module` then
+grades 2.50 ft segments against a 4 ft module they were never meant to satisfy.
+
+That is a real question about what `wall-module` should grade — runs, like the
+BOM does, or segments — and it changes which plans the product calls buildable.
+Too big to bundle into a BOM fix. Logged, with the reproduction one line away
+(swap `toHome`).
+
+### Mutation testing
+Footprint-only floor count -> both floor assertions fail. Dedup removed ->
+a-frame-22 bills 180 and the fixture fails. Exterior doors forced to `door-int`
+-> both door assertions fail. Each restores green.
+
 ## A hip-height guard rail was billed as 14 sheets of interior wall (2026-08-17)
 
 The gable finding ended on "surfaces that are not walls-in-the-model never reach

@@ -419,12 +419,46 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   } else {
     rules.floorSpan.passes.push(`Floor joist span ${structuralSpan.toFixed(1)}ft (between bearing lines) is within the ${MAX_JOIST_SPAN_FT}ft joist limit.`);
   }
+  // Floor cassettes for EVERY level, not just the ground floor. A loft IS a
+  // structural floor deck — the artifact models it as its own floor panel
+  // (`floor-1`, "LOFT LEVEL") — but this counted the footprint once, so a
+  // single-storey 28x28 and the same plan with an 8x28 loft both billed 49
+  // cassettes. Two different buildings, one number, and the loft deck simply
+  // absent from the bill.
+  const cassettesFor = (w: number, d: number) =>
+    Math.ceil(w / PANEL_WIDTH_FT) * Math.ceil(d / PANEL_WIDTH_FT);
+  const floorPanels = (home.pairedArtifactJson as {
+    floorPanels?: Array<{
+      floor?: number; levelIndex?: number;
+      footprint?: { widthFt?: number; depthFt?: number; width?: number; depth?: number };
+    }>;
+  } | undefined)?.floorPanels;
+  // DEDUPLICATE BY LEVEL. Traced plans describe the same two storeys twice —
+  // a-frame-22 carries `floor-0`/`floor-1` AND `level-main`/`level-loft` — so
+  // summing array entries billed it four decks for a two-storey house. One
+  // entry per distinct level, largest footprint wins where they disagree.
+  const byLevel = new Map<number, { w: number; d: number }>();
+  for (const panel of floorPanels ?? []) {
+    const w = panel.footprint?.widthFt ?? panel.footprint?.width ?? 0;
+    const d = panel.footprint?.depthFt ?? panel.footprint?.depth ?? 0;
+    if (!(w > 0 && d > 0)) continue;
+    const level = panel.floor ?? panel.levelIndex ?? 0;
+    const seen = byLevel.get(level);
+    if (!seen || cassettesFor(w, d) > cassettesFor(seen.w, seen.d)) byLevel.set(level, { w, d });
+  }
+  const floorLevels = [...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([, level]) => level);
+  const floorCassettes = floorLevels.length
+    ? floorLevels.reduce((sum, level) => sum + cassettesFor(level.w, level.d), 0)
+    : cassettesFor(home.footprint.width, home.footprint.depth);
   addBom(bom, {
     componentId: 'floor-std',
     description: 'Floor cassette, 4 ft grid',
     category: 'floor',
-    quantity: Math.ceil(home.footprint.width / PANEL_WIDTH_FT) * Math.ceil(home.footprint.depth / PANEL_WIDTH_FT),
+    quantity: floorCassettes,
     unit: 'each',
+    notes: [floorLevels.length > 1
+      ? `${floorLevels.length} floor levels: ${floorLevels.map((l) => `${l.w}x${l.d}ft`).join(', ')}.`
+      : 'Single floor level.'],
   });
   addBom(bom, {
     componentId: 'foundation',

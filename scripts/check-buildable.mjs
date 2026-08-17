@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
+const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
 const { validateBuildability } = await import(join(root, 'lib/build-validator.ts'));
 
 let failures = 0;
@@ -64,6 +65,18 @@ function toHome(a) {
     sourceWalls,
     sourceOpenings,
     rooms: (a.rooms ?? []).map((r) => ({ type: r.type, label: r.label, widthFt: r.bounds?.w, depthFt: r.bounds?.d })),
+    // The validator reads floor levels off the artifact; without this the loft
+    // deck is unreachable here and the floor-cassette gate below is inert.
+    //
+    // NOTE: this adapter is hand-rolled and DIVERGES from the shipped one --
+    // pairedArtifactToLocalHome splits exterior walls into solid SEGMENTS
+    // between openings (ext-n:seg-1/2/3), which is the shape the validator's
+    // run-rebuilding logic was written for, while this passes whole walls.
+    // Swapping to the real adapter turns 93 assertions red, because wall-module
+    // then grades segments that are never panel multiples. That is a genuine
+    // question about the rule, logged in gen-sweep.md, not something to bundle
+    // into a BOM fix.
+    pairedArtifactJson: a,
   };
 }
 
@@ -287,7 +300,14 @@ for (const brief of BRIEFS) {
   // `wall-int`, i.e. 14 sheets of interior wall ordered for a hip-height rail.
   // Both directions are asserted: a loft plan must bill them separately, and a
   // single-storey plan must not invent the line.
-  const bomQty = (id) => (report.bom ?? []).find((item) => item.componentId === id)?.quantity ?? 0;
+  // BOM lines are graded on the SHIPPED adapter. The hand-rolled `toHome` above
+  // cannot classify openings — the raw artifact has `roomIds: undefined` and it
+  // passes `[undefined]` through, so every exterior door reads as interior and
+  // door-ext came out 0 against a plan with one. pairedArtifactToLocalHome
+  // derives the real roomIds (["exterior","room-living"]). The rule assertions
+  // stay on `report`; only the bill is graded here.
+  const shippedReport = validateBuildability(pairedArtifactToLocalHome(res.artifact));
+  const bomQty = (id) => (shippedReport.bom ?? []).find((item) => item.componentId === id)?.quantity ?? 0;
   const hasLoft = (res.artifact.rooms ?? []).some((room) => (room.levelIndex ?? 0) >= 1);
   const guardFt = [...(res.artifact.interiorWalls ?? []), ...(res.artifact.exteriorWalls ?? [])]
     .filter((wall) => /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`))
@@ -309,7 +329,7 @@ for (const brief of BRIEFS) {
         wall.id = String(wall.id ?? '').replace(/guard|rail/gi, 'plain');
       }
     }
-    const disguisedReport = validateBuildability(toHome(disguised));
+    const disguisedReport = validateBuildability(pairedArtifactToLocalHome(disguised));
     const disguisedInt = (disguisedReport.bom ?? []).find((item) => item.componentId === 'wall-int')?.quantity ?? 0;
     check(`${brief} — guard length is not also counted as interior wall panels`,
       disguisedInt > bomQty('wall-int'),
@@ -317,6 +337,51 @@ for (const brief of BRIEFS) {
   } else {
     check(`${brief} — no guard-rail line without a guarded loft`, bomQty('guard-rail') === 0, `${bomQty('guard-rail')}`);
   }
+
+  // A LOFT IS A FLOOR DECK. This billed the footprint once, so a single-storey
+  // 28x28 and the same plan with an 8x28 loft both listed 49 cassettes — two
+  // different buildings, one number, and no loft deck on the bill.
+  const groundOnly = Math.ceil(res.artifact.footprint.widthFt / 4) * Math.ceil(res.artifact.footprint.depthFt / 4);
+  const levels = new Map();
+  for (const panel of res.artifact.floorPanels ?? []) {
+    const fw = panel.footprint?.widthFt ?? panel.footprint?.width ?? 0;
+    const fd = panel.footprint?.depthFt ?? panel.footprint?.depth ?? 0;
+    if (fw > 0 && fd > 0) levels.set(panel.floor ?? panel.levelIndex ?? 0, Math.ceil(fw / 4) * Math.ceil(fd / 4));
+  }
+  const expectedCassettes = levels.size ? [...levels.values()].reduce((a, b) => a + b, 0) : groundOnly;
+  check(`${brief} — floor cassettes cover every level`, bomQty('floor-std') === expectedCassettes,
+    `${bomQty('floor-std')} vs ${expectedCassettes} across ${levels.size || 1} level(s)`);
+  if (hasLoft) {
+    check(`${brief} — a loft adds floor deck beyond the ground floor`,
+      bomQty('floor-std') > groundOnly, `${bomQty('floor-std')} vs ground-only ${groundOnly}`);
+  }
+
+  // Openings were never gated at all: door-ext/door-int/window-std appeared in
+  // no battery, so a miscount would ship in silence exactly the way the guard
+  // rails did.
+  const extDoors = (res.artifact.doors ?? []).filter((o) => o.openingType === 'exteriorDoor').length;
+  const intDoors = (res.artifact.doors ?? []).filter((o) => o.openingType !== 'exteriorDoor').length;
+  check(`${brief} — exterior door units match the plan`, bomQty('door-ext') === extDoors, `${bomQty('door-ext')} vs ${extDoors}`);
+  check(`${brief} — interior door units match the plan`, bomQty('door-int') === intDoors, `${bomQty('door-int')} vs ${intDoors}`);
+  check(`${brief} — window units match the plan`, bomQty('window-std') === (res.artifact.windows ?? []).length,
+    `${bomQty('window-std')} vs ${(res.artifact.windows ?? []).length}`);
+}
+
+// Traced plans describe the same storeys TWICE (a-frame-22 carries floor-0/
+// floor-1 and level-main/level-loft). Summing array entries billed four decks
+// for a two-storey house, so the per-level dedup is asserted against the stored
+// artifact, not just the compiled ones.
+{
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = join(root, 'public/data/den-image-loop/a-frame-22/paired');
+  const file = readdirSync(dir).find((name) => name.endsWith('.paired.json'));
+  const artifact = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+  const entries = (artifact.floorPanels ?? []).length;
+  const distinct = new Set((artifact.floorPanels ?? []).map((p) => p.floor ?? p.levelIndex ?? 0)).size;
+  const qty = (validateBuildability(pairedArtifactToLocalHome(artifact)).bom ?? [])
+    .find((item) => item.componentId === 'floor-std')?.quantity ?? 0;
+  check('a-frame-22 duplicates its floor levels (fixture still exercises the dedup)', entries > distinct, `${entries} entries, ${distinct} levels`);
+  check('a-frame-22 bills one deck per LEVEL, not per floorPanels entry', qty === 90, `${qty}`);
 }
 
 if (failures) {
