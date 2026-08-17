@@ -120,6 +120,47 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## IRC-R312.1 added: the guardless-loft false pass is closed (2026-08-17)
+
+The false pass from last fire, fixed. Stripping every fall-protection guard from
+a loft open ~8 ft above the floor used to leave the code report **byte-identical**
+— compiled plans were safe only because the compiler always builds guards, while
+the JSON-only import lane bypasses the compiler entirely.
+
+**The rule.** `IRC-R312.1 — Guards are required on open sides of walking surfaces
+more than 30 in above the floor below.` Three-state, in the engine's existing
+idiom:
+
+- **not-evaluated** when the source models no guard information at all
+  (`guards: undefined`). Claiming a pass from absent data is how the last false
+  pass happened; an EMPTY array, by contrast, is a positive statement that the
+  plan models no guard and DOES fail.
+- **fail** for an elevated surface with no guard on its floor, naming the height
+  and the threshold.
+- **pass** with the shop-drawing caveat — presence is modelled, guard height and
+  baluster spacing are not, so they are flagged rather than silently claimed
+  (exactly as R310 does for net clear area).
+
+**Threshold is data-driven, not assumed.** Rooms now carry `elevationFt`; the
+30 in test runs against that rather than against "floor index ≥ 1". A
+single-storey plan reports `pass — no walking surface sits more than 30 in above
+the floor below`, because a rule that emits nothing is indistinguishable from a
+rule nobody wired up.
+
+**Wired through BOTH adapters**, not just the battery — `codeAdvisoryInputFromHome`
+(the product) and `reportForArtifact` (the gates) — or the rule would exist and
+never run where it matters.
+
+**Verified both directions:** a loft with guards → `pass: Walking surface 8.0 ft
+above the floor below is guarded (2 guard elements)`; guards stripped → `fail`.
+The anti-vacuity block added last fire now carries the guard breakage, so the
+rule can never quietly stop firing.
+
+**Two pinned expectations updated, both because a rule was ADDED:** the registry
+count 7 → 8, and the live sweep's rendered rule cards 10 → 11. Neither is a
+loosening, and the live gate caught the second one itself — I had not thought
+about the UI rendering one more card.
+
 ## Hunting FALSE PASSES: the engine is sound, but lofts are not (2026-08-17)
 
 The prime directive has two halves and recent fires only worked one: bad geometry

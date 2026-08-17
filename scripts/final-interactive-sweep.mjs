@@ -108,7 +108,10 @@ for (const plan of PLANS) {
   const septic = await page.locator('[data-constraint-rule="NC-SEPTIC-18E"]').count();
   note(septic === 1, 'site checks present');
   const ruleCount = await page.locator('[data-constraint-rule]').count();
-  note(ruleCount === 10, `10 rule cards rendered (${ruleCount})`);
+  // 11 since IRC-R312.1 (guards on elevated walking surfaces) joined the rule
+  // registry — one more card is RENDERED because a rule was added, not because
+  // this assertion was relaxed.
+  note(ruleCount === 11, `11 rule cards rendered (${ruleCount})`);
   const titleBlocks = await page.locator('[data-plan-title-block]').count();
   const northArrows = await page.locator('[data-north-arrow]').count();
   note(titleBlocks >= 1 && northArrows >= 1, `plan sheet annotations present (title ${titleBlocks}, north ${northArrows})`);

@@ -271,7 +271,11 @@ for (const relativePath of PLANS) {
   }
 }
 
-check('rule registry has 7 rules', CODE_ADVISORY_RULES.length, 7);
+// 8 since IRC-R312.1 (guards on elevated walking surfaces) joined the registry:
+// stripping every guard from a loft open ~8 ft above the floor previously left
+// the report byte-identical. Expected value raised because a rule was ADDED, not
+// because one was relaxed.
+check('rule registry has 8 rules', CODE_ADVISORY_RULES.length, 8);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

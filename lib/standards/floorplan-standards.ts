@@ -388,6 +388,8 @@ export function codeAdvisoryInputFromHome(home: DenHome): CodeAdvisoryInput {
       || `${room.label || room.type || 'room'}-${room.floor ?? 0}-${index}`;
     const hasRect = Number.isFinite(room.gw) && Number.isFinite(room.gd) && room.gw > 0 && room.gd > 0;
     const floorIndex = room.floor ?? 0;
+    // Feeds the R312 guard threshold: a loft floor sits ~8 ft up, ground is 0.
+    const roomElevationFt = floorIndex >= 1 ? loftFloorY : 0;
     const ceiling = hasRect && planeEquations.length
       ? ceilingProfileForRect(
         {
@@ -407,6 +409,7 @@ export function codeAdvisoryInputFromHome(home: DenHome): CodeAdvisoryInput {
       label: room.label,
       type: room.type,
       floor: room.floor,
+      elevationFt: roomElevationFt,
       ceiling,
       widthFt: hasRect ? room.gw * GRID_UNIT_FT : undefined,
       depthFt: hasRect ? room.gd * GRID_UNIT_FT : undefined,
@@ -478,6 +481,14 @@ export function codeAdvisoryInputFromHome(home: DenHome): CodeAdvisoryInput {
     footprintDepthFt: home.footprint?.depth,
     rooms,
     openings,
+    // Guards the plan MODELS, for IRC R312.1. `undefined` (no wall graph at all)
+    // means "unknown" and the rule reports not-evaluated; an empty array is the
+    // positive statement that this plan models no guard.
+    guards: home.sourceWalls
+      ? home.sourceWalls
+        .filter((wall) => /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`))
+        .map((wall) => ({ id: wall.id, floor: wall.floor ?? 1 }))
+      : undefined,
     lot: lotFromArtifact(home.pairedArtifactJson),
   };
 }

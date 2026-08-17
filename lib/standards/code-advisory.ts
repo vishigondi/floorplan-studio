@@ -15,6 +15,7 @@ export const CODE_ADVISORY_REPORT_VERSION = 'code_advisory_v1';
 export type CodeAdvisoryCategory =
   | 'room-minimums'
   | 'egress'
+  | 'fall-protection'
   | 'setbacks'
   | 'lot-coverage'
   | 'grid-compliance';
@@ -47,6 +48,11 @@ export const CODE_ADVISORY_RULES: CodeAdvisoryRule[] = [
     ruleId: 'IRC-R310.1',
     citation: 'IRC §R310.1 — Every sleeping room shall have at least one emergency escape and rescue opening (egress window or exterior door).',
     category: 'egress',
+  },
+  {
+    ruleId: 'IRC-R312.1',
+    citation: 'IRC §R312.1 — Guards are required on open sides of walking surfaces more than 30 in above the floor below.',
+    category: 'fall-protection',
   },
   {
     ruleId: 'WH-GRID-4FT',
@@ -163,6 +169,9 @@ export interface CodeAdvisoryRoom {
   grid?: { gx: number; gz: number; gw: number; gd: number; unitFt: number };
   physicalBoundary?: boolean;
   semanticZone?: boolean;
+  /** Height of this room's floor above the floor below, in feet. A loft sits at
+   *  ~8 ft; ground-floor rooms are 0. Drives the R312 guard threshold. */
+  elevationFt?: number;
   /**
    * Ceiling profile derived from roof/loft geometry (all in feet, areas in
    * sq ft over this room's footprint). Omit when no validated geometry.
@@ -204,6 +213,13 @@ export interface CodeAdvisoryInput {
   footprintDepthFt?: number;
   rooms: CodeAdvisoryRoom[];
   openings: CodeAdvisoryOpening[];
+  /**
+   * Fall-protection guards the plan models, by floor. OMITTED (undefined) means
+   * the source does not model guards at all — the rule then reports
+   * `not-evaluated` rather than inventing a pass or a fail. An EMPTY array is a
+   * positive statement that the plan models none.
+   */
+  guards?: Array<{ id?: string; floor?: number }>;
   lot?: CodeAdvisoryLot | null;
 }
 
@@ -476,6 +492,49 @@ export function codeAdvisoryReport(input: CodeAdvisoryInput): CodeAdvisoryReport
     } else {
       const names = offGrid.slice(0, 5).map((room) => room.label ?? room.id).join(', ');
       findings.push(finding('WH-GRID-4FT', 'fail', `${offGrid.length} of ${gridRooms.length} physical room(s) are off the 4 ft panel grid (e.g. ${names}). Panelization may require adjustment.`));
+    }
+  }
+
+  // --- IRC R312.1: guards on elevated walking surfaces ---
+  //
+  // Added because stripping every guard from a loft open ~8 ft above the floor
+  // left the report byte-identical: the compiler always builds guards and the
+  // battery checked its output, but the JSON-only import lane bypasses the
+  // compiler entirely, so a hand-authored guardless loft passed clean.
+  const GUARD_THRESHOLD_FT = 30 / 12;
+  const elevated = input.rooms.filter((room) => {
+    if (room.semanticZone) return false;
+    const elevation = room.elevationFt ?? ((room.floor ?? 0) >= 1 ? undefined : 0);
+    return typeof elevation === 'number' && elevation > GUARD_THRESHOLD_FT;
+  });
+  if (!elevated.length) {
+    // Report rather than stay silent: a rule that emits nothing is
+    // indistinguishable from a rule that was never wired up.
+    findings.push(finding('IRC-R312.1', 'pass',
+      'No walking surface sits more than 30 in above the floor below, so no guard is required.'));
+  } else {
+    if (input.guards === undefined) {
+      // The source models no guard information at all. Saying "pass" here would
+      // claim something the data cannot support.
+      findings.push(finding('IRC-R312.1', 'not-evaluated',
+        'Plan has an elevated walking surface but models no guard information; add guard geometry to evaluate this rule.'));
+    } else {
+      for (const room of elevated) {
+        const onThisFloor = input.guards.filter((guard) => (guard.floor ?? 1) === (room.floor ?? 1));
+        const height = (room.elevationFt ?? 0).toFixed(1);
+        if (onThisFloor.length) {
+          // Presence is modelled; height and baluster spacing are not — flag
+          // them for shop drawings rather than silently claiming compliance,
+          // exactly as R310 does for net clear area.
+          findings.push(finding('IRC-R312.1', 'pass',
+            `Walking surface ${height} ft above the floor below is guarded (${onThisFloor.length} guard element(s)). Confirm guard height ≥ 36 in and baluster spacing ≤ 4 in on shop drawings.`,
+            subject(room)));
+        } else {
+          findings.push(finding('IRC-R312.1', 'fail',
+            `Walking surface ${height} ft above the floor below has NO guard on its open sides; IRC R312.1 requires one above ${GUARD_THRESHOLD_FT.toFixed(1)} ft.`,
+            subject(room)));
+        }
+      }
     }
   }
 

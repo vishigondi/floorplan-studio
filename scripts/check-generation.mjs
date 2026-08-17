@@ -105,6 +105,8 @@ function reportForArtifact(artifact) {
       label: room.label,
       type: room.type,
       floor,
+      // R312 threshold input: a loft floor sits at loftFloorY, ground at 0.
+      elevationFt: floor >= 1 ? loftFloorY : 0,
       widthFt: room.bounds?.w,
       depthFt: room.bounds?.d,
       grid: room.bounds
@@ -134,8 +136,12 @@ function reportForArtifact(artifact) {
     toRoomId: opening.toRoomId,
     opensIntoRoomId: opening.opensIntoRoomId,
   }));
+  const guards = [...(artifact.interiorWalls ?? []), ...(artifact.exteriorWalls ?? [])]
+    .filter((wall) => /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`))
+    .map((wall) => ({ id: wall.id, floor: wall.levelIndex ?? wall.floor ?? 1 }));
   return codeAdvisoryReport({
     planId: artifact.planId,
+    guards,
     jurisdictionId: 'nc-cherokee-county',
     footprintWidthFt: artifact.footprint?.widthFt,
     footprintDepthFt: artifact.footprint?.depthFt,
@@ -724,14 +730,23 @@ console.log('constraint engine: a deliberately broken plan must FAIL, per rule')
       ['IRC-R310.1', 'every egress window made inoperable', (a) => {
         for (const w of a.windows ?? []) w.windowKind = 'fixed';
       }],
+      ['IRC-R312.1', 'every fall-protection guard stripped from a loft', (a) => {
+        const isGuard = (w) => /guard|rail/i.test(`${w.wallKind ?? ''} ${w.id ?? ''}`);
+        a.interiorWalls = (a.interiorWalls ?? []).filter((w) => !isGuard(w));
+        a.exteriorWalls = (a.exteriorWalls ?? []).filter((w) => !isGuard(w));
+      }, '2 bed a-frame with loft, 40x60 lot, 5 ft setbacks'],
       ['WH-GRID-4FT', 'a bedroom 1.3 ft off the 4 ft structural grid', (a) => {
         const bed = a.rooms.find((r) => r.type === 'bedroom');
         bed.bounds.w = (bed.bounds.w ?? 12) + 1.3; bed.w = bed.bounds.w;
       }],
     ];
 
-    for (const [ruleId, description, breakIt] of BREAKAGES) {
-      const broken = clone();
+    for (const [ruleId, description, breakIt, altBrief] of BREAKAGES) {
+      const source = altBrief
+        ? compileIntent(mockIntentFromBrief(parseBrief(altBrief)), 'engine-probe-alt', altBrief)
+        : good;
+      if (!source.ok) { check(`probe plan for ${ruleId} compiles`, false, (source.errors ?? []).join('; ')); continue; }
+      const broken = JSON.parse(JSON.stringify(source.artifact));
       breakIt(broken);
       let caught = false;
       try { caught = failsFor(broken, ruleId); } catch (error) {
