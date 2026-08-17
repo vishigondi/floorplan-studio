@@ -63,7 +63,7 @@
       ]
     },
     "outpost-medium": {
-      "reason": "TRACED plan (project guardrail: never edited). The fx-stoop/fx-entry-storage overlap is 0.08x0.09 ft, right at the 0.06 ft clearance epsilon. The fx-bed10/fx-bedroom10-wardrobe overlap (4.57x1.85 ft) is large and looks like a real tracing error worth investigating at source \u2014 logged, not silently tolerated.",
+      "reason": "TRACED plan (project guardrail: never edited). Two overlaps, now DIAGNOSED against the source drawing (chatgpt-handoff/generated/outpost-medium-proposal-paired-v11.png) rather than guessed at. (1) fx-stoop/fx-entry-storage overlap 0.08x0.09 ft, right at the 0.06 ft clearance epsilon \u2014 noise. (2) fx-bed10/fx-bedroom10-wardrobe overlap 4.57x1.85 ft is a REAL TRACING ERROR: the source shows the bed head against bedroom 10's north wall and the closet as a VERTICAL run on the east wall, but the artifact records the wardrobe as a horizontal band on the north wall \u2014 w=12.4152/d=1.9470, i.e. its width and depth transposed, so its rotation was lost in tracing. Transposing them and seating it against the east wall (x 17.05-19.00) clears the bed completely (x-overlap 0.00). Its 12.4 ft length also exceeds the room's 11 ft depth, so the length is slightly off too. Not repaired here: traced artifacts are never edited, and this one lives in the dev-compiler checkout.",
       "accepted": [
         "fixture-overlap:fx-bed10|fx-bedroom10-wardrobe",
         "fixture-overlap:fx-stoop|fx-entry-storage"

@@ -120,6 +120,39 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## outpost-medium's overlap diagnosed at source: a lost rotation (2026-08-17)
+
+The drift gate flagged `fx-bed10` / `fx-bedroom10-wardrobe` overlapping by
+**4.57 x 1.85 ft** and I recorded it as "looks like a real tracing error worth
+investigating". Investigated it properly against the source drawing rather than
+leaving a guess in the baseline.
+
+**The source** (`chatgpt-handoff/generated/outpost-medium-proposal-paired-v11.png`,
+bedroom 10) shows the bed's headboard against the room's **north wall** and the
+closet as a **vertical run of shelving on the EAST wall**. There is no closet
+band along the north wall at all.
+
+**The artifact** records the wardrobe as a **horizontal band on the north wall**:
+`w = 12.4152, d = 1.9470` at x 5.94, z 16.41 — straight through where the bed goes.
+
+**Diagnosis: the fixture's rotation was lost in tracing — its width and depth are
+transposed.** Not a guess; it checks out numerically. Swap w/d and seat it against
+the east wall at x 17.05–19.00 and the overlap with the bed becomes **0.00 ft** —
+the arrangement the drawing actually shows. The bed was never the problem.
+
+One caveat kept in the record rather than rounded away: rotated, the run is
+12.4 ft long against a room only 11 ft deep, so the traced LENGTH is slightly off
+too — the trace has two errors, not one.
+
+**Not repaired.** Traced artifacts are never edited (project guardrail), and this
+one lives in the dev-compiler checkout anyway. The baseline entry now carries the
+diagnosis and the evidence instead of a suspicion, so whoever re-traces this plan
+knows exactly what to fix.
+
+This is the drift gate earning its keep in the way that matters most: it did not
+just count a violation, it pointed at a specific defect in shipped content that
+nobody had noticed, and the source drawing settled it.
+
 ## Next.js 16.1.6 -> 16.3.0: 7 vulnerabilities -> 0 (2026-08-17)
 
 ### Correcting my own number first
