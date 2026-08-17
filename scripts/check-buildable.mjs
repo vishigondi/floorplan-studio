@@ -138,6 +138,47 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
     SKYLARK_ROOF_PITCHES_DEG.length > 0 || kit.status !== 'buildable', kit.status);
 }
 
+// A kit REQUEST must produce a kit-buildable home or an honest refusal. Sourcing
+// the pitches is only worth anything if a customer can act on them: asking for a
+// WikiHouse home has to yield geometry the blocks can actually cut.
+console.log('skylark: a kit request yields a kit-buildable plan, or refuses');
+{
+  const kitBrief = (text) => compileIntent(mockIntentFromBrief(parseBrief(text)), 'kit-test', text);
+
+  for (const [style, brief] of [
+    ['gable', '2 bed skylark gable, 60x90 lot, 10 ft setbacks'],
+    ['flat', '2 bed wikihouse flat roof, 60x90 lot, 10 ft setbacks'],
+  ]) {
+    const res = kitBrief(brief);
+    check(`kit ${style}: compiles`, res.ok, (res.errors ?? []).join('; '));
+    if (!res.ok) continue;
+    const a = res.artifact;
+    const walls = (a.exteriorWalls ?? []).filter((w) => w.span)
+      .map((w) => Math.hypot(w.span.x2 - w.span.x1, w.span.z2 - w.span.z1));
+    const pitch = roofPitchDeg(a);
+    const kit = assessSkylarkKit({ roofStyle: a.roof.style, roofPitchDeg: pitch, wallLengthsFt: walls });
+    check(`kit ${style}: pitch is a MEASURED Skylark pitch (${pitch.toFixed(1)}°)`,
+      SKYLARK_ROOF_PITCHES_DEG.some((p) => Math.abs(p - pitch) <= 0.5), `${pitch.toFixed(2)}°`);
+    check(`kit ${style}: assessed buildable end to end`, kit.status === 'buildable', `${kit.status} — ${kit.reasons.join(' ')}`);
+  }
+
+  // Styles the kit cannot cut must REFUSE, not quietly ship something else — the
+  // same silent-mismatch rule as the bedroom and sqft caps.
+  for (const style of ['a-frame', 'shed', 'hip', 'gambrel', 'barn']) {
+    const res = kitBrief(`2 bed skylark ${style} roof, 80x100 lot, 10 ft setbacks`);
+    check(`kit ${style}: refused (the kit has no such roof)`, !res.ok, 'compiled anyway');
+    check(`kit ${style}: refusal explains and offers the alternative`,
+      !res.ok && res.errors.some((e) => /WikiHouse kit/.test(e) && /flat roof or a 42° gable/.test(e)),
+      (res.errors ?? []).join(' | ').slice(0, 120));
+  }
+
+  // REGRESSION GUARD: a plain gable is untouched by any of this.
+  const plain = kitBrief('2 bed gable, 60x90 lot, 10 ft setbacks');
+  check('plain gable keeps its 14 ft ridge (kit changes nothing unasked)',
+    plain.ok && Math.abs(plain.artifact.roof.ridgeHeightFt - 14) < 1e-9,
+    plain.ok ? String(plain.artifact.roof.ridgeHeightFt) : 'refused');
+}
+
 // The pitch the kit DOES ship must qualify — otherwise the whole set is dead
 // letters and 'buildable' is unreachable, which is not honesty, just a bug.
 {

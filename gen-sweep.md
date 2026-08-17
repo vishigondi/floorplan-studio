@@ -25,6 +25,45 @@ reliably produce sound, correctly code-checked plans you'd hand to an architect.
    traced plans + gen-001 untouched; keep every data-* hook; delete throwaway
    gen-* after each fire.
 
+## Kit-buildable homes are now REACHABLE (2026-08-16)
+
+Measuring the pitches answered "can the kit build this?" — and the answer for
+six of our seven styles was no. Sourced data nobody can act on is a report, not
+a capability, so: **a brief can now ask for a kit-buildable home and get one.**
+
+- **Brief:** `wikihouse`, `skylark`, `kit-built`/`kit-buildable` set
+  `kitBuildable`. The token is consumed, so it never lands in `unparsed` (P5).
+- **Compiler:** a kit gable is NOT an eighth roof style — it is the same gable
+  with its ridge **derived from the measured pitch** instead of a house number:
+  `ridge = eave + tan(42°)·(span/2)` = 20.61 ft on a 28 ft span, giving exactly
+  42.0°. Everything downstream (elevations, 3D clip, headroom, egress, fixtures)
+  reads the resulting planes and needs no knowledge of the kit (P1, P7).
+- **Refusal, not silent substitution:** asking for a kit home with a roof the kit
+  cannot cut REFUSES, in the same class as the bedroom and sqft caps — "an
+  a-frame roof cannot be built from the WikiHouse kit — Roof pitch 50.5° is not
+  one of the Skylark pitches (0°, 42°) … The kit builds a flat roof or a 42°
+  gable; ask for one of those, or drop the kit requirement." The kit module
+  decides; the compiler holds no second copy of its rules.
+
+| brief | result |
+|---|---|
+| `2 bed skylark gable` | builds at **42.0°** → kit **buildable** |
+| `2 bed wikihouse flat roof` | builds at 0° → kit **buildable** |
+| `2 bed skylark hip / a-frame / shed / gambrel / barn` | **refused**, with the reason and the alternative |
+| `2 bed gable` (no kit asked) | unchanged 23.2°, 14 ft ridge |
+
+**Gates assert MORE:** `check:buildable` proves a kit request yields a measured
+pitch and a `buildable` verdict end to end, that all five impossible styles
+refuse *and* explain, and — as a regression guard — that a plain gable still has
+its 14 ft ridge (the kit changes nothing unasked). `check:generation` runs the
+full per-plan invariant set on the 42° gable, a roof angle no other case covered
+(3724 assertions). Mutation-tested twice: ignore the kit pitch → the kit gable
+fails to compile; drop the refusal → the impossible styles ship silently.
+
+Verified on the real surface: generated through the live API and swept — plan,
+all three elevations (visibly steeper gable, 21 ft ridge over a 28 ft span) and
+3D, 0 failures. `gates` + `gates:live` green.
+
 ## Skylark roof pitches — MEASURED, blocker cleared (2026-08-16)
 
 The backlog item that gated everything: with `SKYLARK_ROOF_PITCHES_DEG` empty,
