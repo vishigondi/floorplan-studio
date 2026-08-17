@@ -120,6 +120,41 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Dependency audit: three unused @thatopen packages removed (2026-08-17)
+
+Long-standing backlog item — five `@thatopen/*` packages, unclear how many were
+real. Measured rather than assumed:
+
+| package | imported in | verdict |
+|---|---|---|
+| `@thatopen/components` | 1 file (`BimPreview.tsx`) | **keep** — it builds the real OBC world (Components/Worlds/SimpleScene/SimpleCamera/SimpleRenderer) |
+| `@thatopen/fragments` | 0 files | **keep** — required PEER of `components` (`~3.4.0`) |
+| `@thatopen/components-front` | 0 files | removed |
+| `@thatopen/ui` | 0 files | removed |
+| `@thatopen/ui-obc` | 0 files | removed |
+
+Checked peers before cutting: `components` declares `fragments`,
+`camera-controls`, `three` and `web-ifc`, all satisfied by our package.json —
+and notably NOT `ui`, `ui-obc` or `components-front`. Removing an unused package
+that turns out to be a peer is how you get a runtime failure no gate catches.
+
+`BimPreview` is not dead code and not behind a flag: it is the DEFAULT 3D view
+(`HomeModel` only renders under `viewPreset === 'debug-review'`), so the live
+sweep's 3D capture already exercises it. Verified after removal — build clean,
+`gates` + `gates:live` green, and the captured 3D still shows the a-frame with
+its glazing and loft guard rails.
+
+### Found while in there: 6 high-severity advisories, all fixable
+`npm audit` reports 7 vulnerabilities (6 high, 1 low). The one that matters is on
+a DIRECT dependency: **Next.js — HTTP request smuggling in rewrites**, and this
+app serves API routes. `postcss` (XSS via unescaped `</style>`) and `sharp`
+(libvips CVEs) are both fixed by the same Next upgrade; `brace-expansion`,
+`js-yaml` and `nanoid` are transitive DoS issues with fixes available.
+
+NOT upgraded in this pass. A framework bump is a different kind of change from a
+dependency cleanup and deserves its own verification rather than riding along
+with it — recorded here so it is a decision, not an oversight.
+
 ## CORRECTION + finding: the plans we ship are in ANOTHER repo (2026-08-17)
 
 Immediately after committing the regeneration I checked what the commit actually
