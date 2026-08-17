@@ -120,6 +120,56 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Visual sweep clean; I killed a sibling project's dev server (2026-08-17)
+
+### The visual review (the point of the fire)
+Full 18-plan sweep, **312 assertions**, and I looked at all three contact sheets.
+Plans: fixtures spread, lofts sharing the building frame, seven distinct roof
+styles, traced plans unchanged. Elevations: correct silhouettes across all 15
+compiled plans, openings on the right facades, shed reading properly.
+**Nothing broken.**
+
+One real product finding, left for next fire: a freshly generated plan **404s on
+a `.render.svg` it does not have yet** (stored renders come from `render:paired`).
+The app falls back correctly, but a 404 on every new plan is noise that hides
+real failures.
+
+### What actually consumed the fire: two environment traps and a mistake
+**A first sweep reported 72 failures — none of them real.** Midway through,
+port 3000 stopped being this app: a **different project's dev server**
+(`/Users/openclaw/projects/MaxRoom`) was listening and answering **401**. Pages
+did not render, so the kit badge and IFC route assertions failed en masse.
+
+**My fix introduced a second trap.** Moving to `127.0.0.1:3007` gave **0 plans**
+with no failed request to show for it — Next 16 blocks client data fetches from a
+dev origin outside `allowedDevOrigins`. `localhost:3007` → 30 cards;
+`127.0.0.1:3007` → 0. My own "the feed listed no stored plans" guard caught it,
+which is the guard earning its keep. Its message now names both traps.
+
+### The mistake: `gates:live` killed the other project's server
+`run-live-gates.mjs` freed its port with `lsof -ti:PORT | xargs kill -9` — **kill
+whatever is listening**. On a machine running more than one project that is
+somebody else's dev server, and it took down MaxRoom's Next process. I also spent
+the session using broad `pkill -f "next dev"`, which matches every project's dev
+server, not just this one.
+
+Fixed at the root: `freePort` now resolves each listener's working directory and
+only reclaims one inside THIS repo. Anything else is **reported and refused**:
+```
+[live-gates] port 3059 is held by pid 12337 from /private/tmp —
+[live-gates] refusing to kill another project's server. Free the port or set LIVE_GATE_PORT.
+```
+exit 1, foreign server survives.
+
+### And a verification that never ran
+I "verified" that guard twice with `timeout 120 node …` — **macOS has no
+`timeout`**. The command failed with `command not found`, the script never
+executed, and I read "foreign server survived" as proof the guard worked. It
+proved nothing: the server survived because nothing had run. Re-verified properly
+without `timeout`. Third instance this session of a check that passed by not
+happening — the tell is always the same, a green read with no evidence the code
+executed.
+
 ## The packet's code report is faithful — and a gate I wrote for it was vacuous (2026-08-17)
 
 Finished the deliverable pass on the section a client most needs to trust: the

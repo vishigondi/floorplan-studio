@@ -328,6 +328,15 @@ const stored = wantStored && !only.length
     const found = [...new Set(ids)].filter((id) => !generated.some((g) => g.id === id)).sort();
     if (!found.length) {
       console.error('[visual-sweep] the feed listed no stored plans — refusing to report a pass over a shrunken set.');
+      // Two environment traps produce exactly this, and both cost real time:
+      //  1. A DIFFERENT project's dev server holding this port (mine had been
+      //     replaced on :3000 mid-sweep; its 401s looked like product failures).
+      //  2. Reaching the server as 127.0.0.1 instead of localhost — Next 16
+      //     blocks client data fetches from a dev origin outside
+      //     `allowedDevOrigins`, so the page renders with ZERO plans and no
+      //     failed request to show for it.
+      console.error(`[visual-sweep] base was ${base}. Check that this port is THIS app`);
+      console.error('[visual-sweep] and prefer http://localhost:<port> — Next 16 blocks dev-origin fetches from 127.0.0.1.');
       await browser.close();
       process.exit(2);
     }

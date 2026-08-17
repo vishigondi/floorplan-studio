@@ -23,7 +23,26 @@ const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { stdio: 'inherit', .
 // kill -9 would take down the test process itself — `-sTCP:LISTEN -a` scopes
 // it to the server alone.
 const freePort = () => {
-  try { spawnSync('bash', ['-lc', `lsof -ti:${PORT} -a -sTCP:LISTEN | xargs kill -9 2>/dev/null`], { stdio: 'ignore' }); } catch {}
+  // NEVER kill a server that is not ours. This used to `kill -9` whatever held
+  // the port, and on a machine running more than one project that is somebody
+  // else's dev server — it took down a sibling project's Next process, which
+  // then looked like this app failing. Only reclaim a listener whose working
+  // directory is this repo; anything else is reported, not killed.
+  try {
+    const pids = spawnSync('bash', ['-lc', `lsof -ti:${PORT} -a -sTCP:LISTEN`], { encoding: 'utf8' })
+      .stdout.split('\n').map((pid) => pid.trim()).filter(Boolean);
+    for (const pid of pids) {
+      const cwd = spawnSync('bash', ['-lc', `lsof -a -p ${pid} -d cwd -Fn | sed -n 's/^n//p'`], { encoding: 'utf8' })
+        .stdout.trim();
+      if (cwd && cwd.startsWith(process.cwd())) {
+        spawnSync('bash', ['-lc', `kill -9 ${pid} 2>/dev/null`], { stdio: 'ignore' });
+      } else {
+        console.error(`[live-gates] port ${PORT} is held by pid ${pid} from ${cwd || 'an unknown directory'} —`);
+        console.error('[live-gates] refusing to kill another project\'s server. Free the port or set LIVE_GATE_PORT.');
+        process.exit(1);
+      }
+    }
+  } catch {}
 };
 
 // A production server needs a build. Build if one isn't present so the runner
