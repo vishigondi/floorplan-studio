@@ -1,6 +1,6 @@
 import type { DenHome, RoomFixture, RoomLayout, RoofPlane, SourceOpeningSegment, SourceWallSegment } from '@/lib/types';
-import { resolveBimComponent, type BimComponentDefinition } from './component-registry';
-import { resolveLocalBimAsset, resolveVisualAsset, visualAssetMode } from './component-assets';
+import { resolveBimComponent, type BimComponentDefinition } from './component-registry.ts';
+import { resolveLocalBimAsset, resolveVisualAsset, visualAssetMode } from './component-assets.ts';
 
 const GRID_FT = 4;
 const FT_TO_M = 0.3048;

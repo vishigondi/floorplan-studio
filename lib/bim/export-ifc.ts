@@ -1,5 +1,5 @@
 import type { DenHome } from '@/lib/types';
-import { semanticBimFromHome, type SemanticBimModel } from './semantic-bim';
+import { semanticBimFromHome, type SemanticBimModel } from './semantic-bim.ts';
 
 export interface ExperimentalIfcExport {
   status: 'experimental';

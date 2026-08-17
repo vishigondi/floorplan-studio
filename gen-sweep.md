@@ -120,6 +120,53 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The standards validator had NO battery — and the reason was structural (2026-08-17)
+
+`validateStandards` is the product's **second verdict system**: it grades the
+semantic BIM model, feeds the readiness lanes, and ships as the "Standards +
+Issues JSON" export. **No battery referenced it at all.**
+
+**The reason was not neglect — it was unloadable.** Its module graph reached
+`@/` path aliases and extensionless imports, neither of which raw Node resolves,
+so no offline gate *could* load it:
+
+```
+lib/data.ts                     import { validateBuildability } from './build-validator'   (no .ts)
+lib/bim/{buildable,semantic}-bim, export-ifc   4 more extensionless value imports
+lib/standards/floorplan-standards.ts           6 '@/lib/...' aliases
+lib/bim/component-assets.ts                    2 '@/public/...' JSON aliases
+```
+
+Twelve specifiers in total, all made relative-with-extension. `next build` still
+compiles in 2.8 s — aliases and relative paths are equivalent to the bundler, and
+the rest of `lib/` already used relative paths. **A verdict system that cannot be
+loaded by the gates will not be gated**, and that is a structural fact worth more
+than any single assertion.
+
+### What the validator actually is
+Measured, not assumed. Nine packs; a clean compiled plan yields **zero blockers**
+and 15 warnings (14 panel-grid, 1 experimental-IFC). Breakages:
+
+| breakage | effect |
+|---|---|
+| roof planes removed | roof-envelope issue ✓ |
+| all windows removed | 2 code-advisory-dimensional warnings |
+| all doors removed | **fewer** issues (14 → 5) |
+| rooms shifted 1.3 ft off grid | **no change** |
+
+The last two look alarming and are not. This is a **model-integrity** checker —
+roles, required fields, host constraints, component mappings — so fewer elements
+legitimately means fewer element-level issues. Habitability and grid alignment
+belong to the code-advisory engine, which *does* catch the off-grid rooms (proved
+last fire). Recorded so nobody re-reads these numbers as a defect.
+
+### The battery
+`check:standards` asserts it loads offline, that all nine packs are evaluated
+AND that no unknown pack appears, that a clean plan produces no blockers, and
+that the machinery is **not inert** — removing the roof planes must raise a
+roof-envelope issue and increase the total. Mutation-tested by making
+`validateStandards` return an empty issue list: the battery fails.
+
 ## Anti-vacuity coverage completed, and made self-enforcing (2026-08-17)
 
 ### The NC jurisdiction rules: no defect, and already protected

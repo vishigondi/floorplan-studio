@@ -1,15 +1,18 @@
-import type { DenHome } from '@/lib/types';
-import { buildableBimFromHome } from '@/lib/bim/buildable-bim';
-import { BIM_COMPONENT_CATALOG } from '@/lib/bim/component-registry';
-import type { SemanticBimCategory, SemanticBimElement } from '@/lib/bim/semantic-bim';
-import { REPAIR_LAYER_PATHS, type RepairLayer } from '@/lib/repair/targeted-repair';
+// Relative, WITH extensions on value imports: raw Node (which the gate
+// batteries use) resolves neither `@/` aliases nor extensionless specifiers, and
+// this file's aliases are why the standards validator had no battery at all.
+import type { DenHome } from '../types';
+import { buildableBimFromHome } from '../bim/buildable-bim.ts';
+import { BIM_COMPONENT_CATALOG } from '../bim/component-registry.ts';
+import type { SemanticBimCategory, SemanticBimElement } from '../bim/semantic-bim.ts';
+import { REPAIR_LAYER_PATHS, type RepairLayer } from '../repair/targeted-repair.ts';
 import {
   codeAdvisoryReport,
   type CodeAdvisoryInput,
   type CodeAdvisoryLot,
   type CodeAdvisoryOpening,
   type CodeAdvisoryReport,
-} from '@/lib/standards/code-advisory';
+} from './code-advisory.ts';
 
 export const STANDARD_REGISTRY_VERSION = 'paired_floorplan_standards_v1';
 

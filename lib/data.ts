@@ -14,7 +14,11 @@ import type {
   SourceWallSegment,
   SourceSpaceFace,
 } from './types';
-import { validateBuildability } from './build-validator';
+// Relative WITH extension: raw-Node gate batteries cannot resolve extensionless
+// VALUE imports, and this one kept lib/data.ts (and everything reachable through
+// it, including validateStandards) unloadable offline — which is why that whole
+// verdict system had no battery.
+import { validateBuildability } from './build-validator.ts';
 
 export let components: ModularComponent[] = [];
 export let coverage: Record<string, Record<string, boolean>> = {};

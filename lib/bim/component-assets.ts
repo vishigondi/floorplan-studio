@@ -1,5 +1,5 @@
-import catalog from '@/public/data/bim-components/catalog.json';
-import visualCatalog from '@/public/data/bim-components/visual-catalog.json';
+import catalog from '../../public/data/bim-components/catalog.json' with { type: 'json' };
+import visualCatalog from '../../public/data/bim-components/visual-catalog.json' with { type: 'json' };
 
 export interface LocalBimAssetCandidate {
   id: string;
