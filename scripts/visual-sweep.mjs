@@ -58,7 +58,13 @@ const BRIEFS = [
 // `findings` is the ONLY record of failure — a second counter alongside it can
 // disagree with the exit code, which is how a red gate reports green.
 const findings = [];
+// Assertions only print when they FAIL, so silence is ambiguous: it means either
+// "everything passed" or "nothing ran". A check placed after `browser.close()`
+// once produced a crash, zero FAIL lines, and a green read. Count executions so
+// coverage is a number, not an inference.
+const executed = new Map();
 function check(planId, label, ok, detail = '') {
+  executed.set(planId, (executed.get(planId) ?? 0) + 1);
   if (!ok) {
     findings.push({ planId, label, detail });
     console.error(`  FAIL [${planId}] ${label}${detail ? `: ${detail}` : ''}`);
@@ -378,6 +384,26 @@ if (!only.length) {
 await browser.close();
 
 writeFileSync(join(outDir, 'sweep.json'), JSON.stringify({ records, findings, generated }, null, 2));
+// A swept plan that contributed no assertions was not checked, whatever the
+// exit code says. Surface it as a failure rather than counting it as covered.
+// Measured, not guessed: a compiled plan runs 18-19 assertions here and a traced
+// plan 10 (it has no semantic elevation panel), while a plan whose page never
+// loads reaches only 3. 8 separates those cleanly with margin either side.
+const MIN_ASSERTIONS_PER_PLAN = 8;
+for (const planId of targets) {
+  const count = executed.get(planId) ?? 0;
+  if (count < MIN_ASSERTIONS_PER_PLAN) {
+    findings.push({
+      planId,
+      label: 'plan was swept but barely checked',
+      detail: `${count} assertion(s) ran — expected at least ${MIN_ASSERTIONS_PER_PLAN}; the page probably never loaded`,
+    });
+    console.error(`  FAIL [${planId}] plan was swept but barely checked: ${count} assertion(s) ran`);
+  }
+}
+const totalAssertions = [...executed.values()].reduce((sum, n) => sum + n, 0);
+console.log(`\n${totalAssertions} assertion(s) executed across ${executed.size} plan(s)`);
+
 const hard = findings.filter((f) => !f.soft);
 const soft = findings.filter((f) => f.soft);
 console.log(`\n${records.length} plans swept -> ${outDir}`);

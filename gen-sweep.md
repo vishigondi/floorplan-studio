@@ -120,6 +120,51 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Auditing this session's gates for the "proven to run" property (2026-08-17)
+
+Applying last fire's lesson backwards: a gate that does not complain has either
+passed or never executed, and I could not tell those apart by looking at exit
+codes. So I checked.
+
+### Offline batteries: 29 assertion families, 0 dead
+Every distinctive assertion added this session was grepped for in its battery's
+real output:
+
+| battery | executed |
+|---|---|
+| check-generation | 4,369 |
+| check-elevations | 581 |
+| check-buildable | 283 |
+| check-code-advisory | 69 |
+| check-ifc | 57 |
+| check-drawing-standards | 46 |
+| check-drift | 22 |
+| check-standards | 15 |
+
+Every family appears at least once — fixture headroom ×471, fixture overlap
+×2,899, facade-drawn ×117, drawn-exactly-once ×105, per-rule breakages ×9, the
+registry coverage check ×1, and so on. **Zero dead assertions.** The offline
+gates are real.
+
+### The browser sweep now counts its own coverage
+The sweep is where the dead gate actually happened, and it only prints on
+FAILURE — so silence there is genuinely ambiguous. It now reports
+`N assertion(s) executed across M plan(s)` and fails any plan that contributed
+fewer than 8.
+
+**The floor is measured, not guessed:** a compiled plan runs 18-19 assertions, a
+traced plan 10 (no semantic elevation panel), and a plan whose page never loads
+reaches 3. Verified both ways — `--only zzz-not-a-plan` now fails with
+`plan was swept but barely checked: 3 assertion(s) ran`, real plans stay clean.
+
+### Being honest about what this does and does not prove
+The counter catches a plan that produced nothing, and makes coverage a number a
+human can see instead of an inference. It does **not** prove each individual
+assertion ran — the browser-closed bug lived in a post-loop section that would
+still have shown a healthy total. **Mutation testing is what proves an
+individual check is load-bearing**, and it is what caught that bug. The counter
+is a cheap second net, not a replacement.
+
 ## Readiness lanes CAN go red — and I nearly shipped a gate that never ran (2026-08-17)
 
 The lanes aggregate both verdict systems into the promote/block decision, and
