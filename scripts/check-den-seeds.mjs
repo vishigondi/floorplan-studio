@@ -253,11 +253,17 @@ assert(appPageSource.includes('Full semantic-layer bundle set') && appPageSource
 assert(appPageSource.includes('repair:ingest') && appPageSource.includes('--response response.txt'), 'repair modal should expose the manual ChatGPT response ingest path before patch application');
 assert(appPageSource.includes('reviewToolsVisible') && appPageSource.includes('Review Tools'), 'detail page should hide harness/review rails by default behind an explicit Review Tools control');
 assert(brochureQaSource.includes('VIEW_BUTTONS') && brochureQaSource.includes('BIM 3D') && brochureQaSource.includes('Cutaway') && brochureQaSource.includes('Plan Top'), 'brochure QA should capture product 3D, cutaway, and plan-top screenshots');
-assert(brochureQaSource.includes('product-gallery') && brochureQaSource.includes('gallery: no product plan cards rendered'), 'brochure QA should capture and validate the product gallery landing page');
-assert(brochureQaSource.includes('gallery: elevation preview missing') && brochureQaSource.includes('gallery: quality lane chips missing'), 'brochure QA should fail if gallery cards lose elevation previews or quality lane chips');
+// The gallery was rebuilt around a plan FEED. "product plan cards",
+// "elevation preview", "quality lane chips" and the "next repair target" badge
+// are gone from the product, so these four assertions named removed UI and had
+// been failing ever since. They now grade the guarantees the feed makes TODAY,
+// so the intent — brochure QA must fail when a card loses its content — is
+// preserved rather than deleted.
+assert(brochureQaSource.includes('product-gallery') && brochureQaSource.includes('gallery: no plan feed cards rendered'), 'brochure QA should capture and validate the product gallery landing page');
+assert(brochureQaSource.includes('gallery: feed cards do not label the concept render') && brochureQaSource.includes('gallery: feed cards do not show the dimensioned plan as source of truth'), 'brochure QA should fail if feed cards lose the concept render or the dimensioned plan');
 assert(brochureQaSource.includes('new-plan-handoff-modal') && brochureQaSource.includes('GENERATED GPT PROMPT PREVIEW'), 'brochure QA should click New Plan Handoff and verify the GPT prompt handoff modal opens');
-assert(brochureQaSource.includes('hasRepairPromptAction') && brochureQaSource.includes('Repair Prompt action'), 'brochure QA should fail if blocked gallery cards lose the repair prompt action');
-assert(brochureQaSource.includes('hasNextRepair') && brochureQaSource.includes('next repair target'), 'brochure QA should fail if blocked gallery cards stop showing the next repair target');
+assert(brochureQaSource.includes('gallery: feed cards do not expose a Repair action') && brochureQaSource.includes('gallery: no clickable Repair actions found on feed cards'), 'brochure QA should fail if feed cards lose the repair action');
+assert(brochureQaSource.includes('gallery: feed cards do not expose an Open Plan action') && brochureQaSource.includes('gallery: harness/debug panel leaked into product landing page'), 'brochure QA should fail if feed cards lose Open Plan or the harness leaks into the product page');
 assert(brochureQaSource.includes('repair-prompt-modal') && brochureQaSource.includes('hasJsonPatchInstruction'), 'brochure QA should click a gallery Repair Prompt action and verify the scoped JSON Patch workflow opens');
 assert(brochureQaSource.includes('REVIEW_TABS') && brochureQaSource.includes('Compare') && brochureQaSource.includes('Overlay') && brochureQaSource.includes('Semantic'), 'brochure QA should capture Compare, Overlay, and Semantic review screenshots');
 assert(brochureQaSource.includes("waitForEvent('download'") && brochureQaSource.includes('paired_floorplan_product_packet') && brochureQaSource.includes('brochureHtml'), 'brochure QA should click Export and verify product packet contents');
@@ -295,7 +301,11 @@ assert(printRepairQueueSource.includes('--zip') && printRepairQueueSource.includ
 assert(printRepairQueueSource.includes('README_FOR_GPT.md') && printRepairQueueSource.includes('patch.schema.json') && printRepairQueueSource.includes('Return exactly one file named `patch.json`'), 'repair queue bundles should include GPT-facing instructions and a JSON Patch schema');
 assert(printRepairQueueSource.includes('Repair Session:') && printRepairQueueSource.includes('Plan Repair Sessions') && printRepairQueueSource.includes('repair:ingest'), 'repair queue should write per-plan repair-session checklists with manual ingest/apply commands');
 assert(!appPageSource.includes("{ id: 'proposal', label: 'GPT Proposal'") && !appPageSource.includes("{ id: 'render', label: 'Render'") && !appPageSource.includes("{ id: 'bim', label: 'BIM Preview'"), 'bottom review panel should not expose duplicate proposal/render/BIM tabs');
-assert(appPageSource.includes("{ id: 'compare', label: 'Compare'") && appPageSource.includes("{ id: 'overlay', label: 'Overlay'") && appPageSource.includes("{ id: 'semantic', label: 'Semantic'"), 'bottom review panel should keep only Compare, Overlay, and Semantic tabs');
+// Assert the TYPE, not the three object literals: Overlay is now built
+// conditionally (`{ id: 'overlay' as CompareMode, ... }`), so the literal match
+// broke while the invariant held. The union is the real source of truth for
+// "only these three tabs" — a fourth tab cannot be added without changing it.
+assert(appPageSource.includes("type CompareMode = 'compare' | 'overlay' | 'semantic';"), 'bottom review panel should keep only Compare, Overlay, and Semantic tabs');
 assert(renderThemesSource.includes("'product-presentation'") && !renderThemesSource.includes("'paired-review'") && !renderThemesSource.includes("'white-aframe-cutaway'"), 'render themes should be collapsed to the single product-presentation theme');
 assert(sceneSource.includes("renderMode === 'debugReview' && renderTheme.showGrid"), 'scene grid must be debug-only');
 assert(sceneSource.includes("renderMode === 'debugReview' && (") && sceneSource.includes('Debug review keeps a large ground plane'), 'large 3D ground plane must be debug-only');
@@ -323,6 +333,13 @@ const allOptions = Object.entries(manifest.plans ?? {}).flatMap(([planId, option
   (options ?? []).map((option) => ({ planId, ...option }))
 ));
 
+// proposalCount had drifted by the same 3 as planCount (the JSON-only plans were
+// seeded without updating the summary) and nothing noticed, because nothing
+// asserted it. A summary field with no assertion is just a number that used to
+// be true.
+assert(manifest.summary?.proposalCount === allOptions.length,
+  `manifest proposal count ${manifest.summary?.proposalCount} does not match ${allOptions.length}`);
+
 function pairedNumber(id) {
   const match = /^proposal-paired-v(\d+)$/.exec(String(id ?? ''));
   return match ? Number(match[1]) : 0;
@@ -338,13 +355,29 @@ for (const option of allOptions) {
   assert(option.pairedArtifact === true, `${option.planId} ${option.id} is missing pairedArtifact=true`);
   assert(option.artifactVersion === 'paired_gpt_floorplan_v1', `${option.planId} ${option.id} uses ${option.artifactVersion}`);
   assert(Boolean(option.pairedJsonUrl), `${option.planId} ${option.id} missing paired JSON URL`);
-  assert(Boolean(option.pairedValidationUrl), `${option.planId} ${option.id} missing validation URL`);
-  const validation = readJson(resolve(LOOP_ROOT, option.planId, option.pairedValidationUrl));
-  if (validation?.passed === true) {
-    assert(Boolean(option.deterministicRenderUrl), `${option.planId} ${option.id} missing deterministic render URL`);
+  // The GPT-paired lane ships a validation sidecar; the JSON-only lane
+  // (`constrained_json`) does not, and must not be made to. Those plans are
+  // compiled deterministically and graded by check:generation, check:code and
+  // check:drawing instead — writing them a validation JSON to satisfy this
+  // assertion is exactly the "synthesize a fake source" the working agreement
+  // forbids. This demanded one from every plan, so it failed the moment the
+  // first JSON-only plan was seeded. Lane split, both lanes still asserted.
+  if (option.sourceKind === 'constrained_json') {
+    // No `continue` here: every assertion after this block still applies to
+    // both lanes. Only the validation sidecar itself is lane-specific.
+    assert(Boolean(option.deterministicRenderUrl),
+      `${option.planId} ${option.id} is JSON-only, so its deterministic render IS the design asset`);
+    assert(option.archived !== true || (option.blockers ?? []).length > 0,
+      `${option.planId} ${option.id} is archived without blockers`);
   } else {
-    assert(option.archived === true, `${option.planId} ${option.id} failed validation but is not archived`);
-    assert((option.blockers ?? []).length > 0, `${option.planId} ${option.id} failed validation without blockers`);
+    assert(Boolean(option.pairedValidationUrl), `${option.planId} ${option.id} missing validation URL`);
+    const validation = readJson(resolve(LOOP_ROOT, option.planId, option.pairedValidationUrl));
+    if (validation?.passed === true) {
+      assert(Boolean(option.deterministicRenderUrl), `${option.planId} ${option.id} missing deterministic render URL`);
+    } else {
+      assert(option.archived === true, `${option.planId} ${option.id} failed validation but is not archived`);
+      assert((option.blockers ?? []).length > 0, `${option.planId} ${option.id} failed validation without blockers`);
+    }
   }
   assert(option.parserReady !== true, `${option.planId} ${option.id} reintroduced legacy parser-ready state`);
   assert(option.promotionReady !== true, `${option.planId} ${option.id} reintroduced legacy promotion-ready state`);

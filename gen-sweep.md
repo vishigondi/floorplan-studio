@@ -120,6 +120,63 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## A whole battery was outside the ladder, and had rotted (2026-08-17)
+
+`scripts/check-den-seeds.mjs` (`npm run paired:smoke`) is 182 assertions over the
+manifest, the plan store and the source of the app. **It is not in the gate
+ladder**, so nothing ran it, and it had been failing for a long time. It is in
+the ladder now, and green. The seven failures split three ways.
+
+### Stale strings, where the invariant still holds (5)
+Four assertions named a gallery UI that no longer exists — "product plan cards",
+"elevation preview", "quality lane chips", the "next repair target" badge. The
+gallery was rebuilt around a plan **feed** whose QA blockers are a different and
+somewhat richer set. I re-pointed them at what the feed guarantees today
+(concept render, dimensioned plan, Repair action, Open Plan, no harness leak),
+so the intent survives rather than being deleted.
+
+The fifth is the more interesting one. It asserted three object literals for the
+review tabs; Overlay became conditional (`{ id: 'overlay' as CompareMode, ... }`)
+and the literal stopped matching while the tabs were still exactly Compare /
+Overlay / Semantic. It now asserts the **type union**, which is the real source
+of truth — and is strictly stronger: the old form could not have caught a
+*fourth* tab being added, the new one cannot miss it. Verified by mutation.
+
+### A lane confusion (1)
+`brief-aframe-2br`, `gen-001` and `loft-showcase` were flagged as "missing
+validation URL". All three are `constrained_json` — the JSON-only lane. They have
+no GPT validation sidecar because they are compiled deterministically and graded
+by check:generation / check:code / check:drawing instead. The assertion demanded
+one from every plan, so it failed the moment the first JSON-only plan was seeded.
+Writing them a validation file to make it pass is precisely the "synthesize a
+fake source to satisfy an old gate" the working agreement forbids, so the check
+is now lane-aware — and **without a `continue`**, so every later assertion in
+that loop still applies to both lanes.
+
+### Real data drift (1)
+`summary.planCount` said 32 against 35 plan directories. `proposalCount` said 18
+against 21. Both off by exactly the three JSON-only plans: they were seeded
+without updating the summary. planCount was caught only because something
+asserted it; **proposalCount drifted in complete silence, because nothing did**.
+Corrected both and added the missing assertion. A summary field with no assertion
+is just a number that used to be true.
+
+Note the manifest lives in the symlinked sibling checkout, so that data
+correction is NOT in this repo's commit — same two-repo split flagged earlier.
+
+### Mutation testing
+Four independent mutations, each caught, each restored green: strip `sourceKind`
+from a JSON-only plan (demands a validation URL again), drift proposalCount by
+one, add a fourth tab to the CompareMode union, delete a gallery blocker string
+from the QA script.
+
+### The pattern
+This is the third dead-gate finding today, after the assertion behind `--only`
+and the two `timeout`-prefixed verifications. A battery nobody runs does not
+decay gracefully into "still mostly right" — it decays into a script that cannot
+even start, while the ladder stays green and reports nothing. Being *in the
+ladder* is the property that matters; the assertions are downstream of that.
+
 ## Generated plans never worked in production, and nothing said so (2026-08-17)
 
 I picked up "fresh plans 404 on a `.render.svg` they don't have yet" expecting a
