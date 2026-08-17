@@ -223,6 +223,17 @@ async function sweepPlan(page, planId) {
 
 // ---------------------------------------------------------------------------
 
+// A gate that dies on a stack trace when nothing is listening reads as a code
+// failure. Say what is actually wrong.
+try {
+  const probe = await fetch(`${base}/`, { method: 'HEAD' });
+  if (!probe.ok && probe.status >= 500) throw new Error(`server at ${base} returned ${probe.status}`);
+} catch (error) {
+  console.error(`[visual-sweep] no app reachable at ${base} — start one (\`npm run dev\`) or pass --base/SWEEP_BASE.`);
+  console.error(`  ${String(error).split('\n')[0]}`);
+  process.exit(2);
+}
+
 const generated = [];
 if (wantGenerated) {
   console.log(`generating ${BRIEFS.length} plans through the real API`);
