@@ -138,6 +138,37 @@ export function facadeFor(view: ElevationView, widthFt: number, depthFt: number)
   }
 }
 
+/**
+ * Which elevations a plan needs drawn.
+ *
+ * Front and side always: they carry the silhouette. Rear and right join them
+ * when they carry an opening — a wall with a window and no drawing is a wall
+ * nobody can build, and once openings resolve against the envelope they land
+ * wherever the roof leaves room.
+ *
+ * This is the ONE rule. The on-screen drawing set, the client packet and the
+ * per-elevation SVG exports all read it, so a plan cannot be complete on screen
+ * and short two facades in the deliverable a customer is handed.
+ */
+export function drawnElevationViews(
+  footprint: { widthFt: number; depthFt: number },
+  openings: Array<{ span?: { x1: number; z1: number; x2: number; z2: number } } | undefined>,
+): ElevationView[] {
+  const spans = openings
+    .map((opening) => opening?.span)
+    .filter((span): span is { x1: number; z1: number; x2: number; z2: number } => Boolean(span));
+  const views: ElevationView[] = ['front', 'side'];
+  for (const view of ['rear', 'right'] as const) {
+    const facade = facadeFor(view, footprint.widthFt, footprint.depthFt);
+    const carries = spans.some((span) => {
+      const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+      return Math.abs(c1 - facade.atFt) < 0.35 && Math.abs(c2 - facade.atFt) < 0.35;
+    });
+    if (carries) views.push(view);
+  }
+  return views;
+}
+
 /** Ceiling height just inside the facade, at `coord` along it (plan coords). */
 function facadeCeiling(planes: CeilingPlane[], facade: FacadeGeometry, coord: number, fallback: number): number {
   if (!planes.length) return fallback;

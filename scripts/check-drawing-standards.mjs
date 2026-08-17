@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildElevationModel } = await import(join(root, 'lib/elevations.ts'));
+const { buildElevationModel, facadeFor, drawnElevationViews } = await import(join(root, 'lib/elevations.ts'));
 
 const PLANS = ['a-frame-bunk', 'a-frame-22', 'outpost-medium', 'gen-001', 'brief-aframe-2br'];
 // Stored renders for traced plans are source-frame-aligned primitive-QA
@@ -52,15 +52,25 @@ for (const planId of PLANS) {
 
   const artifact = JSON.parse(readFileSync(join(root, 'public/data/den-image-loop', planId, option.pairedJsonUrl), 'utf8'));
   const input = { planId, footprint: artifact.footprint, roof: artifact.roof, windows: artifact.windows, doors: artifact.doors };
-  for (const side of ['front', 'side']) {
+  // Grade EVERY facade this plan draws, not a fixed front/side pair — a rear or
+  // right elevation the product ships but no gate reads is an ungraded drawing.
+  // Facade geometry comes from lib/elevations (facadeFor), never a local copy.
+  for (const side of drawnElevationViews(input.footprint, [...(artifact.doors ?? []), ...(artifact.windows ?? [])])) {
     const model = buildElevationModel(input, side);
     const tol = 1.6;
-    const onFacade = (span) => span && (side === 'front'
-      ? Math.max(Math.abs(span.z1), Math.abs(span.z2)) < tol
-      : Math.max(Math.abs(span.x1), Math.abs(span.x2)) < tol);
+    const facade = facadeFor(side, input.footprint.widthFt, input.footprint.depthFt);
+    const onFacade = (span) => {
+      if (!span) return false;
+      const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+      return Math.max(Math.abs(c1 - facade.atFt), Math.abs(c2 - facade.atFt)) < tol;
+    };
     const centers = [...(artifact.doors ?? []), ...(artifact.windows ?? [])]
       .filter((o) => onFacade(o.span))
-      .map((o) => (side === 'front' ? (o.span.x1 + o.span.x2) / 2 : (o.span.z1 + o.span.z2) / 2));
+      .map((o) => {
+        const [a, b] = facade.axis === 'z' ? [o.span.x1, o.span.x2] : [o.span.z1, o.span.z2];
+        const along = (a + b) / 2;
+        return facade.mirrored ? facade.spanFt - along : along;
+      });
     const honest = model.openings.every((o) => centers.some((c) => Math.abs(c - o.center) <= 0.5));
     check(`${side} elevation openings all map to artifact openings (${model.openings.length})`, honest);
     check(`${side} elevation openings stay under the ridge`, model.openings.every((o) => o.headFt <= model.ridgeFt + 1e-6));

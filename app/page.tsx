@@ -17,7 +17,7 @@ import { bimAssetRegistrySummary } from '@/lib/bim/component-registry';
 import { localBimAssetSummary, localVisualAssetAttributions } from '@/lib/bim/component-assets';
 import { buildableBimFromHome, buildableBimSummary } from '@/lib/bim/buildable-bim';
 import { standardsRegistrySummary, validateStandards, codeAdvisoryReportForHome, lotFromArtifact } from '@/lib/standards/floorplan-standards';
-import { buildElevationModel, elevationSvgString, facadeFor, type ElevationArtifactInput, type ElevationView } from '@/lib/elevations';
+import { buildElevationModel, drawnElevationViews as drawnViewsFor, elevationSvgString, type ElevationArtifactInput, type ElevationView } from '@/lib/elevations';
 import { LOOKS, buildLookRenderPrompt, lookRenderSpecFromArtifact, type LookId, type LookRenderMode } from '@/lib/look-render';
 import { CODE_ADVISORY_RULES, type CodeAdvisoryFinding } from '@/lib/standards/code-advisory';
 import { parseBrief, briefToPromptFields } from '@/lib/brief';
@@ -1768,8 +1768,11 @@ function clientPacketHtml(home: DenHome, planSvg: string, groups: ValidationGrou
     `<h1>${escapeHtml(home.model || home.id)}<span class="badge">JSON-only deterministic packet</span></h1>`,
     `<p style="font-size:12px;color:#6b6359">${escapeHtml(home.id)} - ${home.footprint.width}' x ${home.footprint.depth}' - ${home.sqft} sq ft - ${escapeHtml(home.bedBath ?? '')} - ${escapeHtml(home.roofStyle ?? '')} roof${exportLane ? ` - export lane: ${escapeHtml(exportLane.status)}` : ''}</p>`,
     '<section><h2>Floor Plan</h2>', planSvg, '</section>',
-    '<section><h2>Front Elevation</h2>', elevationSvgMarkup(home, 'front'), '</section>',
-    '<section><h2>Side Elevation</h2>', elevationSvgMarkup(home, 'side'), '</section>',
+    // Every facade the plan draws, not a fixed pair — the packet is what leaves
+    // the building, so a wall missing here is a wall the client never sees.
+    ...drawnElevationViews(home).map((view) => (
+      `<section><h2>${view[0].toUpperCase()}${view.slice(1)} Elevation</h2>${elevationSvgMarkup(home, view)}</section>`
+    )),
     `<section><h2>Build Kit (${bom.length} BOM items)</h2><table><thead><tr><th>Component</th><th>Qty</th><th>Label</th></tr></thead><tbody>`, bomRows, '</tbody></table></section>',
     '<section>', reportBody, '</section>',
     '</body></html>',
@@ -2949,8 +2952,12 @@ function WorkflowModal({
                 <button type="button" onClick={() => downloadJson(`${home.id}-${home.pairedProposalId ?? 'draft'}-standards-checks.json`, { standardsRegistry: standardsRegistrySummary(), standardsValidation: validateStandards(home), bcfIssues: validateStandards(home).issues })} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Standards + Issues JSON</button>
                 <button type="button" onClick={() => downloadJson(`${home.id}-${home.pairedProposalId ?? 'draft'}-bim-asset-registry.json`, bimAssetRegistrySummary())} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export BIM Asset Registry</button>
                 <button type="button" onClick={() => downloadText(`${home.id}-${home.pairedProposalId ?? 'draft'}-floorplan.svg`, currentDeterministicSvg() ?? semanticSvgForHome(home), 'image/svg+xml')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export 2D SVG</button>
-                <button type="button" onClick={() => downloadText(`${home.id}-front-elevation.svg`, elevationSvgMarkup(home, 'front'), 'image/svg+xml')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Front Elevation SVG</button>
-                <button type="button" onClick={() => downloadText(`${home.id}-side-elevation.svg`, elevationSvgMarkup(home, 'side'), 'image/svg+xml')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Side Elevation SVG</button>
+                {/* One button per facade the plan actually draws. A hardcoded
+                    front/side pair leaves a rear or right wall — which is where
+                    envelope-resolved egress windows land — with no export at all. */}
+                {drawnElevationViews(home).map((view) => (
+                  <button key={view} type="button" data-export-elevation={view} onClick={() => downloadText(`${home.id}-${view}-elevation.svg`, elevationSvgMarkup(home, view), 'image/svg+xml')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export {view[0].toUpperCase()}{view.slice(1)} Elevation SVG</button>
+                ))}
                 <button type="button" onClick={() => downloadText(`${home.id}-constraint-report.html`, constraintReportHtml(home), 'text/html')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Constraint Report HTML</button>
                 <button type="button" onClick={() => downloadJson(`${home.id}-constraint-report.json`, codeAdvisoryReportForHome(home))} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Constraint Report JSON</button>
                 <button type="button" onClick={() => downloadJson(`${home.id}-build-kit-bom.json`, { planId: home.id, bom: home.buildValidation?.bom ?? [], componentsUsed: home.componentsUsed })} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Build Kit BOM JSON</button>
@@ -3954,33 +3961,20 @@ function PairedComparison({ home, mode, onModeChange }: { home: DenHome; mode: C
   );
 }
 
-/**
- * Which elevations this plan needs. Front and side are always drawn (they carry
- * the silhouette). Rear and right join them when they carry an opening — a wall
- * with a window and no drawing is a wall nobody can build, and once openings
- * resolve against the envelope they land wherever the roof leaves room.
- */
+/** This plan's drawing set, read off the compiled artifact. One rule, in lib. */
 function drawnElevationViews(home: DenHome): ElevationView[] {
   const raw = rawObject(home.pairedArtifactJson) as unknown as {
     footprint?: { widthFt?: number; depthFt?: number };
     windows?: Array<{ span?: { x1: number; z1: number; x2: number; z2: number } }>;
     doors?: Array<{ span?: { x1: number; z1: number; x2: number; z2: number } }>;
   } | null;
-  const widthFt = Number(raw?.footprint?.widthFt ?? home.footprint.width);
-  const depthFt = Number(raw?.footprint?.depthFt ?? home.footprint.depth);
-  const spans = [...(raw?.windows ?? []), ...(raw?.doors ?? [])]
-    .map((opening) => opening.span)
-    .filter((span): span is { x1: number; z1: number; x2: number; z2: number } => Boolean(span));
-  const views: ElevationView[] = ['front', 'side'];
-  for (const view of ['rear', 'right'] as const) {
-    const facade = facadeFor(view, widthFt, depthFt);
-    const carries = spans.some((span) => {
-      const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
-      return Math.abs(c1 - facade.atFt) < 0.35 && Math.abs(c2 - facade.atFt) < 0.35;
-    });
-    if (carries) views.push(view);
-  }
-  return views;
+  return drawnViewsFor(
+    {
+      widthFt: Number(raw?.footprint?.widthFt ?? home.footprint.width),
+      depthFt: Number(raw?.footprint?.depthFt ?? home.footprint.depth),
+    },
+    [...(raw?.windows ?? []), ...(raw?.doors ?? [])],
+  );
 }
 
 function SemanticElevationView({ home, side }: { home: DenHome; side: ElevationView }) {

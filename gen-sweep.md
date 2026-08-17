@@ -78,6 +78,48 @@ gate reports green. The counter is gone; `findings` is the single record.
   `lib/`, `app/`, `components/`.
 - Mutation-tested every invariant added this session.
 
+## Review, part 2 — the deliverable was still short two elevations (2026-08-16)
+
+Continued the review into the two files I had only read around my own changes
+(`app/page.tsx` 5,495 lines, `components/FloorPlanView.tsx` 3,735). The read was
+pattern-directed — non-null assertions, unchecked casts, unguarded division,
+fixed lists that should derive — then reading every hit.
+
+### The find: the client packet shipped Front + Side only
+`clientPacketHtml` is the single self-contained deliverable — plan, elevations,
+code report, BOM — the thing that leaves the building and reaches a client. It
+hardcoded exactly two elevation sections. So the earlier fire fixed the drawing
+set **on screen** and left the **deliverable** short the rear and right walls —
+which on an a-frame is where both bedroom EGRESS windows live.
+
+The per-elevation SVG export had the same shape: two buttons, front and side.
+There was no way to export a rear or right elevation at all.
+
+- **Class:** _the same rule implemented once per surface — screen, packet,
+  export — so fixing one leaves the others wrong._
+- **Fix:** `drawnElevationViews` moved into `lib/elevations.ts` as ONE rule; the
+  panel, the packet and the export buttons all read it (P7). One button per
+  facade the plan draws.
+- **Verified by download, not by reading the code:** clicked through the real
+  export dialog, captured the file, parsed it — the packet now contains
+  `Front, Side, Rear, Right` (5 SVGs; it was 3).
+
+### Same shape in a gate: `check:drawing` graded a fixed pair
+`check-drawing-standards.mjs` looped `['front', 'side']` with its OWN copy of the
+facade-matching math (pre-exclusivity semantics). A rear or right elevation the
+product ships was ungraded by that battery. It now iterates the drawing set and
+takes its geometry from `facadeFor` — 14 facade gradings across the stored plans,
+no local copy.
+
+### Also checked, no defect
+- No `catch {}`, no TODO/FIXME/HACK in `lib/`, `app/`, `components/`.
+- 4 `as unknown as` casts, all at JSON boundaries and all narrowed after.
+- Non-null assertions are confined to a `sourceWalls!` block already guarded by
+  a `sourceWalls?.length` test.
+- `widthFt / depthFt` in the paired-aspect audit has no zero guard, but the
+  compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
+- `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
+
 ## Kit-buildable homes are now REACHABLE (2026-08-16)
 
 Measuring the pitches answered "can the kit build this?" — and the answer for

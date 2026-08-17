@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
-const { buildElevationModel, elevationSvgString, facadeFor } = await import(join(root, 'lib/elevations.ts'));
+const { buildElevationModel, elevationSvgString, facadeFor, drawnElevationViews } = await import(join(root, 'lib/elevations.ts'));
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -232,6 +232,35 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
         drawnOn.length === 1,
         `drawn on ${drawnOn.join(', ') || 'nothing'}`,
       );
+    }
+  }
+}
+
+// THE DRAWING SET IS ONE RULE. The screen, the client packet and the SVG
+// exports all read `drawnElevationViews`; if it under-reports, a wall silently
+// vanishes from the deliverable a customer is handed, not just from the screen.
+console.log('universal: the drawing set covers every facade that carries an opening');
+for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn']) {
+  for (const beds of [1, 2, 3]) {
+    let artifact;
+    try { artifact = compiled(`${beds} bed ${style} roof, 80x100 lot, 10 ft setbacks`); } catch { continue; }
+    const { widthFt, depthFt } = artifact.footprint;
+    const exterior = [
+      ...(artifact.doors ?? []).filter((d) => d.openingType === 'exteriorDoor'),
+      ...(artifact.windows ?? []),
+    ].filter((o) => o.span);
+    const views = drawnElevationViews({ widthFt, depthFt }, exterior);
+    check(`${beds}-bed ${style}: drawing set always includes front and side`,
+      views.includes('front') && views.includes('side'), views.join(', '));
+    for (const opening of exterior) {
+      const home = VIEWS.filter((view) => {
+        const facade = facadeFor(view, widthFt, depthFt);
+        const [c1, c2] = facade.axis === 'z' ? [opening.span.z1, opening.span.z2] : [opening.span.x1, opening.span.x2];
+        return Math.abs(c1 - facade.atFt) < 0.35 && Math.abs(c2 - facade.atFt) < 0.35;
+      });
+      if (home.length !== 1) continue;
+      check(`${beds}-bed ${style}: drawing set includes ${home[0]} for ${opening.id}`,
+        views.includes(home[0]), views.join(', '));
     }
   }
 }
