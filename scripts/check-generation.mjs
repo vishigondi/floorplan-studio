@@ -19,6 +19,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
 const { codeAdvisoryReport, CODE_ADVISORY_RULES } = await import(join(root, 'lib/standards/code-advisory.ts'));
+const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
+const { codeAdvisoryInputFromHome } = await import(join(root, 'lib/standards/floorplan-standards.ts'));
 const { ceilingHeightAt, ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelope-clip.ts'));
 const ceilingPlanes = (artifact) => ceilingPlanesFromRoofPoints(artifact.roof?.planes ?? []);
 const { headroomOverFt, requiredHeadroomFt } = await import(join(root, 'lib/generate/place-fixtures.ts'));
@@ -34,128 +36,18 @@ function check(label, ok, detail = '') {
   }
 }
 
-// --- Ceiling profile derivation (mirrors lib/standards/floorplan-standards) --
-function planeEquation(points) {
-  if (!points || points.length < 3) return null;
-  for (let i = 0; i < points.length - 2; i += 1) {
-    const [p, q, r] = [points[i], points[i + 1], points[i + 2]];
-    const d = (q.x - p.x) * (r.z - p.z) - (r.x - p.x) * (q.z - p.z);
-    if (Math.abs(d) < 1e-9) continue;
-    const a = ((q.y - p.y) * (r.z - p.z) - (r.y - p.y) * (q.z - p.z)) / d;
-    const b = ((q.x - p.x) * (r.y - p.y) - (r.x - p.x) * (q.y - p.y)) / d;
-    const c = p.y - a * p.x - b * p.z;
-    return {
-      a, b, c,
-      minX: Math.min(...points.map((pt) => pt.x)),
-      maxX: Math.max(...points.map((pt) => pt.x)),
-      minZ: Math.min(...points.map((pt) => pt.z)),
-      maxZ: Math.max(...points.map((pt) => pt.z)),
-    };
-  }
-  return null;
-}
-
-const STEP = 0.5;
-// floorElevationFt mirrors the app's loft-aware ceiling derivation: a loft
-// room's clearance is measured from the loft floor, not the ground — so the
-// loft satisfies R305 on its real headroom, never via a ground-referenced
-// shortcut.
-function ceilingProfileForRect(rect, planes, fallbackY, floorElevationFt = 0) {
-  let minFt = Infinity;
-  let maxFt = -Infinity;
-  let at5 = 0;
-  let at7 = 0;
-  let cells = 0;
-  for (let x = rect.x0 + STEP / 2; x < rect.x1; x += STEP) {
-    for (let z = rect.z0 + STEP / 2; z < rect.z1; z += STEP) {
-      let ceilingY = Infinity;
-      for (const plane of planes) {
-        if (x < plane.minX - 1e-6 || x > plane.maxX + 1e-6 || z < plane.minZ - 1e-6 || z > plane.maxZ + 1e-6) continue;
-        ceilingY = Math.min(ceilingY, plane.a * x + plane.b * z + plane.c);
-      }
-      if (!Number.isFinite(ceilingY)) ceilingY = fallbackY;
-      const y = ceilingY - floorElevationFt;
-      minFt = Math.min(minFt, y);
-      maxFt = Math.max(maxFt, y);
-      cells += 1;
-      if (y >= 5) at5 += STEP * STEP;
-      if (y >= 7) at7 += STEP * STEP;
-    }
-  }
-  if (!cells) return undefined;
-  return {
-    minFt: Math.max(0, minFt),
-    maxFt: Math.max(0, maxFt),
-    areaAtOrAbove5FtSqFt: at5,
-    areaAtOrAbove7FtSqFt: at7,
-    source: 'roof-planes',
-  };
-}
-
+// The advisory report comes from the SHIPPED adapter, not a copy of it.
+//
+// This battery used to build its own CodeAdvisoryInput and carry its own
+// plane-equation and ceiling-profile math "mirroring" lib/standards — roughly
+// 100 lines duplicating the exact shared geometry the working agreement names as
+// the thing that must have one source of truth. Two costs showed up together:
+// ZON-HEIGHT was inert here until the field was mirrored by hand, and three
+// breakage tests only ever worked against the copy (they mutated `bounds`, while
+// the real path derives room size from `polygon`) — so the anti-vacuity suite was
+// proving rules can fail in a MODEL of the pipeline, not in the product.
 function reportForArtifact(artifact) {
-  const planes = (artifact.roof?.planes ?? [])
-    .map((plane) => planeEquation(plane.points ?? []))
-    .filter(Boolean);
-  const fallbackY = artifact.roof?.ridgeHeightFt ?? 8;
-  const loftFloorY = 8;
-  const rooms = (artifact.rooms ?? []).map((room) => {
-    const floor = room.levelIndex ?? room.floor ?? 0;
-    return {
-      id: room.id,
-      label: room.label,
-      type: room.type,
-      floor,
-      // R312 threshold input: a loft floor sits at loftFloorY, ground at 0.
-      elevationFt: floor >= 1 ? loftFloorY : 0,
-      widthFt: room.bounds?.w,
-      depthFt: room.bounds?.d,
-      grid: room.bounds
-        ? { gx: room.bounds.x, gz: room.bounds.z, gw: room.bounds.w, gd: room.bounds.d, unitFt: 1 }
-        : undefined,
-      ceiling: room.bounds && planes.length
-        ? ceilingProfileForRect(
-          { x0: room.bounds.x, z0: room.bounds.z, x1: room.bounds.x + room.bounds.w, z1: room.bounds.z + room.bounds.d },
-          planes,
-          fallbackY,
-          floor >= 1 ? loftFloorY : 0,
-        )
-        : undefined,
-    };
-  });
-  const openings = [
-    ...(artifact.doors ?? []).map((opening) => ({ opening, defaultKind: 'door' })),
-    ...(artifact.windows ?? []).map((opening) => ({ opening, defaultKind: 'window' })),
-    ...(artifact.openings ?? []).map((opening) => ({ opening, defaultKind: 'opening' })),
-  ].map(({ opening, defaultKind }) => ({
-    id: opening.id,
-    kind: opening.kind ?? opening.type ?? defaultKind,
-    openingType: opening.openingType,
-    windowKind: opening.windowKind,
-    roomIds: opening.roomIds,
-    fromRoomId: opening.fromRoomId,
-    toRoomId: opening.toRoomId,
-    opensIntoRoomId: opening.opensIntoRoomId,
-  }));
-  const guards = [...(artifact.interiorWalls ?? []), ...(artifact.exteriorWalls ?? [])]
-    .filter((wall) => /guard|rail/i.test(`${wall.wallKind ?? ''} ${wall.id ?? ''}`))
-    .map((wall) => ({ id: wall.id, floor: wall.levelIndex ?? wall.floor ?? 1 }));
-  return codeAdvisoryReport({
-    planId: artifact.planId,
-    guards,
-    jurisdictionId: 'nc-cherokee-county',
-    footprintWidthFt: artifact.footprint?.widthFt,
-    footprintDepthFt: artifact.footprint?.depthFt,
-    rooms,
-    openings,
-    // Ridge above the ground-floor level, for ZON-HEIGHT. NOTE: this battery
-    // builds its own CodeAdvisoryInput rather than calling
-    // codeAdvisoryInputFromHome, so every field has to be mirrored here by hand
-    // — a rule wired into the app adapter alone is inert in this gate, which is
-    // exactly what the ZON-HEIGHT breakage test caught. The duplication is
-    // pre-existing and worth collapsing.
-    buildingHeightFt: artifact.roof?.ridgeHeightFt,
-    lot: artifact.lot ?? null,
-  });
+  return codeAdvisoryReport(codeAdvisoryInputFromHome(pairedArtifactToLocalHome(artifact)));
 }
 
 function statusOf(report, ruleId, subjectId) {
@@ -716,14 +608,29 @@ console.log('constraint engine: a deliberately broken plan must FAIL, per rule')
     const failsFor = (artifact, ruleId) => reportForArtifact(artifact).findings
       .some((f) => f.ruleId === ruleId && f.status === 'fail');
 
+    // Resize a room the way the SHIPPED path reads it. Compiled rooms carry both
+    // `bounds` and `polygon`, and pairedArtifactToLocalHome derives dimensions
+    // from the POLYGON — so mutating bounds alone changed nothing downstream.
+    // These breakages did that for a long time and still "passed", because the
+    // battery graded them through its own private adapter that read bounds.
+    // Both are rewritten now, and the report comes from the app adapter, so a
+    // breakage that does not reach the product cannot report success.
+    const resizeRoom = (room, w, d) => {
+      const x = room.bounds?.x ?? 0;
+      const z = room.bounds?.z ?? 0;
+      if (room.bounds) { room.bounds.w = w; room.bounds.d = d; }
+      if (room.polygon) {
+        room.polygon = [{ x, z }, { x: x + w, z }, { x: x + w, z: z + d }, { x, z: z + d }];
+      }
+    };
+
     const BREAKAGES = [
       ['IRC-R304.1', 'a 4x4 ft bedroom (16 sqft, under the 70 sqft minimum)', (a) => {
-        const bed = a.rooms.find((r) => r.type === 'bedroom');
-        bed.bounds.w = 4; bed.bounds.d = 4; bed.w = 4; bed.d = 4;
+        resizeRoom(a.rooms.find((r) => r.type === 'bedroom'), 4, 4);
       }],
       ['IRC-R304.2', 'a bedroom 3 ft across (under the 7 ft minimum dimension)', (a) => {
         const bed = a.rooms.find((r) => r.type === 'bedroom');
-        bed.bounds.w = 3; bed.w = 3;
+        resizeRoom(bed, 3, bed.bounds?.d ?? 12);
       }],
       ['IRC-R305.1', 'a 5 ft ceiling everywhere (under the 7 ft minimum)', (a) => {
         a.roof.ridgeHeightFt = 5;
@@ -750,7 +657,7 @@ console.log('constraint engine: a deliberately broken plan must FAIL, per rule')
       }],
       ['WH-GRID-4FT', 'a bedroom 1.3 ft off the 4 ft structural grid', (a) => {
         const bed = a.rooms.find((r) => r.type === 'bedroom');
-        bed.bounds.w = (bed.bounds.w ?? 12) + 1.3; bed.w = bed.bounds.w;
+        resizeRoom(bed, (bed.bounds?.w ?? 12) + 1.3, bed.bounds?.d ?? 12);
       }],
       ['ZON-HEIGHT', 'a height cap well under the ridge the plan already has', (a) => {
         a.lot = { ...(a.lot ?? {}), widthFt: 60, depthFt: 90, maxHeightFt: 6 };

@@ -120,6 +120,51 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The anti-vacuity suite was testing a model of the pipeline (2026-08-17)
+
+Adding ZON-HEIGHT exposed that `check-generation.mjs` built its own
+`CodeAdvisoryInput` instead of calling the shipped adapter — about 100 lines
+duplicating `codeAdvisoryInputFromHome`, **including its own plane-equation and
+ceiling-profile math**, which is precisely the shared geometry the working
+agreement names as needing one source of truth. Collapsed it to:
+
+```js
+codeAdvisoryReport(codeAdvisoryInputFromHome(pairedArtifactToLocalHome(artifact)))
+```
+
+### What the swap immediately revealed
+Three breakage tests **failed** the moment they ran against the real path:
+IRC-R304.1, IRC-R304.2, WH-GRID-4FT. Not a regression — the truth surfacing.
+
+Compiled rooms carry **both** `bounds` and `polygon`, and
+`pairedArtifactToLocalHome` derives room size from the **polygon**. The breakages
+mutated `bounds` (and a `w`/`d` that does not exist on these rooms — `bed.w` was
+`undefined`), so the shipped path never saw the damage. It looked fine only
+because the battery graded the result through its own adapter, which read
+`bounds`. Measured directly: after applying the "4x4 ft bedroom" breakage, the
+app adapter still reported `widthFt: 12, depthFt: 12`.
+
+So the anti-vacuity suite — the thing whose entire job is proving a rule can fail
+— was **proving rules can fail in a model of the pipeline, not in the product**.
+Three of them had never exercised the shipped path at all.
+
+Fixed with a `resizeRoom` helper that rewrites both representations, so a
+breakage that does not reach the product can no longer report success.
+
+### Verification
+- Battery green through the real adapter, all breakages passing.
+- Mutation-tested through the NEW path: `if (false)` on the R304.1 finding and
+  an always-true branch on the grid rule are both caught. The suite is still
+  load-bearing, and now load-bearing on the thing that ships.
+- 58 lines of duplicated geometry deleted.
+
+### The shape of it
+Two costs from one duplication, and they arrived together: a new field was inert
+in the gate until mirrored by hand, and old tests were quietly grading a copy.
+Both are the same failure as the rest of today — **a check that did not observe
+what it claimed to observe.** This one is a little worse, because the check that
+was wrong is the one whose whole purpose is catching checks that are wrong.
+
 ## ZON-HEIGHT: the zoning envelope was missing a leg (2026-08-17)
 
 Investigating the loft/grid trade turned up that **no height rule existed** — the
