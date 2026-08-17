@@ -120,6 +120,57 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Full visual sweep after the data-path migration; found an unmodelled gable (2026-08-17)
+
+Today rerouted **every** plan-data fetch through `/api/plan-file`, and only the
+3-plan quick sweep had covered it. Ran the full sweep: **324 assertions across 18
+plans, 0 failures**, and read the dev log rather than just the exit code —
+**889 requests through `/api/plan-file`, 0 legacy static requests.** The
+migration is complete and nothing still reaches for the old path. The only 404s
+were my own backfill gate polling gen-002's render for ~10s before it landed.
+
+### What the assertions did not catch, and the contact sheet did
+On the loft plans (`gen-009`, `gen-010`, `loft-showcase`) the LOFT LEVEL drawing
+has a wall segment at the **top** edge and nothing at the bottom. Checked the
+data rather than the pixels:
+
+```
+ext-n        lvl=0  z=0..0    (x 0..28)
+ext-s        lvl=0  z=28..28  (x 0..28)
+ext-e, ext-w lvl=0
+ext-l1-front lvl=1  z=0       (x 10..18)   <- the only level-1 wall
+room-loft    lvl=1  x=10 z=0 w=8 d=28      <- spans BOTH gable ends
+```
+
+The loft runs the full 28 ft depth and touches both gable ends, but only the
+north end carries a level-1 wall. The compiler says why: `ext-l1-front` exists
+"so the loft window has a same-floor source wall to align to" — it was built to
+**host a window**, not to enclose anything. The drawing is faithfully reporting
+the model.
+
+The real gap is broader than the loft: **gable-end infill above storey height is
+not modelled at all**. A single-storey a-frame has the same triangles missing at
+both ends; the loft case is just where the asymmetry becomes visible, because one
+end got a wall for unrelated reasons.
+
+The BOM confirms it — a `Roof panel/rafter module` line (qty 14) and **no gable
+line whatsoever**. For this plan that is two triangles roughly 28 ft wide by up
+to 18 ft tall, absent from a build list. Consistent with the earlier finding that
+the BOM under-counted wall panels by 19 ft of openings: surfaces that are not
+walls-in-the-model do not reach the bill.
+
+### Not fixed — the scope is a real choice
+Two coherent options, and they differ in what ships:
+1. **Mirror `ext-l1-front` with an `ext-l1-rear`.** Small, makes the loft drawing
+   symmetric, but models only the loft band's rear strip — still no gable
+   triangle, so the BOM stays wrong.
+2. **Model gable-end infill properly** for every pitched roof. Correct, and the
+   one that fixes the BOM, but it changes shipped artifacts, panel counts, the
+   3D, and the elevations.
+
+(2) is the right answer and (1) is a cosmetic patch over the same hole, so this
+wants a decision rather than me picking. Numbers above are the evidence.
+
 ## The anti-vacuity suite was testing a model of the pipeline (2026-08-17)
 
 Adding ZON-HEIGHT exposed that `check-generation.mjs` built its own
