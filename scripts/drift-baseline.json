@@ -37,7 +37,7 @@
       ]
     },
     "brief-aframe-2br": {
-      "reason": "COMPILED by an older compiler, before envelope-aware fixture placement. Not frozen by guardrail \u2014 this SHOULD be regenerated so the shipped plan meets the current bar. Baselined only to make the debt visible and ratcheted; regenerating it is tracked as the next step, not a permanent exemption.",
+      "reason": "COMPILED by an older compiler, before envelope-aware fixture placement. NOT regenerated on purpose: recompiling its brief (\"2-bed A-frame, <=800 sqft, 40x60 lot\") with today's compiler yields a DIFFERENT BUILDING \u2014 28x28 instead of 24x28, 7 rooms instead of 6 \u2014 because the template chosen for a <=800 sqft cap has changed. Both fit the brief, so this is not a defect to fix silently; swapping the gallery plan for another building is a content decision, not a geometry repair. The 8 headroom violations are recorded until that decision is made.",
       "accepted": [
         "fixture-headroom:fx-bath-toilet",
         "fixture-headroom:fx-bath-vanity",
@@ -54,17 +54,6 @@
       "accepted": [
         "fixture-headroom:fx-bath-toilet",
         "fixture-headroom:fx-bath-vanity",
-        "fixture-headroom:fx-bed1-wardrobe",
-        "fixture-headroom:fx-kitchen-counter",
-        "fixture-headroom:fx-kitchen-range",
-        "fixture-headroom:fx-kitchen-sink",
-        "fixture-headroom:fx-living-sofa",
-        "fixture-overlap:fx-kitchen-counter|fx-kitchen-sink"
-      ]
-    },
-    "loft-showcase": {
-      "reason": "COMPILED before envelope-aware fixture placement (it predates the loft-guard fire too). Not frozen by guardrail \u2014 like brief-aframe-2br this should be regenerated rather than exempted; baselined to make the debt visible until then.",
-      "accepted": [
         "fixture-headroom:fx-bed1-wardrobe",
         "fixture-headroom:fx-kitchen-counter",
         "fixture-headroom:fx-kitchen-range",

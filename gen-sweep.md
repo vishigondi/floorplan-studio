@@ -120,6 +120,41 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The ratchet pays out: loft-showcase regenerated, 49 -> 43 (2026-08-17)
+
+The drift gate's whole point is to turn invisible debt into a number that can
+only go down. First payout.
+
+**Dry run first, because these are SHIPPED plans.** Recompiling each stale plan
+from its own stored brief and diffing against what is on disk:
+
+| plan | recompiles to | decision |
+|---|---|---|
+| `loft-showcase` | **the identical building** — same 28x28 footprint, same 8 rooms, byte-identical room layout, same 5 windows, same roof — with 5 headroom violations gone and the drawing set 2 -> 4 | **regenerated** |
+| `brief-aframe-2br` | a **different building** — 28x28 instead of 24x28, 7 rooms instead of 6 | **left alone** |
+
+`brief-aframe-2br`'s brief is "≤800 sqft"; 24x28 = 672 and 28x28 = 784 both
+satisfy it, and the template chosen for that cap has changed since. Swapping the
+gallery plan for a different building is a **content decision, not a geometry
+repair** — so it stays baselined, with that reason written down instead of a
+vague "stale". Regenerating it silently would have been the easy, wrong move.
+
+**What was regenerated, and how carefully:** only the compiled geometry. The
+artifact ENVELOPE — schemaVersion, planId, proposalId, brief, generator,
+coordinateMode, gridFt — and the key ORDER are preserved, so the diff reads as a
+geometry change rather than a rewrite. The stored render was regenerated through
+the project's own `render:paired`, because a stored render that disagrees with
+its JSON is the drift class this project already gates.
+
+**The ratchet caught its own follow-through:** with the plan fixed, `check:drift`
+failed on *stale exemptions* — `fixed, remove from baseline:
+fixture-headroom:fx-bed1-wardrobe, ...` — forcing the baseline down rather than
+letting a dead entry sit there re-authorising the defect. **49 -> 43.**
+
+Verified visually: same showcase building, fixtures no longer stacked, loft
+aligned in the shared building frame, front/side/rear/right drawn.
+`gates` + `gates:live` green.
+
 ## check:drift — the invariants now grade the plans we SHIP (2026-08-16)
 
 Every battery compiles a fresh plan and grades the result, so all of them only
