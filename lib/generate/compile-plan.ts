@@ -29,6 +29,12 @@ export interface IntentRoom {
   z: number;
   w: number;
   d: number;
+  /** A labelled REGION of a larger open volume rather than an enclosed room --
+   * Den's plans call out Entry, Kitchen, Dining and Living as four numbers
+   * inside one wall-free space. Zones carry no wall against their neighbours
+   * and are excluded from panel-grid compliance, which is measured on physical
+   * boundaries. */
+  semanticZone?: boolean;
 }
 
 export interface IntentSpan {
@@ -259,6 +265,9 @@ function deriveInteriorWalls(rooms: IntentRoom[]): WallSegment[] {
       // interior wall there would double the facade, put a stud wall across the
       // entry door, and bill the panel twice in the BOM.
       if (isUnconditioned(a) || isUnconditioned(b)) continue;
+      // Two zones of the same open volume have no wall between them. That is
+      // what makes the core open: the boundary is a label, not a partition.
+      if (a.semanticZone && b.semanticZone) continue;
       // Vertical shared edge: a's right == b's left (or vice versa)
       for (const [left, right] of [[a, b], [b, a]] as const) {
         if (Math.abs(left.x + left.w - right.x) < EPS) {
@@ -969,6 +978,9 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     rooms: rooms.map((room, index) => ({
       id: room.id, levelFrameId: 'floor-0', levelIndex: 0, roomKind: room.type,
       type: room.type, label: room.label,
+      // Zones are drawn and labelled like rooms but are not physical
+      // boundaries: the grid gate and the wall derivation both skip them.
+      ...(room.semanticZone ? { semanticZone: true, physicalBoundary: false } : {}),
       // Stable shared callout numbering: render legend and proposal image
       // must both use 1..N in intent order.
       calloutNumber: index + 1,
@@ -1307,28 +1319,61 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
       openings.push({ id: 'open-kitchen-hall', fromRoomId: 'room-kitchen', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
     }
   } else {
-    // OPEN CORE. Den keeps living, dining and kitchen as ONE room at every
-    // scale -- the studio encloses only its bathroom -- while we used to wall
-    // them into separate boxes joined by a passthrough. Merging them is the
-    // single largest step towards their plans, and it removes the interior wall
-    // and its opening rather than adding anything: deriveInteriorWalls builds
-    // walls from ROOM ADJACENCY, so one room means no wall to punch.
-    rooms.push(
-      { id: 'room-core', label: 'Living / Dining / Kitchen', type: 'living', x: 0, z: 0, w: widthFt, d: 12 },
-    );
+    // OPEN CORE, AS ZONES. Reading Den's own drawing corrected this: they do
+    // NOT merge the core into one room labelled "Living / Dining / Kitchen".
+    // a-frame-22 calls out Entry(1), Kitchen(2), Dining(3) and Living(4) as
+    // four separately numbered regions of ONE wall-free volume. The openness is
+    // the absence of partitions, not the absence of names -- and the names are
+    // most of what makes their plans readable.
+    //
+    // So the core is one volume divided into labelled zones. No wall is derived
+    // between two zones, and the panel-grid gate skips them because they are
+    // not physical boundaries. Each still has to be a legal room in its own
+    // right where the code cares: Living and Dining are habitable (70 sq ft,
+    // 7 ft minimum dimension), Kitchen is exempt from both, and Entry is
+    // non-habitable, so a shallow entry zone triggers nothing.
+    const zone = (id: string, label: string, type: string, x: number, z: number, w: number, d: number): IntentRoom =>
+      ({ id, label, type, x, z, w, d, semanticZone: true });
+    // The 4 ft entry zone straddles the door. Dining needs 70 sq ft and a 7 ft
+    // dimension, which a narrow plan cannot give it without starving the
+    // kitchen -- so below 28 ft the dining zone folds back into Living rather
+    // than shipping a 32 sq ft "Dining" that fails R304.1.
+    // The zone split is deliberately NOT livingW. livingW sizes the old walled
+    // living room; using it here left only 8 ft for the rest of the band, too
+    // little for a dining zone, so Den's Dining callout never appeared. A 12 ft
+    // living zone leaves 12 ft for Dining over Kitchen on a 28 ft plan, and
+    // narrower plans simply fall through to Living + Entry + Kitchen.
+    const entryX = 12;
+    const restX = entryX + 4;
+    rooms.push(zone('room-living', 'Living Room', 'living', 0, 0, entryX, 12));
+    rooms.push(zone('room-entry', 'Entry', 'entry', entryX, 0, 4, 12));
+    if (widthFt - restX >= 12) {
+      rooms.push(zone('room-dining', 'Dining', 'dining', restX, 0, widthFt - restX, 8));
+      rooms.push(zone('room-kitchen', 'Kitchen', 'kitchen', restX, 8, widthFt - restX, 4));
+    } else {
+      rooms.push(zone('room-kitchen', 'Kitchen', 'kitchen', restX, 0, widthFt - restX, 12));
+    }
   }
-  // On the 3-bed the east wall now fronts the bath, so the kitchen window moves
-  // to the core's north wall rather than landing in a bathroom.
-  windows.push({ id: 'win-kitchen-e', roomId: bedrooms === 3 ? 'room-kitchen' : 'room-core', span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
+  // The east window must be bound to the zone that actually CONTAINS it, not to
+  // whatever the kitchen is called: with a dining zone present the kitchen sits
+  // in the rear 4 ft of the band, so a window at z 4-8 stands in the dining
+  // zone. A window attributed to a room it does not touch is a daylight credit
+  // claimed for the wrong space.
+  const eastZoneId = bedrooms === 3 ? 'room-kitchen' : (rooms.some((r) => r.id === 'room-dining') ? 'room-dining' : 'room-kitchen');
+  windows.push({ id: 'win-kitchen-e', roomId: eastZoneId, span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
   rooms.push({ id: 'room-hall', label: 'Hall', type: 'hall', x: 0, z: 12, w: widthFt, d: 4 });
   // Entry sits on the inner (ridge-side) half of the living facade so the
   // door clears A-frame headroom; the living window takes the outer half.
-  const entryMid = livingW * 0.75;
-  doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: bedrooms === 3 ? 'room-living' : 'room-core', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
-  windows.push({ id: 'win-living-n', roomId: bedrooms === 3 ? 'room-living' : 'room-core', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
+  // With zones, the door belongs to the 4 ft Entry zone and centres on it.
+  const entryMid = bedrooms === 3 ? livingW * 0.75 : livingW + 2;
+  doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: bedrooms === 3 ? 'room-living' : 'room-entry', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
+  windows.push({ id: 'win-living-n', roomId: 'room-living', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
   {
-    const span = snapOpeningToModule(4, livingW - 2);
-    openings.push({ id: 'open-living-hall', fromRoomId: bedrooms === 3 ? 'room-living' : 'room-core', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
+    // Keep the opening inside the living zone it is attributed to; livingW
+    // describes the walled 3-bed living room and overruns the 12 ft zone.
+    const livingRoom = rooms.find((r) => r.id === 'room-living');
+    const span = snapOpeningToModule(4, (livingRoom ? livingRoom.x + livingRoom.w : livingW) - 2);
+    openings.push({ id: 'open-living-hall', fromRoomId: 'room-living', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
   }
 
   // Rear band (z 16 to depth; 12 ft deep on the standard 28 ft plans, 8 ft on

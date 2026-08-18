@@ -302,6 +302,37 @@ for (const relativePath of PLANS) {
   }
 }
 
+// The R304.1 KITCHEN EXCEPTION, and that it did not become a hole.
+//
+// R304.1 reads "Exception: Kitchens", and both citations this module prints say
+// so, but the check applied the 70 sq ft minimum to kitchens anyway. Fixing
+// that risked the opposite failure -- waving kitchens through entirely -- and
+// the exception reaches R305.1 too, whose sloped-ceiling test is written
+// against "required floor area" and was hardcoded to 70. These pin BOTH sides:
+// the exception applies, and every other room and rule still bites.
+{
+  const room = (label, w, d, ceiling) => ({
+    id: `r-${label}`, label, type: label.toLowerCase(), roomKind: label.toLowerCase(),
+    areaSqFt: w * d, grid: { gx: 0, gz: 0, gw: w, gd: d, unitFt: 4 },
+    bounds: { x: 0, z: 0, w, d }, ceiling,
+  });
+  const flat9 = { minFt: 9, maxFt: 9, areaAtOrAbove5FtSqFt: 999, areaAtOrAbove7FtSqFt: 999 };
+  const underEave = (area) => ({ minFt: 2.1, maxFt: 15, areaAtOrAbove5FtSqFt: area * 0.4, areaAtOrAbove7FtSqFt: area * 0.1 });
+  const statusFor = (r, ruleId) => {
+    const report = codeAdvisoryReport({ rooms: [r], openings: [], footprint: { widthFt: 28, depthFt: 28 } });
+    const hit = (report.findings ?? []).find((f) => f.ruleId === ruleId && f.subjectId === r.id);
+    return hit?.status ?? 'none';
+  };
+  check('R304.1: a 48 sq ft kitchen is exempt', statusFor(room('Kitchen', 12, 4, flat9), 'IRC-R304.1'), 'pass');
+  check('R304.1: a 48 sq ft bedroom still fails', statusFor(room('Bedroom', 8, 6, flat9), 'IRC-R304.1'), 'fail');
+  check('R304.1: a 48 sq ft dining still fails', statusFor(room('Dining', 8, 6, flat9), 'IRC-R304.1'), 'fail');
+  // The exception is about AREA, never headroom: a kitchen mostly under a low
+  // eave must still fail. Without this the R305.1 change would be a hole.
+  check('R305.1: a kitchen buried under a low eave still fails', statusFor(room('Kitchen', 12, 4, underEave(48)), 'IRC-R305.1'), 'fail');
+  check('R305.1: a bedroom buried under a low eave still fails', statusFor(room('Bedroom', 12, 12, underEave(144)), 'IRC-R305.1'), 'fail');
+  check('R305.1: a kitchen with full headroom passes', statusFor(room('Kitchen', 12, 4, flat9), 'IRC-R305.1'), 'pass');
+}
+
 // 9 since ZON-HEIGHT joined the registry: the engine modelled setback and
 // coverage but had no notion of building height at all, while every real
 // jurisdiction caps it. Expected value raised because a rule was ADDED, not

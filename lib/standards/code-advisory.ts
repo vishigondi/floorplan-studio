@@ -32,7 +32,7 @@ export interface CodeAdvisoryRule {
 export const CODE_ADVISORY_RULES: CodeAdvisoryRule[] = [
   {
     ruleId: 'IRC-R304.1',
-    citation: 'IRC §R304.1 — Habitable rooms shall have a floor area of not less than 70 sq ft.',
+    citation: 'IRC §R304.1 — Habitable rooms shall have a floor area of not less than 70 sq ft (exception: kitchens).',
     category: 'room-minimums',
   },
   {
@@ -396,7 +396,16 @@ export function codeAdvisoryReport(input: CodeAdvisoryInput): CodeAdvisoryReport
     const excludedNote = rawArea !== undefined && area !== undefined && rawArea - area > 0.5
       ? ` (${(rawArea - area).toFixed(1)} sq ft under the 5 ft ceiling cutoff excluded)`
       : '';
-    if (area === undefined) {
+    // R304.1 carries "Exception: Kitchens" -- and BOTH citations this module
+    // prints already say so ("kitchens excepted"). The check did not implement
+    // it, so the report contradicted its own citation and failed any kitchen
+    // under 70 sq ft. Found because an open-plan kitchen zone tripped it; it is
+    // a defect either way, since the rule as applied was stricter than the
+    // authority quoted beside it.
+    const isKitchen = KITCHEN_PATTERN.test(roomText(room));
+    if (isKitchen) {
+      findings.push(finding('IRC-R304.1', 'pass', `Kitchen — exempt from the ${MIN_HABITABLE_AREA_SQFT} sq ft minimum (R304.1 exception).`, subject(room)));
+    } else if (area === undefined) {
       findings.push(finding('IRC-R304.1', 'not-evaluated', 'Room has no usable geometry in the semantic JSON.', subject(room)));
     } else if (area + 1e-6 < MIN_HABITABLE_AREA_SQFT) {
       findings.push(finding('IRC-R304.1', 'fail', `Floor area ${area.toFixed(1)} sq ft${excludedNote} is below the ${MIN_HABITABLE_AREA_SQFT} sq ft minimum.`, subject(room)));
@@ -404,7 +413,7 @@ export function codeAdvisoryReport(input: CodeAdvisoryInput): CodeAdvisoryReport
       findings.push(finding('IRC-R304.1', 'pass', `Floor area ${area.toFixed(1)} sq ft${excludedNote} meets the ${MIN_HABITABLE_AREA_SQFT} sq ft minimum.`, subject(room)));
     }
 
-    if (KITCHEN_PATTERN.test(roomText(room))) continue;
+    if (isKitchen) continue;
     const minDim = roomMinDimensionFt(room);
     if (minDim === undefined) {
       findings.push(finding('IRC-R304.2', 'not-evaluated', 'Room has no usable geometry in the semantic JSON.', subject(room)));
@@ -441,10 +450,22 @@ export function codeAdvisoryReport(input: CodeAdvisoryInput): CodeAdvisoryReport
       }
       continue;
     }
-    // Sloped ceiling: the required floor area (70 sq ft) must exist at >=5 ft,
-    // and at least half of it (35 sq ft) at >=7 ft.
-    const requiredAt5 = MIN_HABITABLE_AREA_SQFT;
-    const requiredAt7 = MIN_HABITABLE_AREA_SQFT / 2;
+    // Sloped ceiling: the REQUIRED FLOOR AREA must exist at >=5 ft, and at
+    // least half of it at >=7 ft. The requirement is phrased against required
+    // floor area, so it cannot be a flat 70 for a room the code requires no
+    // area of: a kitchen exempt under R304.1 was still being asked for 70 sq ft
+    // of headroom, which failed kitchens whose ceiling was fine and whose only
+    // fault was being a kitchen. Same defect as the R304.1 exception above,
+    // reaching this rule through the shared constant.
+    //
+    // For an exempt kitchen the requirement is measured against its OWN floor
+    // area instead of zero. Reading it as zero would wave through a kitchen
+    // entirely under a 3 ft eave; measuring against its own area keeps the
+    // rule's 50%-at-7-ft shape and still fails a kitchen buried under a slope.
+    const kitchenExempt = KITCHEN_PATTERN.test(roomText(room));
+    const requiredArea = kitchenExempt ? (roomAreaSqFt(room) ?? MIN_HABITABLE_AREA_SQFT) : MIN_HABITABLE_AREA_SQFT;
+    const requiredAt5 = kitchenExempt ? 0 : requiredArea;
+    const requiredAt7 = requiredArea / 2;
     const summary = `sloped ceiling ${ceiling.minFt.toFixed(1)}-${ceiling.maxFt.toFixed(1)} ft; ${ceiling.areaAtOrAbove5FtSqFt.toFixed(1)} sq ft at >=5 ft, ${ceiling.areaAtOrAbove7FtSqFt.toFixed(1)} sq ft at >=7 ft`;
     if (ceiling.areaAtOrAbove5FtSqFt + 1e-6 >= requiredAt5 && ceiling.areaAtOrAbove7FtSqFt + 1e-6 >= requiredAt7) {
       findings.push(finding('IRC-R305.1', 'pass', `Sloped-ceiling provision met (${summary}; requires ${requiredAt5} sq ft at >=5 ft and ${requiredAt7} sq ft at >=7 ft).`, subject(room)));
