@@ -120,6 +120,51 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Correction: the gable IS enclosed — and the bill now names what it omits (2026-08-17)
+
+Went looking for whether the gable decision, like `wall-module`, already had an
+answer in the codebase. It did, and it **corrects something I reported earlier
+today**.
+
+I wrote that gable-end infill "is not modelled at all" and that the loft plans
+had a hole in the envelope. **That is wrong.** `lib/bim/buildable-bim.ts` gives
+gable-end traces `heightPolicy: 'full-height-gable-end'` and sets
+`segment.height = ridge - y1`, while eave/knee walls are clipped low. The gable
+ends are extruded to the ridge; the building is closed in the model. What misled
+me was `EnvelopeMesh.tsx`, whose comment says gable triangles were *removed*
+because "wall-ext panels already cover the east/west perimeter faces" — but that
+is the older renderer, and its assumption (10 ft walls) does not hold for an
+a-frame with a 2 ft knee wall anyway.
+
+### What actually survives
+The **bill** does not cover the apex. Panels are counted from plan-view wall RUNS
+at a storey-height SKU, so the triangle above storey height appears in no line.
+And it cannot simply be added: `SKYLARK150_BLOCKS` lists roof blocks and wall
+columns and **nothing for the apex**, so billing it would mean inventing a
+component — precisely the fabricated source the working agreement forbids.
+
+So the bill now **states the omission** instead:
+
+```
+Not included in these quantities
+  • gable-end infill above storey height (a-frame roof): enclosed in the 3D
+    model but not billed — Skylark publishes no apex block to count it against
+  • site works, foundations below the sill, services and finishes
+```
+
+A quantity list that names nothing missing reads as complete. This is the same
+`coverage.omitted` pattern the IFC export already uses, applied to the BOM, and
+it appears in the packet and the JSON export beside "Quantities assume".
+
+Gated both directions, because an omission list is easy to make vacuous: remove
+the declarations -> fails; declare a gable omission on a **flat** roof -> fails.
+
+### The loft-plan asymmetry, restated correctly
+The LOFT LEVEL drawing still shows a wall at one gable and not the other, because
+`ext-l1-front` exists only to host the loft window. That is a **drawing**
+inconsistency, not a hole in the building. Smaller than I said, and still worth
+deciding.
+
 ## wall-module graded the wrong unit — and quantifying it found a real plan defect (2026-08-17)
 
 The "what should `wall-module` grade" decision I queued turns out to have an

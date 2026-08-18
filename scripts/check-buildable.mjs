@@ -388,6 +388,17 @@ for (const brief of BRIEFS) {
     `${bomQty('foundation')} vs ${Math.ceil(perimeterFt / 4)} for ${perimeterFt}ft`);
   // None of the compiled briefs produce a deck, so the line must not appear.
   check(`${brief} — no deck panels without a deck room`, bomQty('floor-deck') === 0, `${bomQty('floor-deck')}`);
+
+  // THE BILL MUST NAME WHAT IT LEAVES OUT. Gable-end infill is enclosed in the
+  // model (buildable-bim extrudes gable-end walls to the ridge) but panels are
+  // counted from plan-view runs at a storey SKU, so the apex triangle is in no
+  // line. Skylark publishes no apex block, so it is stated, not invented.
+  const omissions = shippedReport.omissions ?? [];
+  check(`${brief} — the bill states what it omits`, omissions.length > 0, 'no omissions declared');
+  const claimsGable = omissions.some((line) => /gable/i.test(line));
+  const isPitched = res.artifact.roof?.style !== 'flat';
+  check(`${brief} — gable infill is declared only for pitched roofs`, claimsGable === isPitched,
+    `${res.artifact.roof?.style}: claimsGable=${claimsGable}`);
 }
 
 // Deck panels are only exercised by a traced plan — a-frame-22 is the sole plan

@@ -540,6 +540,24 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     ],
   });
 
+  // WHAT THIS BILL DOES NOT COVER.
+  //
+  // Gable-end infill is the honest example. The BIM extrudes gable-end walls to
+  // the ridge (buildable-bim: heightPolicy 'full-height-gable-end'), so the
+  // building IS closed in the model — but panels are counted from plan-view wall
+  // RUNS at a storey-height SKU, so the triangle above storey height is not in
+  // any line here. Skylark publishes no gable block to bill it against
+  // (SKYLARK150_BLOCKS lists roofs and wall columns, nothing for the apex), and
+  // inventing a component to make the bill look complete is exactly the kind of
+  // fabricated source this project forbids. So it is named instead.
+  const pitched = home.roofStyle !== 'flat';
+  const omissions = [
+    ...(pitched
+      ? [`gable-end infill above storey height (${home.roofStyle} roof): enclosed in the 3D model but not billed — Skylark publishes no apex block to count it against`]
+      : []),
+    'site works, foundations below the sill, services and finishes',
+  ];
+
   const bomItems = [...bom.values()].filter((item) => item.quantity > 0);
   if (!bomItems.length) rules.bom.blockers.push('No BOM items were generated.');
   else rules.bom.passes.push(`${bomItems.length} BOM line items generated.`);
@@ -556,5 +574,6 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     bom: bomItems.sort((a, b) => a.componentId.localeCompare(b.componentId)),
     componentsUsed,
     assumptions,
+    omissions,
   };
 }

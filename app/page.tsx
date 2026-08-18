@@ -1811,6 +1811,7 @@ function clientPacketHtml(home: DenHome, planSvg: string, groups: ValidationGrou
   const reportBody = report.slice(report.indexOf('<body>') + 6, report.indexOf('</body>'));
   const bom = home.buildValidation?.bom ?? [];
   const buildAssumptions = home.buildValidation?.assumptions ?? [];
+  const buildOmissions = home.buildValidation?.omissions ?? [];
   // The packet is what a CLIENT reads. It used to print `componentId` under a
   // "Component" heading and `record.label ?? record.category` under "Label" —
   // but BOM items carry `description`, never `label`, so the fallback always
@@ -1862,6 +1863,12 @@ function clientPacketHtml(home: DenHome, planSvg: string, groups: ValidationGrou
     buildAssumptions.length
       ? `<h2 style="margin-top:18px">Quantities assume</h2><ul style="font-size:12px">${buildAssumptions.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
       : '<p style="font-size:12px;color:#6b6359">This build report states no assumptions.</p>',
+    // ...and what it leaves out. A quantity list that names nothing missing
+    // reads as complete; gable-end infill is enclosed in the model but has no
+    // line here, and saying so is the difference between a bill and a guess.
+    buildOmissions.length
+      ? `<h2 style="margin-top:18px">Not included in these quantities</h2><ul style="font-size:12px">${buildOmissions.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`
+      : '',
     '</section>',
     '<section>', reportBody, '</section>',
     '</body></html>',
@@ -3049,7 +3056,7 @@ function WorkflowModal({
                 ))}
                 <button type="button" onClick={() => downloadText(`${home.id}-constraint-report.html`, constraintReportHtml(home), 'text/html')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Constraint Report HTML</button>
                 <button type="button" onClick={() => downloadJson(`${home.id}-constraint-report.json`, codeAdvisoryReportForHome(home))} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Constraint Report JSON</button>
-                <button type="button" onClick={() => downloadJson(`${home.id}-build-kit-bom.json`, { planId: home.id, bom: home.buildValidation?.bom ?? [], componentsUsed: home.componentsUsed, assumptions: home.buildValidation?.assumptions ?? [] })} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Build Kit BOM JSON</button>
+                <button type="button" onClick={() => downloadJson(`${home.id}-build-kit-bom.json`, { planId: home.id, bom: home.buildValidation?.bom ?? [], componentsUsed: home.componentsUsed, assumptions: home.buildValidation?.assumptions ?? [], omissions: home.buildValidation?.omissions ?? [] })} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Build Kit BOM JSON</button>
                 <button type="button" data-export-client-packet onClick={() => downloadText(`${home.id}-client-packet.html`, clientPacketHtml(home, currentDeterministicSvg() ?? semanticSvgForHome(home), groups), 'text/html')} className="w-full rounded-sm border border-emerald-800 bg-emerald-800 px-3 py-2 text-xs text-white hover:bg-emerald-700">Download Client Packet (HTML)</button>
                 <button type="button" onClick={export3d} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Current 3D PNG</button>
                 <button type="button" onClick={onExportPacket} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Brochure Packet JSON</button>

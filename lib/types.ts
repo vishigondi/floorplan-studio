@@ -316,6 +316,9 @@ export interface BuildValidationReport {
   bom: BuildBomItem[];
   componentsUsed: string[];
   assumptions: string[];
+  /** What this bill deliberately does NOT cover. Stated, never silently
+   *  omitted — a quantity list that names nothing missing reads as complete. */
+  omissions: string[];
 }
 
 export interface RenderedModelBounds {
