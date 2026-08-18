@@ -19,6 +19,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
+import { filterManifestForDeployment, isPublicDeployment, servablePlanIds } from '@/lib/licensing';
 
 const STORE = path.join(process.cwd(), 'public', 'data', 'den-image-loop');
 
@@ -71,6 +72,32 @@ export async function GET(
   try {
     const info = await stat(real);
     if (!info.isFile()) return NextResponse.json({ error: 'not a file' }, { status: 404 });
+
+    // LICENSING GATE. This route is the single door to the plan store, so it is
+    // where "what may leave this deployment" is decided. Repo privacy does not
+    // settle it: serving Den-derived plans from a public deployment is
+    // redistribution wherever the bytes are stored.
+    if (isPublicDeployment()) {
+      const manifestPath = path.join(STORE, 'proposal-manifest.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+
+      // The manifest itself is rewritten, never passed through: a feed that
+      // lists plans the route then refuses still discloses their ids.
+      if (real === await realpath(manifestPath)) {
+        return NextResponse.json(filterManifestForDeployment(manifest), {
+          headers: { 'Cache-Control': 'no-store' },
+        });
+      }
+
+      // Everything else is addressed as <planId>/..., so the first segment
+      // decides. 404 rather than 403 — a deployment that may not serve a plan
+      // should not confirm it exists.
+      const planId = segments[0];
+      if (!servablePlanIds(manifest).has(planId)) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 });
+      }
+    }
+
     const bytes = await readFile(real);
     return new NextResponse(new Uint8Array(bytes), {
       headers: {
