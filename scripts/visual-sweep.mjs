@@ -380,7 +380,12 @@ for (const [i, planId] of targets.entries()) {
 // Downloaded once, for one compiled plan: its BOM table must name components in
 // words, not print internal ids under a "Component" heading with the category
 // mislabelled as "Label".
-if (!only.length) {
+// Runs for --only sweeps too. It used to be gated on `!only.length`, and
+// `check:visual:quick` — the ONLY visual sweep the live ladder runs — always
+// passes --only, so the client packet was never graded in CI at all. Same blind
+// spot as the generated lane. One packet download is cheap; skipping the
+// deliverable is not.
+if (targets.length) {
   // Pick a plan that HAS a failing rule where one exists. Downloading the packet
   // for a spotless plan makes the "failures reach the client" assertion vacuous —
   // it loops over an empty set and proves nothing, which is how a packet that
@@ -402,7 +407,13 @@ if (!only.length) {
     const exportBtn = page.getByRole('button', { name: /^Export$/ }).first();
     if (await exportBtn.count()) { await exportBtn.click(); await page.waitForTimeout(1000); }
     const trigger = page.locator('[data-export-client-packet]').first();
-    if (await trigger.count()) {
+    // A missing trigger used to skip EVERY packet assertion in silence — the
+    // sweep then reported a clean run having graded no packet at all. Proven by
+    // mutation: breaking an assertion here still passed, because none of them
+    // ran. Say so instead.
+    const triggerCount = await trigger.count();
+    check(packetPlan, 'the client-packet export is reachable (else no packet is graded)', triggerCount > 0);
+    if (triggerCount) {
       const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 30000 }),
         trigger.click(),
@@ -416,6 +427,24 @@ if (!only.length) {
       check(packetPlan, 'packet BOM names components in words, not slugs',
         slugLike.length === 0, `slug-like first cells: ${slugLike.slice(0, 4).join(', ')}`);
       check(packetPlan, 'packet BOM has rows', firstCells.length > 0);
+
+      // WHAT THE BILL ASSUMES. validateBuildability has always published the
+      // panel module, the wall-height SKUs and the joist span, and the packet
+      // rendered none of them — every quantity in the table above depends on
+      // those numbers, so a bill that states none of them cannot be checked by
+      // whoever orders from it.
+      check(packetPlan, 'packet states what the quantities assume',
+        /Quantities assume/.test(html), 'no assumptions section');
+      check(packetPlan, 'packet names the panel module it counted against',
+        /panel module: [\d.]+ft/.test(html), 'no panel-module assumption');
+      // Per-line notes were dropped too, including the ones that QUALIFY a
+      // number (roof modules do not subdivide the slope length). A qualified
+      // quantity printed bare reads as more certain than it is.
+      check(packetPlan, 'packet BOM table carries a Notes column',
+        />Notes</.test(headerRow), headerRow.slice(0, 160));
+      const noteCells = [...html.matchAll(/<tr>(?:<td>[^<]*<\/td>){5}<td>([^<]*)<\/td>/g)].map((m) => m[1]);
+      check(packetPlan, 'at least one BOM line prints its note',
+        noteCells.some((cell) => cell.trim().length > 0), `${noteCells.length} note cells, all empty`);
 
       // THE CODE REPORT A CLIENT READS MUST BE THE ENGINE'S, NOT A RE-DERIVATION.
       // A packet that quietly recomputes (or rounds, or filters) its pass/fail

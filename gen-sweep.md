@@ -120,6 +120,62 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The bill now says what it assumes — and the packet gate never ran (2026-08-17)
+
+`validateBuildability` has always published `assumptions` — panel module, wall
+height SKUs, joist span — and **nothing rendered them**, not the packet, not the
+BOM JSON export. Every quantity in the bill depends on those three numbers, so a
+bill that states none of them cannot be checked by whoever orders from it. Same
+for per-line `notes`, which the packet table dropped entirely — including the
+ones that *qualify* a number, like roof modules not subdividing the slope length.
+A qualified quantity printed bare reads as more certain than it is.
+
+Both now appear in the packet and in the exported JSON. What a reader gets:
+
+```
+Quantities assume:
+  • panel module: 4.00ft (4 ft structural grid = the 1220 mm Skylark sheet, 4.003 ft)
+  • wall height SKUs: 7.87ft, 9.84ft
+  • maximum simple floor joist span: 16ft
+
+floor-std  (63) — 2 floor levels: 28x28ft, 8x28ft.
+guard-rail (14) — 56.0 ft of fall-protection guard (IRC R312.1); not billed as wall panels.
+roof-steep (14) — 7 module(s) per plane along the 28ft ridge, 2 planes. Span sets
+                  the block class (Skylark R-L/R-S/R-XXS), not the count; slope
+                  length is not subdivided.
+```
+
+Today's four BOM corrections are all legible in that output, which is the point.
+
+### The gate I added did not run, and I only knew because I checked
+The new packet assertions passed. **They also passed when I deliberately broke
+one** — so they were never executing. Two reasons, found by chasing it instead of
+accepting the green:
+
+1. The whole packet block was gated on `if (!only.length)`. And
+   `check:visual:quick` — the ONLY visual sweep the live ladder runs — always
+   passes `--only`. **The client packet has never been graded in CI.** Same blind
+   spot as the generated lane earlier today, in the same file, found the same way.
+2. Inside it, `if (await trigger.count())` skipped every packet assertion in
+   silence whenever the export control was missing.
+
+Fixed both: the block runs for `--only` sweeps too, and a missing export trigger
+is now a reported failure rather than a quiet skip. Evidence it executes: the
+quick sweep went from **18 assertions to 31** on one plan, and the live ladder
+from its old count to **58 across 3 plans**. Positive execution evidence, not
+absence of failure.
+
+Mutation-tested: remove the assumptions section -> fails; drop the Notes column
+-> fails. Both restore green.
+
+### Third time today
+A gate after `browser.close()`, an assertion behind `--only` (generated lane), a
+`timeout` that does not exist on macOS, a battery outside the ladder, an audit
+keyed to gitignored scratch — and now a packet gate behind the *same* `--only`
+flag as the first one. The tell never changes: **green, with no evidence the code
+ran.** The habit that keeps working is to break the assertion on purpose and
+confirm it screams.
+
 ## Every BOM line is now gated (2026-08-17)
 
 Closed the thread. `foundation` and `floor-deck` were the last two unchecked
