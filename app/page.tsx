@@ -8,7 +8,7 @@ import ComponentDetail from '@/components/ui/ComponentDetail';
 import type { SceneHandle } from '@/components/three/Scene';
 import FloorPlanView from '@/components/FloorPlanView';
 import { DEFAULT_RENDER_THEME_ID, RENDER_THEMES } from '@/lib/render-themes';
-import { validateBuildability } from '@/lib/build-validator';
+import { buildKitBomExport, validateBuildability } from '@/lib/build-validator';
 import { MAX_TEMPLATE_BEDROOMS, MAX_TEMPLATE_BATHS } from '@/lib/generate/compile-plan';
 import type { DenHome, PairedGeometryAudit, RenderMode, RenderedModelBounds, RenderThemeId, RoofSemantics } from '@/lib/types';
 import { semanticBimFromHome, semanticBimSummary } from '@/lib/bim/semantic-bim';
@@ -3056,7 +3056,7 @@ function WorkflowModal({
                 ))}
                 <button type="button" onClick={() => downloadText(`${home.id}-constraint-report.html`, constraintReportHtml(home), 'text/html')} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Constraint Report HTML</button>
                 <button type="button" onClick={() => downloadJson(`${home.id}-constraint-report.json`, codeAdvisoryReportForHome(home))} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Constraint Report JSON</button>
-                <button type="button" onClick={() => downloadJson(`${home.id}-build-kit-bom.json`, { planId: home.id, bom: home.buildValidation?.bom ?? [], componentsUsed: home.componentsUsed, assumptions: home.buildValidation?.assumptions ?? [], omissions: home.buildValidation?.omissions ?? [] })} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Build Kit BOM JSON</button>
+                <button type="button" onClick={() => downloadJson(`${home.id}-build-kit-bom.json`, buildKitBomExport(home))} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Build Kit BOM JSON</button>
                 <button type="button" data-export-client-packet onClick={() => downloadText(`${home.id}-client-packet.html`, clientPacketHtml(home, currentDeterministicSvg() ?? semanticSvgForHome(home), groups), 'text/html')} className="w-full rounded-sm border border-emerald-800 bg-emerald-800 px-3 py-2 text-xs text-white hover:bg-emerald-700">Download Client Packet (HTML)</button>
                 <button type="button" onClick={export3d} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Current 3D PNG</button>
                 <button type="button" onClick={onExportPacket} className="w-full rounded-sm border border-stone-300 bg-white px-3 py-2 text-xs text-stone-700 hover:border-stone-800 hover:bg-stone-50">Export Brochure Packet JSON</button>

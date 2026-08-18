@@ -225,6 +225,33 @@ function statusFrom(blockers: string[], warnings: string[]): BuildValidationRepo
   return 'pass';
 }
 
+/**
+ * The Build Kit BOM export payload, as a value.
+ *
+ * Inlined in the download handler, this was the one artefact the product emits
+ * that NO gate touched — a click no battery can make. So the assumptions and
+ * omissions added to it were unverifiable, which is the same "produced and never
+ * checked" shape as the rest of the bill. Extracted so it can be asserted
+ * without driving a browser download (Chrome allows only one per session, and
+ * the client packet already spends it).
+ */
+export function buildKitBomExport(home: DenHome): {
+  planId: string;
+  bom: BuildValidationReport['bom'];
+  componentsUsed: string[];
+  assumptions: string[];
+  omissions: string[];
+} {
+  const report = home.buildValidation;
+  return {
+    planId: home.id,
+    bom: report?.bom ?? [],
+    componentsUsed: home.componentsUsed ?? [],
+    assumptions: report?.assumptions ?? [],
+    omissions: report?.omissions ?? [],
+  };
+}
+
 export function validateBuildability(home: DenHome): BuildValidationReport {
   const assumptions = [
     `panel module: ${PANEL_WIDTH_FT.toFixed(2)}ft (4 ft structural grid = the 1220 mm Skylark sheet, 4.003 ft)`,

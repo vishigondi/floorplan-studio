@@ -120,6 +120,39 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## The one export no gate could reach (2026-08-18)
+
+Checked which downloads the batteries actually exercise. The client packet: yes.
+The IFC route: yes, the sweep fetches `/api/export-ifc`. **The Build Kit BOM
+JSON: nothing, anywhere.**
+
+Its payload was built inline in the button's `onClick`, so it was a *click*, not
+a function — nothing a battery could call. Which means the `assumptions` and
+`omissions` I added to that download earlier today shipped **unverified**: the
+same "produced and never checked" shape as the bill itself.
+
+Driving the real download is not the fix. Chrome allows one programmatic download
+per session (a known debt in the playbook) and the client-packet gate already
+spends it, so a second click would be flaky by construction. Extracted
+`buildKitBomExport(home)` as a value instead, and the button now calls it — the
+payload is assertable without a browser.
+
+Eight assertions on it, including that the exported assumptions and bom **match
+the report** rather than merely being non-empty, and that a lofted plan carries
+its `guard-rail` line into the download.
+
+Mutation-tested: return empty assumptions/omissions (the pre-extraction state)
+-> two failures; quietly filter a line out of the exported bill -> the match and
+the guard-rail assertions both fail.
+
+### The pattern, one more time
+Ten separate things today were unverified for the same reason — a gate after
+`browser.close()`, an assertion behind `--only` (three times), a `timeout` that
+does not exist, a battery outside the ladder, an audit keyed to scratch, a
+battery grading its own copy of the pipeline (twice), and now a payload that only
+existed inside a click handler. **Code that cannot be called cannot be tested**,
+and inlining it in a handler is the quietest way to make it uncallable.
+
 ## Every plan the product ships reports "blocked" — now ratcheted (2026-08-18)
 
 Having fixed the compiler's passthroughs, the obvious question: what does the

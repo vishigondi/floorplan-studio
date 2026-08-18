@@ -31,7 +31,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
 const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
-const { validateBuildability } = await import(join(root, 'lib/build-validator.ts'));
+const { validateBuildability, buildKitBomExport } = await import(join(root, 'lib/build-validator.ts'));
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -443,6 +443,33 @@ for (const brief of BRIEFS) {
       moduleRule && moduleRule.status !== 'blocked',
       `${moduleRule?.status}: ${(moduleRule?.details ?? []).slice(0, 1).join('')}`);
   }
+}
+
+// THE BOM EXPORT A USER DOWNLOADS.
+//
+// This payload was inlined in the download handler, so no battery could reach it
+// — a click, not a function. The assumptions and omissions added to the bill were
+// therefore shipped unverified. It is a value now, and asserted here: driving the
+// real download is not an option because Chrome allows one programmatic download
+// per session and the client packet already spends it.
+{
+  const brief = '2 bed a-frame with loft, 40x60 lot, 5 ft setbacks';
+  const res = compileIntent(mockIntentFromBrief(parseBrief(brief)), 'bom-export', brief);
+  const home = pairedArtifactToLocalHome(res.artifact);
+  const payload = buildKitBomExport(home);
+  check('BOM export names the plan', typeof payload.planId === 'string' && payload.planId.length > 0, payload.planId);
+  check('BOM export carries the bill', Array.isArray(payload.bom) && payload.bom.length > 0, `${payload.bom?.length} lines`);
+  check('BOM export lists the components used', Array.isArray(payload.componentsUsed) && payload.componentsUsed.length > 0);
+  // The two honesty fields: a downloaded bill that states neither its
+  // assumptions nor its omissions cannot be checked by whoever orders from it.
+  check('BOM export states its assumptions', (payload.assumptions ?? []).length > 0, JSON.stringify(payload.assumptions));
+  check('BOM export states its omissions', (payload.omissions ?? []).length > 0, JSON.stringify(payload.omissions));
+  check('BOM export assumptions match the report', JSON.stringify(payload.assumptions) === JSON.stringify(home.buildValidation?.assumptions ?? []));
+  check('BOM export bom matches the report', payload.bom.length === (home.buildValidation?.bom ?? []).length);
+  // A lofted plan must carry its guard-rail line into the download too.
+  check('BOM export includes the loft guard rail line',
+    payload.bom.some((item) => item.componentId === 'guard-rail'),
+    payload.bom.map((i) => i.componentId).join(', '));
 }
 
 // Traced plans describe the same storeys TWICE (a-frame-22 carries floor-0/
