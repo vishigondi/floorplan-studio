@@ -120,6 +120,46 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Every BOM line is now gated (2026-08-17)
+
+Closed the thread. `foundation` and `floor-deck` were the last two unchecked
+lines — and `foundation` had looked covered only because my earlier scan matched
+the *word* "foundation" in unrelated assertion prose ("paired compiler
+foundation") in check-den-seeds. A substring coincidence reading as coverage is
+the same mistake as a green gate that never ran, so it is worth naming.
+
+Both compute correctly, verified before gating rather than after:
+- `foundation` = perimeter / module — 112 ft -> 28 for a 28x28.
+- `floor-deck` = per-deck tiling — a-frame-22's two decks are 6.71x18.53 ft
+  (2x5=10) and 2.02x18.53 ft (1x5=5), total **15**, matching the bill exactly.
+
+Deck panels are exercised by **one plan in the whole store** (a-frame-22 is the
+only artifact with Deck rooms), so the gate gets its own fixture there — plus an
+assertion that a-frame-22 *still has decks*, so the check fails loudly instead of
+passing over nothing if that ever changes. Same guard as the un-square roof
+fixture: when a gate depends on a property of its fixture, assert the property.
+
+Mutation-tested: foundation counting one side instead of the perimeter (14 vs
+28), and decks billing one panel each regardless of size (2 vs 15). Both caught.
+
+**Coverage now, checked mechanically rather than claimed:** every `componentId`
+in build-validator — wall-ext, wall-int, wall-ext-opening, wall-int-opening,
+guard-rail, floor-std, floor-deck, foundation, window-std, the ternary door ids,
+and the dynamic roof id — is asserted by a gate. At the start of today the wall
+lines were the only ones, and only because earlier fires had touched them.
+
+### What the whole BOM thread found
+Four real defects in the bill a builder would order from, none of which any gate
+could have caught:
+1. **19 ft of opening panels** missing (earlier fire).
+2. **Guard rails billed as 14 sheets** of full-height interior wall.
+3. **The loft deck missing entirely** — a lofted plan billed the same 49
+   cassettes as a single-storey one.
+4. **Roof modules counted across the span** — 24 for a 28 ft ridge that takes 14.
+
+Every one was a quantity that looked plausible in isolation. That is the argument
+for gating a bill of materials against geometry rather than eyeballing it.
+
 ## Roof modules were counted across the span, not along the ridge (2026-08-17)
 
 Finishing the BOM gating reached `roof-steep` / `roof-flat` / `roof-gable`, and

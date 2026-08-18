@@ -381,6 +381,32 @@ for (const brief of BRIEFS) {
     : Math.ceil(ridgeParallel / 4) * 2;
   check(`${brief} — roof modules count along the ridge`, roofLine?.quantity === expectedRoof,
     `${roofLine?.componentId}=${roofLine?.quantity} vs ${expectedRoof} (ridge-parallel ${ridgeParallel}ft, ${res.artifact.roof?.style})`);
+
+  // Foundation is the sill perimeter over the module.
+  const perimeterFt = (res.artifact.footprint.widthFt + res.artifact.footprint.depthFt) * 2;
+  check(`${brief} — foundation sill covers the perimeter`, bomQty('foundation') === Math.ceil(perimeterFt / 4),
+    `${bomQty('foundation')} vs ${Math.ceil(perimeterFt / 4)} for ${perimeterFt}ft`);
+  // None of the compiled briefs produce a deck, so the line must not appear.
+  check(`${brief} — no deck panels without a deck room`, bomQty('floor-deck') === 0, `${bomQty('floor-deck')}`);
+}
+
+// Deck panels are only exercised by a traced plan — a-frame-22 is the sole plan
+// in the store with Deck rooms — so grade it there or the line is never checked
+// at all. The fixture's own precondition is asserted: if a-frame-22 ever stops
+// having decks, this must fail loudly rather than pass over nothing.
+{
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const dir = join(root, 'public/data/den-image-loop/a-frame-22/paired');
+  const file = readdirSync(dir).find((name) => name.endsWith('.paired.json'));
+  const artifact = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+  const home = pairedArtifactToLocalHome(artifact);
+  const decks = (home.rooms ?? []).filter((room) => /deck|porch|patio/i.test(`${room.type} ${room.label}`));
+  check('a-frame-22 still has deck rooms (fixture precondition)', decks.length > 0, `${decks.length}`);
+  const expected = decks.reduce((sum, room) =>
+    sum + Math.ceil((room.gw * 4) / 4) * Math.ceil((room.gd * 4) / 4), 0);
+  const qty = (validateBuildability(home).bom ?? [])
+    .find((item) => item.componentId === 'floor-deck')?.quantity ?? 0;
+  check('deck panels tile every deck room', qty === expected, `${qty} vs ${expected} across ${decks.length} deck(s)`);
 }
 
 // A square plan hides the axis bug entirely — width and depth agree, so the old
