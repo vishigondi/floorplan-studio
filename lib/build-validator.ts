@@ -246,21 +246,26 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     rules.wallModule.blockers.push('No source wall graph is available for modular wall validation.');
   }
 
+  // Wall HEIGHT is per wall; wall MODULE is per RUN, and the module check moved
+  // below where the runs are reconstructed. Grading the raw entries here was
+  // wrong: `sourceWalls` are the SOLID STRETCHES BETWEEN OPENINGS, so a 2.50 ft
+  // stretch between two windows was being asked to be a 4 ft multiple. It is not
+  // a panel — it is part of one. The run it belongs to (4.00 + 2.50 + 14.50 plus
+  // 7 ft of openings = 28 ft = 7 panels) is exactly on module.
+  //
+  // Nothing caught it because check-buildable fed the validator whole walls from
+  // a hand-rolled adapter, so no segment was ever graded.
   for (const wall of walls) {
     const length = wallLengthFt(wall);
     if (length < 0.05) continue;
-    const moduleDelta = nearestMultipleDelta(length, PANEL_WIDTH_FT);
     const label = wall.id ?? `${wall.exterior ? 'exterior' : 'interior'} wall`;
-    if (moduleDelta.delta > PANEL_TOLERANCE_FT) {
-      rules.wallModule.blockers.push(`${label} is ${length.toFixed(2)}ft, not N x ${PANEL_WIDTH_FT}ft (nearest ${moduleDelta.count} panels is ${(moduleDelta.count * PANEL_WIDTH_FT).toFixed(2)}ft).`);
-    }
     const inferred = inferredWallHeight(home, wall);
     const sku = nearestSku(inferred.height, WALL_HEIGHT_SKUS_FT);
     if (sku.delta > WALL_HEIGHT_TOLERANCE_FT) {
       rules.wallHeight.blockers.push(`${label} ${inferred.source} height ${inferred.height.toFixed(2)}ft is not a 2.4m/3.0m wall SKU.`);
     }
   }
-  if (walls.length && !rules.wallModule.blockers.length) rules.wallModule.passes.push(`${walls.length} source walls align with panel multiples.`);
+  // (moved below the run reconstruction, so the message can count runs)
   if (walls.length && !rules.wallHeight.blockers.length) rules.wallHeight.passes.push(`${walls.length} source walls map to known wall height SKUs or explicit assumptions.`);
 
   // PANELS ARE COUNTED PER WALL RUN, NOT PER SEGMENT.
@@ -305,6 +310,19 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     if (!run) continue;
     run.lengthFt += Number(opening.widthFt ?? 0);
     run.openings += 1;
+  }
+
+  // THE MODULE CHECK, on the unit that is actually panelized.
+  for (const [runId, run] of runs.entries()) {
+    if (run.lengthFt < 0.05) continue;
+    const moduleDelta = nearestMultipleDelta(run.lengthFt, PANEL_WIDTH_FT);
+    if (moduleDelta.delta > PANEL_TOLERANCE_FT) {
+      rules.wallModule.blockers.push(`${runId} run is ${run.lengthFt.toFixed(2)}ft, not N x ${PANEL_WIDTH_FT}ft (nearest ${moduleDelta.count} panels is ${(moduleDelta.count * PANEL_WIDTH_FT).toFixed(2)}ft).`);
+    }
+  }
+
+  if (runs.size && !rules.wallModule.blockers.length) {
+    rules.wallModule.passes.push(`${runs.size} wall run(s) align with panel multiples.`);
   }
 
   let exteriorWallPanels = 0;

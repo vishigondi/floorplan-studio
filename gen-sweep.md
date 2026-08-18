@@ -120,6 +120,53 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## wall-module graded the wrong unit — and quantifying it found a real plan defect (2026-08-17)
+
+The "what should `wall-module` grade" decision I queued turns out to have an
+answer, and the correct model was already in the file.
+
+`sourceWalls` are the **solid stretches between openings** — the BOM's own
+comment says so, which is why the BOM reconstructs RUNS before panelizing. The
+rule graded the raw entries, so a **2.50 ft stretch between two windows** was
+asked to be a 4 ft multiple. It is not a panel; it is part of one. Its run —
+`4.00 + 2.50 + 14.50` plus 7 ft of openings = **28 ft = 7 panels** — is exactly
+on module. Fixed: the rule now grades runs, next to where the BOM builds them.
+
+### Why nobody saw it
+`check-buildable`'s hand-rolled `toHome` **drops `wallId` from openings**, so run
+reconstruction never happens there: runs collapse to whole walls and the rule
+passed for the wrong reason. The same blindness hides the BOM's opening-panel
+logic — the 19 ft shortfall fix has never been exercised by that battery either.
+
+So the new gate gets its report from `pairedArtifactToLocalHome` directly, and
+asserts **both preconditions**: that the adapter really segments walls, and that
+the fixture really contains an off-module segment. Without those the assertion
+would pass over nothing. Mutation: grade segments again -> `blocked:
+ext-n:seg-2 run is 2.50ft`.
+
+### What quantifying it uncovered
+Swapping the whole battery to the shipped adapter went **93 -> 62** failures:
+every wall-module failure gone, and what remains is one narrow, real defect.
+
+Exactly **two openings** — `open-living-kitchen` and `open-kitchen-hall` — across
+**31 briefs and every roof style**. `open-living-kitchen` spans z 2 -> 10 ft on a
+wall running 0 -> 12 ft, so it starts **2 ft into the run** and straddles the
+joints at 4 and 8. The rule is right to refuse it: that opening is not
+panel-buildable.
+
+**Not fixed, because the options are a design choice**, and an 8 ft opening in a
+12 ft wall has only three module-aligned placements:
+
+| option | placement | cost |
+|---|---|---|
+| shrink | `4..8` — 4 ft, centred, exactly one panel | halves the passthrough |
+| shift  | `4..12` — keeps 8 ft | runs into the corner, no return |
+| shift  | `0..8` — keeps 8 ft | same, other corner |
+
+Every generated plan currently carries this, so it is worth deciding. The battery
+stays on the hand-rolled adapter until then; swapping it is a one-line change
+whose only remaining failures are these two openings.
+
 ## Swept every silent-skip guard; the lane-redness gate had never run either (2026-08-17)
 
 Six times today a check was green because it never executed, so I stopped

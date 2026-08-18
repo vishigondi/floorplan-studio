@@ -424,6 +424,40 @@ for (const brief of BRIEFS) {
     `${roofLine?.quantity} vs ${Math.ceil(d / 4) * 2} (would be ${Math.ceil(w / 4) * 2} across the span)`);
 }
 
+// WALL-MODULE GRADES RUNS, NOT THE SOLID STRETCHES BETWEEN OPENINGS.
+//
+// Graded through the SHIPPED adapter on purpose: `toHome` above is hand-rolled
+// and drops `wallId` from openings, so run reconstruction never happens there —
+// runs collapse to whole walls and this rule passes for the wrong reason. The
+// same blindness hides the BOM's opening-panel logic.
+//
+// pairedArtifactToLocalHome splits exterior walls into solid segments
+// (ext-n:seg-1/2/3). Grading those directly asked a 2.50 ft stretch between two
+// windows to be a 4 ft multiple; it is not a panel, it is part of one. The run
+// it belongs to — 4.00 + 2.50 + 14.50 plus 7 ft of openings = 28 ft — is exactly
+// 7 panels.
+{
+  for (const brief of ['2 bed gable, 60x90 lot, 10 ft setbacks', '2 bed a-frame roof, 80x100 lot, 10 ft setbacks']) {
+    const res = compileIntent(mockIntentFromBrief(parseBrief(brief)), 'run-module', brief);
+    if (!res.ok) { check(`${brief} — compiles for the run-module check`, false, res.errors.join('; ')); continue; }
+    const home = pairedArtifactToLocalHome(res.artifact);
+    // The fixture must actually be segmented, or this proves nothing.
+    const segmented = (home.sourceWalls ?? []).filter((w) => /:seg-\d+$/.test(String(w.id)));
+    check(`${brief} — the shipped adapter really segments walls (fixture precondition)`,
+      segmented.length > 0, `${(home.sourceWalls ?? []).length} walls, none segmented`);
+    const offModuleSegments = segmented.filter((w) => {
+      const len = Math.hypot((w.x2 - w.x1) * 4, (w.z2 - w.z1) * 4);
+      return len > 0.05 && Math.abs(len / 4 - Math.round(len / 4)) > 0.02;
+    });
+    check(`${brief} — the fixture has an off-module segment (else the rule is untested)`,
+      offModuleSegments.length > 0, 'every segment happens to be a panel multiple');
+    const moduleRule = (validateBuildability(home).rules ?? []).find((r) => r.id === 'wall-module');
+    check(`${brief} — wall-module passes on runs despite off-module segments`,
+      moduleRule && moduleRule.status !== 'blocked',
+      `${moduleRule?.status}: ${(moduleRule?.details ?? []).slice(0, 1).join('')}`);
+  }
+}
+
 // Traced plans describe the same storeys TWICE (a-frame-22 carries floor-0/
 // floor-1 and level-main/level-loft). Summing array entries billed four decks
 // for a two-storey house, so the per-level dedup is asserted against the stored
