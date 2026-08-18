@@ -1088,12 +1088,54 @@ const KIT_PITCH_DEG = SKYLARK_ROOF_PITCHES_DEG.filter((p) => p > 0).slice(-1)[0]
  * lands exactly on a stock block. Everything downstream (elevations, 3D clip,
  * headroom) reads the resulting planes and needs no knowledge of the kit.
  */
+/**
+ * The lowest ridge at or above `baseRidgeFt` that yields a loft on the 4 ft grid.
+ *
+ * A loft used to be snapped to a 4 ft SIZE but placed at whatever offset the
+ * headroom band began, so every loft plan shipped a WH-GRID-4FT failure. Holding
+ * the roof fixed, that is unfixable: the a-frame's headroom envelope is exactly
+ * as wide as its band (zero slack), so the only grid-aligned option is a 4 ft
+ * loft, below MIN_LOFT_SPAN_FT.
+ *
+ * The roof is the variable nobody was varying. Raising the ridge widens the
+ * envelope until a grid-aligned band fits — and the band that fits is WIDER than
+ * the one it replaces (8 ft -> 12 ft), so grid compliance buys a bigger loft
+ * rather than costing one.
+ *
+ * Searched against buildLoft itself rather than hardcoding the answer, so this
+ * stays correct if spans, eaves or MIN_LOFT_SPAN_FT change.
+ */
+const LOFT_RIDGE_SEARCH_STEP_FT = 0.25;
+const LOFT_RIDGE_SEARCH_LIMIT_FT = 12;
+
+function ridgeForGridAlignedLoft(
+  roof: { style: string; ridgeAxis: 'x' | 'z'; eaveHeightFt: number },
+  baseRidgeFt: number,
+  widthFt: number,
+  depthFt: number,
+): number {
+  const onGrid = (value: number) => Math.abs(value / 4 - Math.round(value / 4)) < 1e-6;
+  for (let ridge = baseRidgeFt; ridge <= baseRidgeFt + LOFT_RIDGE_SEARCH_LIMIT_FT; ridge += LOFT_RIDGE_SEARCH_STEP_FT) {
+    const loft = buildLoft({ ridgeAxis: roof.ridgeAxis, ridgeHeightFt: ridge, eaveHeightFt: roof.eaveHeightFt }, widthFt, depthFt);
+    if (!loft) continue;
+    const { x, z, w, d } = loft.bounds;
+    if (onGrid(x) && onGrid(z) && onGrid(w) && onGrid(d)) return ridge;
+  }
+  // No ridge within the search window aligns it; keep the design height rather
+  // than inventing an arbitrary one.
+  return baseRidgeFt;
+}
+
 function gableRidgeFt(
   style: string,
   widthFt: number,
   brief: { hasLoft?: boolean; kitBuildable?: boolean },
 ): number {
-  if (style === 'a-frame') return 18;
+  if (style === 'a-frame') {
+    return brief.hasLoft
+      ? ridgeForGridAlignedLoft({ style, ridgeAxis: 'z', eaveHeightFt: 1 }, 18, widthFt, widthFt)
+      : 18;
+  }
   if (brief.kitBuildable && KIT_PITCH_DEG > 0) {
     return ridgeHeightForPitchFt(
       { style, ridgeAxis: 'z', ridgeHeightFt: 0, eaveHeightFt: 8 },
@@ -1101,7 +1143,9 @@ function gableRidgeFt(
       KIT_PITCH_DEG,
     );
   }
-  return brief.hasLoft ? 20 : 14;
+  return brief.hasLoft
+    ? ridgeForGridAlignedLoft({ style, ridgeAxis: 'z', eaveHeightFt: 8 }, 20, widthFt, widthFt)
+    : 14;
 }
 
 export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; roofStyle?: string; maxSqft?: number; hasLoft?: boolean; kitBuildable?: boolean; levels?: number; lot?: GenerationIntent['lot'] }): GenerationIntent {
@@ -1345,7 +1389,17 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
         : style === 'hip'
           ? { style, ridgeAxis: (widthFt >= depthFt ? 'x' : 'z') as 'x' | 'z', ridgeHeightFt: HIP_RIDGE_FT, eaveHeightFt: HIP_EAVE_FT }
           : style === 'gambrel'
-            ? { style, ridgeAxis: 'z' as const, ridgeHeightFt: GAMBREL_RIDGE_FT, eaveHeightFt: GAMBREL_EAVE_FT }
+            ? {
+              style,
+              ridgeAxis: 'z' as const,
+              // Gambrel had no loft awareness at all -- a fixed ridge whatever
+              // the brief asked for. It needs the least of any style to clear
+              // the grid, so it was failing WH-GRID-4FT for want of inches.
+              ridgeHeightFt: brief.hasLoft
+                ? ridgeForGridAlignedLoft({ style, ridgeAxis: 'z', eaveHeightFt: GAMBREL_EAVE_FT }, GAMBREL_RIDGE_FT, widthFt, widthFt)
+                : GAMBREL_RIDGE_FT,
+              eaveHeightFt: GAMBREL_EAVE_FT,
+            }
             : style === 'barn'
               ? { style, ridgeAxis: (widthFt >= depthFt ? 'x' : 'z') as 'x' | 'z', ridgeHeightFt: BARN_RIDGE_FT, eaveHeightFt: BARN_EAVE_FT }
               : { style, ridgeAxis: 'z' as const, ridgeHeightFt: gableRidgeFt(style, widthFt, brief), eaveHeightFt: style === 'a-frame' ? 1 : 8 },
