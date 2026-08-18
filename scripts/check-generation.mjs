@@ -194,6 +194,20 @@ for (const testCase of CASES) {
     const bathsInPlan = artifact.rooms.filter((room) => room.type === 'bathroom').length;
     check(`bath count ${testCase.expectBaths}`, bathsInPlan === testCase.expectBaths, `got ${bathsInPlan}`);
   }
+
+  // EVERY WALL-HUNG FIXTURE MUST NAME ITS WALL. The app blocks a plan whose
+  // fixture has no anchorWallId, and the whole offline ladder stayed green
+  // while the browser showed "fx-kitchen-fridge is missing anchorWallId":
+  // paired-geometry asserts this on STORED plans, and nothing asserted it on
+  // freshly generated ones. A product blocker no gate can see is the gap worth
+  // closing, not just the fixture that fell through it.
+  {
+    const WALL_HUNG = /counter|sink|range|refrigerator|toilet|vanity|shower|tub|wardrobe/;
+    const orphans = (artifact.fixtures ?? [])
+      .filter((f) => WALL_HUNG.test(String(f.type ?? '')) && !f.wallAnchor?.wallId);
+    check('every wall-hung fixture names its wall', orphans.length === 0,
+      orphans.map((f) => f.id).join(', '));
+  }
   if (testCase.expectBathNote) {
     // A dropped 2nd bath must be SURFACED (no silent program mismatch) — same
     // input-honesty class as the bedroom over-cap refusal.

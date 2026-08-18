@@ -11,6 +11,7 @@
 // generated footprint is refused on the SAME threshold the report would fail
 // (one source of truth — never two 0.35s that can drift apart).
 import { DEFAULT_MAX_COVERAGE_RATIO } from '../standards/code-advisory.ts';
+import { ceilingHeightAt as envelopeCeilingHeightAt, type CeilingPlane as EnvelopeCeilingPlane } from '../bim/envelope-clip.ts';
 // Openings are RESOLVED against the envelope, never authored blind to it — the
 // templates' spans are preferences, the roof decides what is physically possible.
 import { resolveEgressWindow } from './place-openings.ts';
@@ -328,7 +329,7 @@ interface StarterFixture {
  * (beds on the far edge, wet fixtures on the near edge, kitchen run on the
  * perimeter side) so the same intent always furnishes identically.
  */
-function starterFixtures(intent: GenerationIntent, walls: WallSegment[]): StarterFixture[] {
+function starterFixtures(intent: GenerationIntent, walls: WallSegment[], ceiling: EnvelopeCeilingPlane[] = []): StarterFixture[] {
   const { widthFt } = intent.footprint;
   const fixtures: StarterFixture[] = [];
   const nearestWall = (px: number, pz: number): WallSegment | undefined => {
@@ -422,36 +423,107 @@ function starterFixtures(intent: GenerationIntent, walls: WallSegment[]): Starte
         }
       }
     }
-    // NOT `else if` from here: an open core matches BOTH /kitchen/ and /living/,
-    // and the chain used to stop at the first, furnishing a combined room with a
-    // counter run and no sofa.
+    // A kitchen ZONE has walls on only some of its edges -- the sides it shares
+    // with the dining and living zones are open by definition. The recipe used
+    // to assume a deep room against the east perimeter and anchored the fridge
+    // to the room's north edge, which in a zone is thin air: the fixture came
+    // out with no anchorWallId and blocked the plan. It also derived the run
+    // depth from room.d, collapsing to a 2 ft counter in a 12x4 galley.
+    //
+    // So find the longest edge that actually CARRIES a wall and lay the run
+    // along it. That is what a galley kitchen is, and it works for the old deep
+    // room too.
     if (/kitchen/.test(text)) {
-      const onRightPerimeter = Math.abs(room.x + room.w - widthFt) < EPS;
-      const runX = onRightPerimeter ? room.x + room.w - 2 : room.x + 0.2;
-      const wallX = onRightPerimeter ? room.x + room.w : room.x;
-      const runDepth = Math.min(7, room.d - 2);
-      add(`fx-${slug}-counter`, room.id, 'counter_run', runX, room.z + 1, 1.8, runDepth, 'work aisle clear', { x: wallX, z: room.z + 1 + runDepth / 2 });
-      add(`fx-${slug}-sink`, room.id, 'sink', runX + 0.1, room.z + 1 + runDepth / 2 - 0.75, 1.6, 1.5, 'under window where possible', { x: wallX, z: room.z + 1 + runDepth / 2 });
-      add(`fx-${slug}-range`, room.id, 'range', runX - 0.1, room.z + 1 + runDepth + 0.3, 2.0, 1.8, 'landing space beside', { x: wallX, z: room.z + 1 + runDepth + 1.2 });
-      add(`fx-${slug}-fridge`, room.id, 'refrigerator', room.x + 0.4, room.z + 0.4, 2.8, 2.6, 'door swing clear', { x: room.x + 1.8, z: room.z });
+      const edges = [
+        { axis: 'z' as const, at: room.z, lo: room.x, hi: room.x + room.w, len: room.w, inward: 1 },
+        { axis: 'z' as const, at: room.z + room.d, lo: room.x, hi: room.x + room.w, len: room.w, inward: -1 },
+        { axis: 'x' as const, at: room.x, lo: room.z, hi: room.z + room.d, len: room.d, inward: 1 },
+        { axis: 'x' as const, at: room.x + room.w, lo: room.z, hi: room.z + room.d, len: room.d, inward: -1 },
+      ].filter((edge) => walls.some((wall) => {
+        const vertical = Math.abs(wall.span.x1 - wall.span.x2) < EPS;
+        if (edge.axis === 'x') {
+          if (!vertical || Math.abs(wall.span.x1 - edge.at) > 0.26) return false;
+          return Math.min(Math.max(wall.span.z1, wall.span.z2), edge.hi) - Math.max(Math.min(wall.span.z1, wall.span.z2), edge.lo) > 1;
+        }
+        if (vertical || Math.abs(wall.span.z1 - edge.at) > 0.26) return false;
+        return Math.min(Math.max(wall.span.x1, wall.span.x2), edge.hi) - Math.max(Math.min(wall.span.x1, wall.span.x2), edge.lo) > 1;
+      }));
+      // ...and pick it by USABLE length, not raw length. A counter needs
+      // standing headroom, and on an a-frame the longest wall is the one that
+      // dives under the eave: the first version of this ran a 10 ft counter
+      // from the ridge out to 4.17 ft of headroom. Measure the longest
+      // contiguous stretch of each edge that clears the work height, and lay
+      // the run inside it.
+      const MIN_WORK_HEADROOM_FT = 6.67;
+      const usable = (edge: typeof edges[number]) => {
+        if (!ceiling.length) return { lo: edge.lo, hi: edge.hi };
+        let best = { lo: edge.lo, hi: edge.lo };
+        let runStart: number | null = null;
+        for (let t = edge.lo; t <= edge.hi + 1e-6; t += 0.5) {
+          const px = edge.axis === 'z' ? t : edge.at + edge.inward * 1;
+          const pz = edge.axis === 'z' ? edge.at + edge.inward * 1 : t;
+          const ok = envelopeCeilingHeightAt(ceiling, px, pz) >= MIN_WORK_HEADROOM_FT;
+          if (ok && runStart === null) runStart = t;
+          if ((!ok || t + 0.5 > edge.hi) && runStart !== null) {
+            const end = ok ? t : t - 0.5;
+            if (end - runStart > best.hi - best.lo) best = { lo: runStart, hi: end };
+            runStart = null;
+          }
+        }
+        return best;
+      };
+      const scored = edges
+        .map((edge) => ({ edge, span: usable(edge) }))
+        .sort((a, b) => (b.span.hi - b.span.lo) - (a.span.hi - a.span.lo));
+      const edge = scored[0] && scored[0].span.hi - scored[0].span.lo >= 4 ? scored[0].edge : undefined;
+      const span = scored[0]?.span;
+      if (edge && span) {
+        const DEPTH = 2;
+        const runLen = Math.min(span.hi - span.lo - 0.4, 10);
+        const start = span.lo + 0.2;
+        // Along-run offsets: sink centred, range beyond it, fridge at the end.
+        const at = (offset: number, size: number) => {
+          const along = Math.min(start + offset, span.hi - 0.2 - size);
+          const inset = edge.inward > 0 ? edge.at : edge.at - DEPTH;
+          return edge.axis === 'z'
+            ? { x: along, z: inset, w: size, d: DEPTH, wall: { x: along + size / 2, z: edge.at } }
+            : { x: inset, z: along, w: DEPTH, d: size, wall: { x: edge.at, z: along + size / 2 } };
+        };
+        const run = at(0, runLen);
+        add(`fx-${slug}-counter`, room.id, 'counter_run', run.x, run.z, run.w, run.d, 'work aisle clear', run.wall);
+        const sink = at(runLen / 2 - 0.8, 1.6);
+        add(`fx-${slug}-sink`, room.id, 'sink', sink.x, sink.z, sink.w, sink.d, 'under window where possible', sink.wall);
+        const range = at(runLen / 2 + 1.2, 2.0);
+        add(`fx-${slug}-range`, room.id, 'range', range.x, range.z, range.w, range.d, 'landing space beside', range.wall);
+        const fridge = at(runLen - 2.8, 2.8);
+        add(`fx-${slug}-fridge`, room.id, 'refrigerator', fridge.x, fridge.z, fridge.w, fridge.d, 'door swing clear', fridge.wall);
+      }
+    }
+    // Dining is its own zone now, so it furnishes itself rather than being
+    // squeezed into the living room's recipe.
+    if (/dining/.test(text) && !/kitchen/.test(text)) {
+      if (room.w >= 6 && room.d >= 6) {
+        add(`fx-${slug}-dining`, room.id, 'round_table_six_chairs', room.x + room.w / 2 - 2, room.z + room.d / 2 - 2, 4, 4, 'chairs pull out');
+      }
     }
     if (/living|great/.test(text)) {
-      if (room.w >= 12 && room.d >= 9) {
-        // In an open core the kitchen run takes the east end, so the seating
-        // goes west and dining sits BETWEEN them -- which is how Den sequences
-        // it. In a living-only room the old placement still applies.
+      if (room.w >= 10 && room.d >= 9) {
         const sharesWithKitchen = /kitchen/.test(text);
-        add(`fx-${slug}-sofa`, room.id, 'sofa_chairs_coffee_table', room.x + 1.5, room.z + 1.5, Math.min(8, room.w - 4), Math.min(6, room.d - 3), 'circulation around');
-        add(
-          `fx-${slug}-dining`,
-          room.id,
-          'round_table_six_chairs',
-          sharesWithKitchen ? room.x + room.w / 2 - 2 : room.x + room.w - 5,
-          room.z + room.d / 2 - 2,
-          4,
-          4,
-          'chairs pull out',
-        );
+        add(`fx-${slug}-sofa`, room.id, 'sofa_chairs_coffee_table', room.x + 1.5, room.z + 1.5, Math.min(8, room.w - 3), Math.min(6, room.d - 3), 'circulation around');
+        // Only carry dining here when the living room IS the dining room; a
+        // separate Dining zone furnishes its own table above.
+        if (sharesWithKitchen || !intent.rooms.some((r) => /dining/.test(`${r.type} ${r.label}`.toLowerCase()))) {
+          add(
+            `fx-${slug}-dining`,
+            room.id,
+            'round_table_six_chairs',
+            sharesWithKitchen ? room.x + room.w / 2 - 2 : room.x + room.w - 5,
+            room.z + room.d / 2 - 2,
+            4,
+            4,
+            'chairs pull out',
+          );
+        }
       }
     }
   }
@@ -997,7 +1069,7 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
       // a bed or a shower under a 2 ft eave is drawn-but-unusable space. They
       // resolve AS A SET, so a displaced fixture never lands on one already
       // placed (resolving each alone sends the whole room to one optimum).
-      const authored = starterFixtures(intent, allWalls);
+      const authored = starterFixtures(intent, allWalls, ceilingPlanes);
       const resolutions = resolveFixtureSet(authored, roomRects, ceilingPlanes);
       return authored.map((fixture) => {
         const resolved = resolutions.get(fixture.id);
