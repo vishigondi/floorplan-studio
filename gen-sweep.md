@@ -120,6 +120,46 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Every plan the product ships reports "blocked" — now ratcheted (2026-08-18)
+
+Having fixed the compiler's passthroughs, the obvious question: what does the
+validator say about the plans already in the store? **All six are blocked**, and
+none of it was caused by today's change — stored artifacts predate it, and the
+app has always used the shipped adapter, so this is what the product has been
+showing.
+
+Two distinct causes, which is why one blanket exemption would have been useless:
+
+| plan | blocked on | why |
+|---|---|---|
+| a-frame-22, a-frame-bunk, outpost-medium | wall-module, openings (+ wall-height, floor-span) | **traced** drawings — real drawn widths (6.67 ft, 5.28 ft, 7.51 ft, 4.50 ft) that were never designed to a 4 ft module |
+| gen-001, brief-aframe-2br, loft-showcase | openings (+ floor-span on gen-001) | **compiled before** the module snap; new plans no longer do this |
+
+Recorded in the drift ratchet rather than fixed, for reasons that differ per
+plan: the traced trio must never be edited, gen-001's JSON is frozen, and
+regenerating `brief-aframe-2br` / `loft-showcase` would write into the
+**symlinked dev-compiler checkout** rather than this repo — the open two-repo
+question. Each baseline entry says which of those applies.
+
+Baseline went **43 -> 155** accepted violations: `wall-module` 82, `openings` 18,
+`wall-height` 10, `floor-span` 2.
+
+The keys come from `validateBuildability` itself, not a recomputation here. Every
+time this project has reimplemented shipped logic inside a battery the copy
+drifted and hid the very defect it existed to catch — three times today alone —
+so the ratchet asks the validator.
+
+Mutation-tested both directions without touching a single artifact: drop an
+accepted key and the gate reports new drift; add a key for a violation that does
+not exist and it reports a stale exemption.
+
+**What this buys:** the state can now only improve. A newly stored plan that is
+blocked, or any regression in an existing one, fails the gate. Before this, all
+155 were invisible.
+
+Incidental find from the mutation: `buildable-floor-span:Floor` on gen-001 —
+its joist span exceeds the 16 ft limit, which nothing had reported either.
+
 ## Every interior passthrough was off the panel module (2026-08-18)
 
 Third decision dissolved by measuring instead of asking — and it needed a

@@ -30,6 +30,8 @@ const { ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelop
 const { headroomOverFt, requiredHeadroomFt } = await import(join(root, 'lib/generate/place-fixtures.ts'));
 const { PLACEMENT_CLEARANCE_FT } = await import(join(root, 'lib/generate/placement.ts'));
 const { facadeFor, drawnElevationViews } = await import(join(root, 'lib/elevations.ts'));
+const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
+const { validateBuildability } = await import(join(root, 'lib/build-validator.ts'));
 
 const LOOP_DIR = join(root, 'public', 'data', 'den-image-loop');
 // Lives beside its battery, NOT under artifacts/ — that directory is entirely
@@ -112,6 +114,26 @@ function violations(artifact) {
       }
       if (facades.length > 1) found.push(`opening-ambiguous-facade:${opening.id}`);
     }
+  }
+
+  // BUILDABILITY OF WHAT WE SHIP. Taken from validateBuildability itself rather
+  // than recomputed here — every time this project has reimplemented shipped
+  // logic in a battery, the copy drifted and hid the defect it was meant to
+  // catch. Every stored plan is currently blocked, for two different reasons
+  // that the baseline records separately: traced plans carry real drawn
+  // dimensions that were never on the WikiHouse module, while the JSON-only
+  // plans predate the compiler snapping its passthroughs to it.
+  try {
+    const report = validateBuildability(pairedArtifactToLocalHome(artifact));
+    for (const rule of report.rules ?? []) {
+      if (rule.status !== 'blocked') continue;
+      for (const detail of rule.details ?? []) {
+        const subject = String(detail).split(/\s+/)[0];
+        if (subject) found.push(`buildable-${rule.id}:${subject}`);
+      }
+    }
+  } catch (error) {
+    found.push(`buildable-threw:${String(error).split('\n')[0].slice(0, 60)}`);
   }
 
   return found.sort();
