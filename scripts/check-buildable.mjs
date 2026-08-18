@@ -365,6 +365,37 @@ for (const brief of BRIEFS) {
   check(`${brief} — interior door units match the plan`, bomQty('door-int') === intDoors, `${bomQty('door-int')} vs ${intDoors}`);
   check(`${brief} — window units match the plan`, bomQty('window-std') === (res.artifact.windows ?? []).length,
     `${bomQty('window-std')} vs ${(res.artifact.windows ?? []).length}`);
+
+  // ROOF MODULES REPEAT ALONG THE RIDGE. The span picks which block class the
+  // kit ships (R-L / R-S / R-XXS, plus -42), it does not set the count. This
+  // used ceil(width/4) regardless of ridge axis — the dimension the roof SPANS
+  // whenever the ridge runs along z — so it was right only for a square plan by
+  // coincidence, and a 48x28 gable billed 24 modules for a 28 ft ridge that
+  // takes 14. The error grew with how un-square the house was.
+  const roofLine = (shippedReport.bom ?? []).find((item) => item.category === 'roof');
+  const ridgeParallel = res.artifact.roof?.ridgeAxis === 'x'
+    ? res.artifact.footprint.widthFt
+    : res.artifact.footprint.depthFt;
+  const expectedRoof = res.artifact.roof?.style === 'flat'
+    ? Math.ceil(res.artifact.footprint.widthFt / 4) * Math.ceil(res.artifact.footprint.depthFt / 4)
+    : Math.ceil(ridgeParallel / 4) * 2;
+  check(`${brief} — roof modules count along the ridge`, roofLine?.quantity === expectedRoof,
+    `${roofLine?.componentId}=${roofLine?.quantity} vs ${expectedRoof} (ridge-parallel ${ridgeParallel}ft, ${res.artifact.roof?.style})`);
+}
+
+// A square plan hides the axis bug entirely — width and depth agree, so the old
+// formula and the correct one give the same number. Grade a deliberately
+// UN-square pitched plan, or this assertion proves nothing.
+{
+  const brief = '4 bed gable, 100x120 lot, 10 ft setbacks';
+  const res = compileIntent(mockIntentFromBrief(parseBrief(brief)), 'roof-axis', brief);
+  const w = res.artifact.footprint.widthFt, d = res.artifact.footprint.depthFt;
+  check('the roof-axis fixture is genuinely un-square', Math.abs(w - d) >= 8, `${w}x${d}`);
+  const roofLine = (validateBuildability(pairedArtifactToLocalHome(res.artifact)).bom ?? [])
+    .find((item) => item.category === 'roof');
+  check('an un-square gable bills along its ridge, not across its span',
+    roofLine?.quantity === Math.ceil(d / 4) * 2,
+    `${roofLine?.quantity} vs ${Math.ceil(d / 4) * 2} (would be ${Math.ceil(w / 4) * 2} across the span)`);
 }
 
 // Traced plans describe the same storeys TWICE (a-frame-22 carries floor-0/

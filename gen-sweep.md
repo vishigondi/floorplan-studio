@@ -120,6 +120,62 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Roof modules were counted across the span, not along the ridge (2026-08-17)
+
+Finishing the BOM gating reached `roof-steep` / `roof-flat` / `roof-gable`, and
+the formula was:
+
+```
+ceil(width / 4) * (flat ? ceil(depth / 4) : 2)
+```
+
+For a pitched roof that tiles across the **width** whatever the ridge does. With
+`ridgeAxis: 'z'` the width is the dimension the roof **spans**, not the one the
+modules repeat along — so the count was right only when width and depth happened
+to agree.
+
+| plan | ridge | billed | correct |
+|---|---|---|---|
+| 28x28 gable | z | 14 | 14 (square, hides it) |
+| 36x28 gable | z | 18 | **14** |
+| 48x28 gable | z | 24 | **14** |
+
+A 48x28 gable billed **24 modules for a 28 ft ridge that takes 14** — a 71%
+over-count that grew with how un-square the house was, and vanished entirely on
+the square plans everything else is tested against.
+
+Grounded in the kit rather than my assumption: Skylark ships roof blocks in span
+**classes** (`R-L`, `R-S`, `R-XXS`, plus `-42` variants). The span selects WHICH
+block; the blocks repeat along the ridge. So the count is ridge-parallel length ÷
+module, per plane, and the span sets the class. The note on the BOM line now says
+that, and says plainly that slope length is not subdivided.
+
+The fixture matters as much as the fix: every other roof assertion uses a 28x28
+plan, where the bug is invisible. The gate grades a deliberately un-square
+48x28 plan and **asserts the fixture is un-square** — otherwise the assertion
+would quietly stop proving anything if the brief ever changed.
+
+Mutation-tested: count across the span again -> fails; one plane instead of two
+-> fails. Both restore green.
+
+## Moved the project to ~/projects/wikihouse-planner (2026-08-17)
+
+At the user's request. 2.1 GB moved with the working tree intact — git history,
+remote and the one uncommitted change all preserved, `npm run gates` and
+`gates:live` both green from the new path afterwards.
+
+Two things handled on the way: stale wait-loops from this session still held the
+old directory (stopped first), and **MaxRoom's dev server was running out of the
+destination parent** — left strictly alone this time, and verified still running
+afterwards.
+
+**The plan store did NOT move.** `public/data/den-image-loop` is a committed
+symlink to an absolute path in the *old* workspace
+(`~/.openclaw/workspace/projects/dev-compiler/...`). It still resolves — 39
+entries — so everything works, but the planner now reaches back into a workspace
+the project has otherwise left. That is the same two-repo split flagged earlier,
+now with the two halves further apart.
+
 ## Over half the bill of materials was ungated; the loft deck was missing (2026-08-17)
 
 After the guard-rail over-count, the obvious question: what else in the BOM is

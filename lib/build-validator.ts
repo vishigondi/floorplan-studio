@@ -492,13 +492,34 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     rules.roofPitch.passes.push(`Roof pitch ${pitch.toFixed(1)}deg matches the ${pitchSku.sku}deg stock rafter SKU.`);
   }
   const roofComponent = componentForRoof(home, pitch);
+  // Pitched-roof modules repeat ALONG THE RIDGE; the span picks which block
+  // class (Skylark ships R-L / R-S / R-XXS, plus -42 variants), it does not set
+  // the count. This counted `ceil(width/4)` regardless of ridge axis, which is
+  // the dimension the roof SPANS whenever the ridge runs along z — right only
+  // for a square plan by coincidence. A 48x28 gable billed 24 modules where the
+  // 28 ft ridge takes 7 per plane, 14 in total: a 71% over-count that grew with
+  // how un-square the house was.
+  const ridgeParallelFt = home.roofSemantics?.ridgeAxis === 'x'
+    ? home.footprint.width
+    : home.footprint.depth;
+  const roofModulesPerPlane = Math.ceil(ridgeParallelFt / PANEL_WIDTH_FT);
+  const roofModules = home.roofStyle === 'flat'
+    ? Math.ceil(home.footprint.width / PANEL_WIDTH_FT) * Math.ceil(home.footprint.depth / PANEL_WIDTH_FT)
+    : roofModulesPerPlane * 2;
+
   addBom(bom, {
     componentId: roofComponent,
     description: 'Roof panel/rafter module',
     category: 'roof',
-    quantity: Math.max(1, Math.ceil(home.footprint.width / PANEL_WIDTH_FT) * (home.roofStyle === 'flat' ? Math.ceil(home.footprint.depth / PANEL_WIDTH_FT) : 2)),
+    quantity: Math.max(1, roofModules),
     unit: 'each',
-    notes: [home.roofSemantics?.status === 'validated' ? 'Uses paired roof/elevation semantics.' : 'Roof quantity is provisional until roof/elevation JSON is validated.'],
+    notes: [
+      home.roofStyle === 'flat'
+        ? `Flat deck tiled over ${home.footprint.width}x${home.footprint.depth}ft.`
+        : `${roofModulesPerPlane} module(s) per plane along the ${ridgeParallelFt}ft ridge, 2 planes. `
+          + 'Span sets the block class (Skylark R-L/R-S/R-XXS), not the count; slope length is not subdivided.',
+      home.roofSemantics?.status === 'validated' ? 'Uses paired roof/elevation semantics.' : 'Roof quantity is provisional until roof/elevation JSON is validated.',
+    ],
   });
 
   const bomItems = [...bom.values()].filter((item) => item.quantity > 0);
