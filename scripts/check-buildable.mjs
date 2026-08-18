@@ -253,6 +253,13 @@ for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn
 for (const style of ['a-frame', 'gable', 'gambrel', 'barn']) {
   BRIEFS.push(`2 bed ${style} roof with loft, 40x60 lot, 5 ft setbacks`);
 }
+// A lot too tight for ANY deck. Every other brief here clears the coverage cap
+// with room for one, which left the deck BOM check's zero branch unexercised --
+// a phantom deck line on a deckless plan would have gone unbilled and unseen.
+// On a 40x58 lot the 28x28 footprint leaves 28 sq ft under the 35% cap, less
+// than the smallest 8x4 deck, so this plan must ship with no deck and no deck
+// panels.
+BRIEFS.push('1 bed gable roof, 40x58 lot, 5 ft setbacks');
 
 for (const brief of BRIEFS) {
   const res = compileIntent(mockIntentFromBrief(parseBrief(brief)), 'buildable-test', brief);
@@ -362,8 +369,17 @@ for (const brief of BRIEFS) {
   const perimeterFt = (res.artifact.footprint.widthFt + res.artifact.footprint.depthFt) * 2;
   check(`${brief} — foundation sill covers the perimeter`, bomQty('foundation') === Math.ceil(perimeterFt / 4),
     `${bomQty('foundation')} vs ${Math.ceil(perimeterFt / 4)} for ${perimeterFt}ft`);
-  // None of the compiled briefs produce a deck, so the line must not appear.
-  check(`${brief} — no deck panels without a deck room`, bomQty('floor-deck') === 0, `${bomQty('floor-deck')}`);
+  // Deck panels must be JUSTIFIED BY A DECK ROOM and match its area. This used
+  // to assert simply that the count was 0, on the stated premise that no brief
+  // produced a deck -- true when it was written, false since the entry deck
+  // landed. Asserting the count the room actually implies is the check the name
+  // always promised, and it is strictly stronger: it still catches a phantom
+  // deck line, and now also catches a deck that is billed short or double.
+  const deckRoom = (res.artifact.rooms ?? []).find((room) => String(room.type ?? '') === 'deck');
+  const deckBounds = deckRoom?.bounds;
+  const expectedDeck = deckBounds ? Math.ceil(deckBounds.w / 4) * Math.ceil(deckBounds.d / 4) : 0;
+  check(`${brief} — deck panels match the deck room`, bomQty('floor-deck') === expectedDeck,
+    `${bomQty('floor-deck')} vs ${expectedDeck}${deckBounds ? ` for ${deckBounds.w}x${deckBounds.d}ft deck` : ' (no deck room)'}`);
 
   // THE BILL MUST NAME WHAT IT LEAVES OUT. Gable-end infill is enclosed in the
   // model (buildable-bim extrudes gable-end walls to the ridge) but panels are

@@ -85,8 +85,15 @@ const METRICS = {
       || Math.abs(a1.z + a1.d - b1.z) < 0.51 || Math.abs(b1.z + b1.d - a1.z) < 0.51);
     return { met: touches, detail: touches ? 'adjacent' : 'kitchen does not touch living/dining' };
   },
+  // An entry must be an INTERIOR transitional space -- Den's outpost-medium has
+  // a real Entry room inside the envelope. Matching the word alone is not
+  // enough: an "Entry Deck" outside the footprint flipped this metric MET on
+  // two briefs while nothing about the interior changed. Same vacuous-metric
+  // bug as no-corridor keying on the word "hall". Outdoor platforms are
+  // excluded by type, so the name can never carry the metric on its own.
   'has-entry': (a) => {
-    const hit = ground(a).some((r) => /entry|foyer|mudroom/.test(`${typeOf(r)} ${labelOf(r)}`));
+    const outdoor = (r) => /^(deck|porch|patio|balcony|terrace)$/.test(typeOf(r));
+    const hit = ground(a).some((r) => !outdoor(r) && /entry|foyer|mudroom/.test(`${typeOf(r)} ${labelOf(r)}`));
     return { met: hit, detail: hit ? 'present' : 'no entry room' };
   },
   'has-closets': (a) => {
@@ -110,7 +117,7 @@ const METRICS = {
 // Raise FLOOR as metrics land. It may never fall.
 // Measured baseline on 2026-08-18: 7/28. The 3-bed scores 0/7 -- the same plan
 // compared against Den's barnhouse-family in DEN_GAP_REVIEW.md.
-const FLOOR = Number(process.env.DEN_FIDELITY_FLOOR ?? 10);
+const FLOOR = Number(process.env.DEN_FIDELITY_FLOOR ?? 14);
 
 let met = 0;
 let total = 0;

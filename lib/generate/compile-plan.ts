@@ -240,6 +240,13 @@ interface WallSegment {
 }
 
 /** Interior walls: maximal shared-edge segments between adjacent rooms. */
+/** Rooms that are OUTDOOR platforms rather than enclosed space. They sit outside
+ * the conditioned footprint, carry no interior walls, and are not habitable --
+ * the habitable-room rules (R304/R305) must never be applied to them. */
+function isUnconditioned(room: IntentRoom): boolean {
+  return /^(deck|porch|patio|balcony|terrace)$/.test(String(room.type ?? ''));
+}
+
 function deriveInteriorWalls(rooms: IntentRoom[]): WallSegment[] {
   const walls: WallSegment[] = [];
   let counter = 0;
@@ -247,6 +254,11 @@ function deriveInteriorWalls(rooms: IntentRoom[]): WallSegment[] {
     for (let j = i + 1; j < rooms.length; j += 1) {
       const a = rooms[i];
       const b = rooms[j];
+      // A deck abutting the facade shares an edge with the room behind it, but
+      // that edge is the EXTERIOR wall -- which already exists. Deriving an
+      // interior wall there would double the facade, put a stud wall across the
+      // entry door, and bill the panel twice in the BOM.
+      if (isUnconditioned(a) || isUnconditioned(b)) continue;
       // Vertical shared edge: a's right == b's left (or vice versa)
       for (const [left, right] of [[a, b], [b, a]] as const) {
         if (Math.abs(left.x + left.w - right.x) < EPS) {
@@ -517,10 +529,22 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     const setbacks = lot.setbacksFt ?? {};
     const envelopeW = lot.widthFt - (setbacks.left ?? 0) - (setbacks.right ?? 0);
     const envelopeD = lot.depthFt - (setbacks.front ?? 0) - (setbacks.rear ?? 0);
-    if (widthFt > envelopeW + EPS || depthFt > envelopeD + EPS) {
+    // Measure the SITE extent, not just the heated box. Rooms may legitimately
+    // sit outside the conditioned footprint -- the entry deck does -- but a deck
+    // is still a structure standing on the lot, so it consumes setback like any
+    // other. Checking `footprint` alone would let a deck sprawl into a setback
+    // completely unseen by the gate that exists to catch exactly that.
+    const groundRooms = rooms;
+    const siteW = Math.max(widthFt, ...groundRooms.map((r) => r.x + r.w))
+      - Math.min(0, ...groundRooms.map((r) => r.x));
+    const siteD = Math.max(depthFt, ...groundRooms.map((r) => r.z + r.d))
+      - Math.min(0, ...groundRooms.map((r) => r.z));
+    if (siteW > envelopeW + EPS || siteD > envelopeD + EPS) {
+      const outside = siteW > widthFt + EPS || siteD > depthFt + EPS;
       errors.push(
-        `footprint ${widthFt}x${depthFt} ft exceeds the buildable envelope ${envelopeW}x${envelopeD} ft `
-        + `(lot ${lot.widthFt}x${lot.depthFt} ft minus setbacks)`,
+        `built extent ${siteW}x${siteD} ft exceeds the buildable envelope ${envelopeW}x${envelopeD} ft `
+        + `(lot ${lot.widthFt}x${lot.depthFt} ft minus setbacks)`
+        + (outside ? ` — the ${widthFt}x${depthFt} ft footprint fits, but attached exterior structure pushes it past the setback` : ''),
       );
     }
     // Likewise refuse a footprint over the lot-coverage cap — the SAME threshold
@@ -528,10 +552,22 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     // a plan that fails its own coverage report. Smaller templates have already
     // been tried by mockIntentFromBrief; reaching here means none fit this lot.
     const maxRatio = lot.maxCoverageRatio ?? DEFAULT_MAX_COVERAGE_RATIO;
-    const coverage = (widthFt * depthFt) / (lot.widthFt * lot.depthFt);
+    // Whether an uncovered deck counts toward lot coverage is genuinely
+    // jurisdiction-dependent -- ZON-COVERAGE is worded "building footprint", and
+    // many ordinances exempt at-grade decks while counting elevated ones. We
+    // COUNT it. Assuming the exemption would be choosing the reading that makes
+    // our own plans pass, and would understate coverage on exactly the small
+    // lots where the cap binds. Conservative here means a smaller deck, not a
+    // surprise at the permit counter.
+    const attachedArea = rooms
+      .filter((room) => isUnconditioned(room))
+      .reduce((sum, room) => sum + room.w * room.d, 0);
+    const coverage = (widthFt * depthFt + attachedArea) / (lot.widthFt * lot.depthFt);
     if (coverage > maxRatio + 1e-6) {
       errors.push(
-        `footprint ${widthFt}x${depthFt} ft covers ${(coverage * 100).toFixed(1)}% of the `
+        `footprint ${widthFt}x${depthFt} ft`
+        + (attachedArea > 0 ? ` plus ${attachedArea} sq ft of attached deck` : '')
+        + ` covers ${(coverage * 100).toFixed(1)}% of the `
         + `${lot.widthFt}x${lot.depthFt} ft lot, over the ${(maxRatio * 100).toFixed(0)}% coverage cap `
         + `— enlarge the lot or lower the program`,
       );
@@ -557,6 +593,17 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
   }
 
   for (const room of rooms) {
+    // Outdoor platforms are SUPPOSED to sit outside the heated box -- that is
+    // what makes them outdoor. They are not unchecked, though: the envelope and
+    // coverage tests above measure the built extent including them, so a deck
+    // still has to fit the lot. What they must not do is overhang the facade
+    // sideways, leaving a corner of decking cantilevered off nothing.
+    if (isUnconditioned(room)) {
+      if (room.x < -EPS || room.x + room.w > widthFt + EPS) {
+        errors.push(`room ${room.id} overhangs the ${widthFt} ft facade (x ${room.x} to ${room.x + room.w})`);
+      }
+      continue;
+    }
     if (room.x < -EPS || room.z < -EPS || room.x + room.w > widthFt + EPS || room.z + room.d > depthFt + EPS) {
       errors.push(`room ${room.id} extends outside the footprint`);
     }
@@ -1412,6 +1459,51 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
       { id: 'win-bed3-s', roomId: 'room-bed3', span: { x1: 34, z1: depthFt, x2: 38, z2: depthFt } },
       { id: 'win-bed4-e', roomId: 'room-bed4', span: { x1: widthFt, z1: 20, x2: widthFt, z2: 24 } },
     );
+  }
+
+  // ENTRY DECK. Every Den cabin opens onto one, and it is the cheapest piece of
+  // their character to earn: it sits OUTSIDE the conditioned footprint (Den's
+  // a-frame-22 runs its decks from x -6.7..0 and 36..38), so it cannot disturb
+  // the interior grid or any habitable-room rule.
+  //
+  // It is not free, though. A deck is a structure standing on the lot, so it
+  // has to fit the buildable envelope AND the coverage cap -- compileIntent now
+  // measures both against the built extent rather than the heated box. We take
+  // the largest grid-aligned deck that fits and no more. On a tight lot that is
+  // a modest entry porch; where nothing fits there is simply no deck, because
+  // shrinking the house to make room for one would be a bad trade.
+  {
+    const sb = brief.lot?.setbacksFt ?? {};
+    const envelopeD = brief.lot ? brief.lot.depthFt - (sb.front ?? 0) - (sb.rear ?? 0) : Infinity;
+    const lotArea = brief.lot ? brief.lot.widthFt * brief.lot.depthFt : Infinity;
+    const maxRatio = brief.lot?.maxCoverageRatio ?? DEFAULT_MAX_COVERAGE_RATIO;
+    const areaBudget = brief.lot ? maxRatio * lotArea - widthFt * depthFt : Infinity;
+    const depthRoom = envelopeD - depthFt;
+    const entryMid = livingW * 0.75;
+
+    let deck: { x: number; w: number; d: number } | null = null;
+    outer: for (const deckD of [8, 4]) {
+      if (deckD > depthRoom + EPS) continue;
+      for (const deckW of [widthFt, 16, 12, 8].filter((w) => w <= widthFt)) {
+        if (deckW * deckD > areaBudget + EPS) continue;
+        // Centre on the entry door, snapped to the 4 ft panel grid and clamped
+        // inside the facade so the deck never overhangs a corner.
+        const x = Math.max(0, Math.min(widthFt - deckW, Math.round((entryMid - deckW / 2) / 4) * 4));
+        deck = { x, w: deckW, d: deckD };
+        break outer;
+      }
+    }
+    if (deck) {
+      rooms.push({
+        id: 'room-deck',
+        label: deck.w >= widthFt ? 'Deck' : 'Entry Deck',
+        type: 'deck',
+        x: deck.x,
+        z: -deck.d,
+        w: deck.w,
+        d: deck.d,
+      });
+    }
   }
 
   return {
