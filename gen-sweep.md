@@ -120,6 +120,50 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Swept every silent-skip guard; the lane-redness gate had never run either (2026-08-17)
+
+Six times today a check was green because it never executed, so I stopped
+finding them one at a time and scanned for the shape: an assertion inside a
+conditional whose false branch reports nothing. 49 candidates across the
+batteries, most of them legitimate (`if (failures)` summaries, per-testcase
+optional expectations, plain branches). Three were not.
+
+### The worst one: the gate that proves the lanes can go red
+```js
+if (!only.length) {              // <- and check:visual:quick ALWAYS passes --only
+  ...deliberately break a plan, require the design lane to turn `blocked`...
+```
+This is the probe that breaks a plan's wall graph on purpose and demands the
+readiness lane turn red. It is the one gate standing between "the lanes work"
+and "every plan we sweep is healthy, so green proves only that good plans look
+good" — and it has **never run in CI**, behind the same `--only` flag that hid
+the packet gate and the generated lane. Third assertion found behind that one
+flag today, in the same file.
+
+It now runs for `--only` sweeps. Because it briefly writes a broken artifact to
+disk it also now **refuses to pick a protected plan** — the traced trio and
+gen-001 are excluded, since "restored in `finally`" is not a licence to edit an
+artifact the working agreement says is never edited. If nothing eligible remains
+it reports that, rather than passing over a probe it did not run.
+
+Verified both ways: the mutation fails with
+`design:pass design:blocked design:blocked ...` — the blocked lane is really
+there, so the probe genuinely exercises the path — and sha256 of all five
+protected/probe artifacts is **byte-identical** before and after a full run.
+
+### Two "couldn't check" guards that reported nothing
+- `if (await bim.count())` — no BIM 3D button meant the 3D assertions vanished.
+- `if (artifactForKit?.roof && ...)` — **seven** kit and elevation assertions
+  hung off an artifact that, if unreadable, silently took them all with it.
+
+Both now assert the precondition itself. A missing control is a finding, not a
+reason to say nothing.
+
+### Evidence, not absence of failure
+The quick sweep went **58 -> 66 assertions**, and the live ladder reports the
+same 66. That is the number I now check first: an assertion count that did not
+move means the code I just added did not run.
+
 ## The bill now says what it assumes — and the packet gate never ran (2026-08-17)
 
 `validateBuildability` has always published `assumptions` — panel module, wall

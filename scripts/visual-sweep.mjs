@@ -174,6 +174,12 @@ async function sweepPlan(page, planId) {
     //     assessment was gated offline for a whole fire while showing nowhere,
     //     so the one question a WikiHouse customer has had no on-screen answer.
     const artifactForKit = artifactFor(planId);
+    // Seven kit/elevation assertions hang off this artifact. If it cannot be
+    // read they all vanish and the plan still reports clean, so the load itself
+    // is asserted.
+    check(planId, 'the plan artifact loads (kit + elevation checks depend on it)',
+      Boolean(artifactForKit?.roof && artifactForKit.footprint),
+      artifactForKit ? 'artifact has no roof/footprint' : 'artifact could not be read');
     if (artifactForKit?.roof && artifactForKit.footprint) {
       const shown = await page.locator('[data-kit-status]').first().getAttribute('data-kit-status').catch(() => null);
       record.kitStatus = shown;
@@ -218,7 +224,11 @@ async function sweepPlan(page, planId) {
 
     // 3. The 3D model.
     const bim = page.getByRole('button', { name: 'BIM 3D', exact: true }).first();
-    if (await bim.count()) {
+    // Report a missing control rather than skipping the 3D assertions in
+    // silence — "no BIM 3D button" is a finding, not a reason to say nothing.
+    const bimCount = await bim.count();
+    check(planId, '3D view is reachable', bimCount > 0, 'no BIM 3D button on the page');
+    if (bimCount) {
       await bim.click();
       await page.waitForTimeout(2200);
       const canvas = page.locator('canvas').first();
@@ -480,10 +490,24 @@ if (targets.length) {
 // the UI. Every plan we sweep is healthy, so a green run proves only that good
 // plans look good. This deliberately breaks one and requires the design lane to
 // turn `blocked` — then puts it back.
-if (!only.length) {
-  const probeId = generated[0]?.id ?? targets[0];
-  const dir = join(root, 'public', 'data', 'den-image-loop', probeId, 'paired');
-  const file = existsSync(dir) ? readdirSyncSafe(dir).find((name) => name.endsWith('.paired.json')) : null;
+// Runs for --only sweeps too. This was gated on `!only.length` while
+// check:visual:quick — the only visual sweep the live ladder runs — always
+// passes --only, so THE GATE THAT PROVES THE LANES CAN GO RED has never run in
+// CI. That is the worst possible one to skip: every plan swept is healthy, so
+// without it a green run only ever proved that good plans look good.
+//
+// It briefly writes a broken artifact to disk, so it must never pick a plan the
+// working agreement protects: the traced plans are never edited and gen-001's
+// JSON is frozen. Restored in `finally` either way.
+const PROBE_INELIGIBLE = new Set(['a-frame-22', 'a-frame-bunk', 'outpost-medium', 'gen-001']);
+{
+  const probeId = generated[0]?.id ?? targets.find((id) => !PROBE_INELIGIBLE.has(id));
+  const dir = probeId ? join(root, 'public', 'data', 'den-image-loop', probeId, 'paired') : null;
+  const file = dir && existsSync(dir) ? readdirSyncSafe(dir).find((name) => name.endsWith('.paired.json')) : null;
+  // Never skip in silence: if nothing is eligible, say so rather than reporting
+  // a clean run in which the lanes were never proven able to fail.
+  check(probeId ?? 'lane-probe', 'a plan is available to prove the lanes can go red',
+    Boolean(file), probeId ? `no paired artifact for ${probeId}` : `every target is protected: ${targets.join(', ')}`);
   if (file) {
     const path = join(dir, file);
     const original = readFileSync(path, 'utf8');
