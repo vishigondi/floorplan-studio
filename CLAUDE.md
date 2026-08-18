@@ -72,3 +72,16 @@ Chrome blocks a 2nd programmatic download per session. See the playbook §7.
 (Shipped 2026-06-15: compiled lofts — "...with loft" on an a-frame or steep
 gable builds a level-1 loft over the roof's headroom band, R305-checked from
 the loft floor. Single-level plans compile unchanged.)
+
+## Before deploying publicly
+
+`PUBLIC_DEPLOYMENT=1` **must** be set in the deployment environment. The planner
+is linked to a Vercel project, and the licensing gate (`lib/licensing.ts`,
+enforced in `app/api/plan-file`) defaults to PERMISSIVE so local work and the
+gate ladder see every plan.
+
+Without it, a public deployment serves all 18 Den-derived proposals. Repo
+visibility does not cover this: serving them publicly is redistribution wherever
+the bytes live, and their licence for that is not established. With it, only the
+3 `constrained_json` plans — our own compiler's output — are served, and the
+manifest is rewritten to match so the feed does not disclose the rest.
