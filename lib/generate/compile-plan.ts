@@ -174,6 +174,28 @@ interface LoftBuild {
  * when the roof is too low to give honest headroom — the plan stays single
  * level rather than fake a loft under a roof that can't hold one.
  */
+/**
+ * Snap an interior passthrough onto the 4 ft panel module.
+ *
+ * Rooms are placed on the grid, so wall runs start and end on module — but the
+ * openings punched through them were hand-placed (z 2 -> 10 on a 0 -> 12 wall),
+ * which is 2 ft into the run and straddling the joints at 4 and 8. Every
+ * passthrough the compiler emitted was off-module, so `check:buildable`'s
+ * openings rule refused all of them the moment it was fed real segmented walls.
+ *
+ * Shrink INWARD (ceil the start, floor the end): that lands both edges on a
+ * joint and never eats the corner return. If the result is narrower than one
+ * panel the opening cannot be module-aligned where it sits, so fall back to a
+ * single centred panel.
+ */
+function snapOpeningToModule(lo: number, hi: number): { lo: number; hi: number } {
+  const start = Math.ceil(lo / 4) * 4;
+  const end = Math.floor(hi / 4) * 4;
+  if (end - start >= 4) return { lo: start, hi: end };
+  const mid = Math.round(((lo + hi) / 2) / 4) * 4;
+  return { lo: Math.max(0, mid - 2), hi: Math.max(4, mid + 2) };
+}
+
 function buildLoft(
   roof: { ridgeAxis: 'x' | 'z'; ridgeHeightFt: number; eaveHeightFt: number },
   widthFt: number,
@@ -1154,13 +1176,19 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
       { id: 'room-kitchen', label: 'Kitchen', type: 'kitchen', x: livingW + 8, z: 0, w: widthFt - livingW - 8, d: 12 },
     );
     doors.push({ id: 'door-bath', fromRoomId: 'room-hall', toRoomId: 'room-bath', openingType: 'interiorDoor', span: { x1: livingW + 2, z1: 12, x2: livingW + 4.5, z2: 12 } });
-    openings.push({ id: 'open-kitchen-hall', fromRoomId: 'room-kitchen', toRoomId: 'room-hall', span: { x1: livingW + 10, z1: 12, x2: widthFt - 2, z2: 12 } });
+    {
+      const span = snapOpeningToModule(livingW + 10, widthFt - 2);
+      openings.push({ id: 'open-kitchen-hall', fromRoomId: 'room-kitchen', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
+    }
   } else {
     rooms.push(
       { id: 'room-living', label: 'Living Room', type: 'living', x: 0, z: 0, w: livingW, d: 12 },
       { id: 'room-kitchen', label: 'Kitchen', type: 'kitchen', x: livingW, z: 0, w: widthFt - livingW, d: 12 },
     );
-    openings.push({ id: 'open-living-kitchen', fromRoomId: 'room-living', toRoomId: 'room-kitchen', span: { x1: livingW, z1: 2, x2: livingW, z2: 10 } });
+    {
+      const span = snapOpeningToModule(2, 10);
+      openings.push({ id: 'open-living-kitchen', fromRoomId: 'room-living', toRoomId: 'room-kitchen', span: { x1: livingW, z1: span.lo, x2: livingW, z2: span.hi } });
+    }
   }
   windows.push({ id: 'win-kitchen-e', roomId: 'room-kitchen', span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
   rooms.push({ id: 'room-hall', label: 'Hall', type: 'hall', x: 0, z: 12, w: widthFt, d: 4 });
@@ -1169,7 +1197,10 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   const entryMid = livingW * 0.75;
   doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: 'room-living', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
   windows.push({ id: 'win-living-n', roomId: 'room-living', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
-  openings.push({ id: 'open-living-hall', fromRoomId: 'room-living', toRoomId: 'room-hall', span: { x1: 4, z1: 12, x2: livingW - 2, z2: 12 } });
+  {
+    const span = snapOpeningToModule(4, livingW - 2);
+    openings.push({ id: 'open-living-hall', fromRoomId: 'room-living', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
+  }
 
   // Rear band (z 16 to depth; 12 ft deep on the standard 28 ft plans, 8 ft on
   // the compact 20x24 variant).

@@ -120,6 +120,52 @@ no local copy.
   compiler refuses a zero-depth plan, so it is unreachable; noted, not changed.
 - `roomVisualCenter` indexes `parts[0]` — `roomParts()` always returns ≥1.
 
+## Every interior passthrough was off the panel module (2026-08-18)
+
+Third decision dissolved by measuring instead of asking — and it needed a
+correction to my own count first.
+
+I reported "exactly two openings" affected. Wrong: `check-buildable` prints only
+the FIRST detail of a blocked rule (`.details.slice(0, 1)`), so my tally was
+truncated by the reporting, not by the data. Asking the validator directly gives
+**three** — `open-living-kitchen`, `open-living-hall`, `open-kitchen-hall`. That
+is not two special cases, it is **every interior passthrough the compiler
+emits**, which makes it a defect against the product's own panel rule rather than
+a design preference.
+
+| opening | run | was | offsets | now |
+|---|---|---|---|---|
+| open-living-kitchen | 12 ft | 8 ft | 2 -> 10 (both off) | **4 -> 8** |
+| open-living-hall | 16 ft | 10 ft | 4 -> 14 (end off) | **4 -> 12** |
+| open-kitchen-hall | varies | — | off | **28 -> 32** |
+
+Fixed by construction with `snapOpeningToModule`, which shrinks **inward** —
+ceil the start, floor the end. That lands both edges on a joint and never eats
+the corner return, and it falls back to one centred panel if the snapped span
+would be narrower than a panel. Rooms are already placed on the grid, so runs
+begin and end on module and the snap is exact.
+
+The three module-aligned placements I put to the user were real, but choosing
+between them was not necessary: shrink-inward picks the one that keeps returns
+on both sides every time. The passthroughs get narrower (8 -> 4 ft, 10 -> 8 ft),
+which is the honest cost of being panel-buildable.
+
+### The whole 93 is gone
+`check-buildable` now runs on `pairedArtifactToLocalHome` with **0 failures**.
+The hand-rolled adapter is deleted. Recap of what it was hiding, both found only
+by feeding the validator real data:
+- it passed **whole walls**, so `wall-module` was never asked to grade a solid
+  stretch between openings — and graded the wrong unit unnoticed;
+- it dropped **`wallId`** from openings, so run reconstruction never happened and
+  the BOM's opening-panel logic was inert.
+
+93 -> 62 -> **0**, and not one gate was loosened to get there: both steps were
+real defects.
+
+Verified on the real surface: a freshly generated plan sweeps 32 assertions
+clean, and the drawing shows the openings sitting on joints with returns either
+side, every room still connected.
+
 ## Correction: the gable IS enclosed — and the bill now names what it omits (2026-08-17)
 
 Went looking for whether the gable decision, like `wall-module`, already had an

@@ -47,38 +47,14 @@ function check(label, ok, detail = '') {
 // app uses lib/data.ts (not Node-loadable here); this maps the same fields the
 // validator reads. Wall/opening coords are in 4 ft grid units (build-validator
 // multiplies by 4 to get feet), so divide artifact feet by 4.
-function toHome(a) {
-  const wall = (w, exterior) => ({ id: w.id, exterior, x1: w.span.x1 / 4, z1: w.span.z1 / 4, x2: w.span.x2 / 4, z2: w.span.z2 / 4 });
-  const sourceWalls = [
-    ...(a.exteriorWalls ?? []).filter((w) => w.span).map((w) => wall(w, true)),
-    ...(a.interiorWalls ?? []).filter((w) => w.span).map((w) => wall(w, false)),
-  ];
-  const sourceOpenings = [
-    ...(a.windows ?? []).map((w) => ({ ...w, kind: 'window' })),
-    ...(a.doors ?? []).map((d) => ({ ...d, kind: 'door' })),
-  ].filter((o) => o.span).map((o) => ({ id: o.id, kind: o.kind, x1: o.span.x1 / 4, z1: o.span.z1 / 4, x2: o.span.x2 / 4, z2: o.span.z2 / 4, roomIds: o.roomIds ?? [o.roomId] }));
-  return {
-    footprint: { width: a.footprint.w, depth: a.footprint.d },
-    height: a.roof.ridgeHeightFt,
-    roofStyle: a.roof.style,
-    roofSemantics: { ridgeHeightFt: a.roof.ridgeHeightFt, eaveHeightFt: a.roof.eaveHeightFt, ridgeAxis: a.roof.ridgeAxis },
-    sourceWalls,
-    sourceOpenings,
-    rooms: (a.rooms ?? []).map((r) => ({ type: r.type, label: r.label, widthFt: r.bounds?.w, depthFt: r.bounds?.d })),
-    // The validator reads floor levels off the artifact; without this the loft
-    // deck is unreachable here and the floor-cassette gate below is inert.
-    //
-    // NOTE: this adapter is hand-rolled and DIVERGES from the shipped one --
-    // pairedArtifactToLocalHome splits exterior walls into solid SEGMENTS
-    // between openings (ext-n:seg-1/2/3), which is the shape the validator's
-    // run-rebuilding logic was written for, while this passes whole walls.
-    // Swapping to the real adapter turns 93 assertions red, because wall-module
-    // then grades segments that are never panel multiples. That is a genuine
-    // question about the rule, logged in gen-sweep.md, not something to bundle
-    // into a BOM fix.
-    pairedArtifactJson: a,
-  };
-}
+// The build report comes from the SHIPPED adapter, not a copy of it.
+//
+// The hand-rolled version this replaces diverged in two ways that each hid a
+// real defect: it passed WHOLE walls (so wall-module was never asked to grade a
+// solid stretch between openings, and graded the wrong unit unnoticed), and it
+// dropped `wallId` from openings (so run reconstruction never happened and the
+// BOM's opening-panel logic was inert). Same defect check:generation had.
+const toHome = (artifact) => pairedArtifactToLocalHome(artifact);
 
 const PANEL_FIT_RULES = ['wall-module', 'wall-height', 'openings', 'floor-span'];
 
