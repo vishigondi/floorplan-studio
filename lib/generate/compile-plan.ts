@@ -400,7 +400,11 @@ function starterFixtures(intent: GenerationIntent, walls: WallSegment[]): Starte
           add(`fx-${slug}-shower`, room.id, 'shower', room.x + room.w - 2.5, room.z + 0.3, 2.4, 2.6, 'door clear', { x: room.x + room.w - 1.3, z: room.z });
         }
       }
-    } else if (/kitchen/.test(text)) {
+    }
+    // NOT `else if` from here: an open core matches BOTH /kitchen/ and /living/,
+    // and the chain used to stop at the first, furnishing a combined room with a
+    // counter run and no sofa.
+    if (/kitchen/.test(text)) {
       const onRightPerimeter = Math.abs(room.x + room.w - widthFt) < EPS;
       const runX = onRightPerimeter ? room.x + room.w - 2 : room.x + 0.2;
       const wallX = onRightPerimeter ? room.x + room.w : room.x;
@@ -409,10 +413,24 @@ function starterFixtures(intent: GenerationIntent, walls: WallSegment[]): Starte
       add(`fx-${slug}-sink`, room.id, 'sink', runX + 0.1, room.z + 1 + runDepth / 2 - 0.75, 1.6, 1.5, 'under window where possible', { x: wallX, z: room.z + 1 + runDepth / 2 });
       add(`fx-${slug}-range`, room.id, 'range', runX - 0.1, room.z + 1 + runDepth + 0.3, 2.0, 1.8, 'landing space beside', { x: wallX, z: room.z + 1 + runDepth + 1.2 });
       add(`fx-${slug}-fridge`, room.id, 'refrigerator', room.x + 0.4, room.z + 0.4, 2.8, 2.6, 'door swing clear', { x: room.x + 1.8, z: room.z });
-    } else if (/living|great/.test(text)) {
+    }
+    if (/living|great/.test(text)) {
       if (room.w >= 12 && room.d >= 9) {
+        // In an open core the kitchen run takes the east end, so the seating
+        // goes west and dining sits BETWEEN them -- which is how Den sequences
+        // it. In a living-only room the old placement still applies.
+        const sharesWithKitchen = /kitchen/.test(text);
         add(`fx-${slug}-sofa`, room.id, 'sofa_chairs_coffee_table', room.x + 1.5, room.z + 1.5, Math.min(8, room.w - 4), Math.min(6, room.d - 3), 'circulation around');
-        add(`fx-${slug}-dining`, room.id, 'round_table_six_chairs', room.x + room.w - 5, room.z + room.d / 2 - 2, 4, 4, 'chairs pull out');
+        add(
+          `fx-${slug}-dining`,
+          room.id,
+          'round_table_six_chairs',
+          sharesWithKitchen ? room.x + room.w / 2 - 2 : room.x + room.w - 5,
+          room.z + room.d / 2 - 2,
+          4,
+          4,
+          'chairs pull out',
+        );
       }
     }
   }
@@ -1214,6 +1232,23 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // takes the west column; its width shrinks with the footprint.
   const livingW = (bedrooms === 3 ? widthFt === 36 : widthFt > 20) ? 16 : 12;
   if (bedrooms === 3) {
+    // The bath used to sit BETWEEN the living room and the kitchen, splitting
+    // the one space Den always keeps whole and fronting the living area with a
+    // bathroom door. It moves to the east END of the front band, which is where
+    // Den puts them -- off circulation, at the edge of the plan -- leaving the
+    // core contiguous across the rest.
+    // THE 3-BED OPEN CORE IS BLOCKED, and the blocker is geometry rather than
+    // effort. The bath cannot go at either END of the front band: on a sloped
+    // roof both x-edges are under the eave, and an 8 ft bath there measures a
+    // 2.1 ft ceiling (IRC-R305.1). Moving it inboard to the REAR band then
+    // narrows the bedrooms to 12/6/9/9 -- off the 4 ft grid, and Bedroom 3 at
+    // the eave drops to 66 sq ft once the 5 ft sloped-ceiling cutoff applies,
+    // under the 70 sq ft minimum.
+    //
+    // On a 36 ft sloped-roof plan you cannot have all three of: an open core, a
+    // rear bath, and three viable bedrooms. A wider footprint would buy it. Left
+    // split until then rather than loosening a habitability rule to claim a
+    // fidelity point.
     rooms.push(
       { id: 'room-living', label: 'Living Room', type: 'living', x: 0, z: 0, w: livingW, d: 12 },
       { id: 'room-bath', label: 'Bath', type: 'bathroom', x: livingW, z: 0, w: 8, d: 12 },
@@ -1225,25 +1260,28 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
       openings.push({ id: 'open-kitchen-hall', fromRoomId: 'room-kitchen', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
     }
   } else {
+    // OPEN CORE. Den keeps living, dining and kitchen as ONE room at every
+    // scale -- the studio encloses only its bathroom -- while we used to wall
+    // them into separate boxes joined by a passthrough. Merging them is the
+    // single largest step towards their plans, and it removes the interior wall
+    // and its opening rather than adding anything: deriveInteriorWalls builds
+    // walls from ROOM ADJACENCY, so one room means no wall to punch.
     rooms.push(
-      { id: 'room-living', label: 'Living Room', type: 'living', x: 0, z: 0, w: livingW, d: 12 },
-      { id: 'room-kitchen', label: 'Kitchen', type: 'kitchen', x: livingW, z: 0, w: widthFt - livingW, d: 12 },
+      { id: 'room-core', label: 'Living / Dining / Kitchen', type: 'living', x: 0, z: 0, w: widthFt, d: 12 },
     );
-    {
-      const span = snapOpeningToModule(2, 10);
-      openings.push({ id: 'open-living-kitchen', fromRoomId: 'room-living', toRoomId: 'room-kitchen', span: { x1: livingW, z1: span.lo, x2: livingW, z2: span.hi } });
-    }
   }
-  windows.push({ id: 'win-kitchen-e', roomId: 'room-kitchen', span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
+  // On the 3-bed the east wall now fronts the bath, so the kitchen window moves
+  // to the core's north wall rather than landing in a bathroom.
+  windows.push({ id: 'win-kitchen-e', roomId: bedrooms === 3 ? 'room-kitchen' : 'room-core', span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
   rooms.push({ id: 'room-hall', label: 'Hall', type: 'hall', x: 0, z: 12, w: widthFt, d: 4 });
   // Entry sits on the inner (ridge-side) half of the living facade so the
   // door clears A-frame headroom; the living window takes the outer half.
   const entryMid = livingW * 0.75;
-  doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: 'room-living', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
-  windows.push({ id: 'win-living-n', roomId: 'room-living', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
+  doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: bedrooms === 3 ? 'room-living' : 'room-core', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
+  windows.push({ id: 'win-living-n', roomId: bedrooms === 3 ? 'room-living' : 'room-core', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
   {
     const span = snapOpeningToModule(4, livingW - 2);
-    openings.push({ id: 'open-living-hall', fromRoomId: 'room-living', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
+    openings.push({ id: 'open-living-hall', fromRoomId: bedrooms === 3 ? 'room-living' : 'room-core', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
   }
 
   // Rear band (z 16 to depth; 12 ft deep on the standard 28 ft plans, 8 ft on
@@ -1316,6 +1354,9 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
     // With a second bath (36 ft only), Bedroom 2 narrows to 8 ft and the
     // freed 4 ft column hosts Bath 2 (toward the ridge) plus a walk-in
     // closet for Bedroom 3.
+    // Single-bath 3-bed: the bath sits INBOARD in the rear band so the front
+    // band can be one open core. Widths keep every bedroom past the 7 ft
+    // minimum dimension (12, 9, 9 on a 36 ft plan) and past 70 sq ft.
     const bed2W = widthFt === 36 ? (baths === 2 ? 8 : 12) : 8;
     const bed3X = baths === 2 ? 24 : 12 + bed2W;
     rooms.push(

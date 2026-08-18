@@ -74,6 +74,11 @@ const METRICS = {
     const kitchen = rooms.find((r) => /kitchen/.test(`${typeOf(r)} ${labelOf(r)}`));
     const living = rooms.find((r) => /living|dining/.test(`${typeOf(r)} ${labelOf(r)}`));
     if (!kitchen || !living) return { met: true, detail: 'single-room plan' };
+    // An open core resolves BOTH to the same room. They are not adjacent, they
+    // are the same space -- which is the strongest form of the thing this
+    // metric asks about. Reporting that as a miss made the score go DOWN when
+    // the core was merged, which is the metric being wrong, not the plan.
+    if (kitchen.id === living.id) return { met: true, detail: `same room (${kitchen.label ?? kitchen.id})` };
     const a1 = kitchen.bounds, b1 = living.bounds;
     if (!a1 || !b1) return { met: false, detail: 'missing bounds' };
     const touches = (Math.abs(a1.x + a1.w - b1.x) < 0.51 || Math.abs(b1.x + b1.w - a1.x) < 0.51
@@ -105,7 +110,7 @@ const METRICS = {
 // Raise FLOOR as metrics land. It may never fall.
 // Measured baseline on 2026-08-18: 7/28. The 3-bed scores 0/7 -- the same plan
 // compared against Den's barnhouse-family in DEN_GAP_REVIEW.md.
-const FLOOR = Number(process.env.DEN_FIDELITY_FLOOR ?? 7);
+const FLOOR = Number(process.env.DEN_FIDELITY_FLOOR ?? 10);
 
 let met = 0;
 let total = 0;
