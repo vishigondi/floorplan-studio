@@ -282,3 +282,70 @@ checking its relation?**
 ### Still unmet (4 of 28)
 
 `has-closets` on three briefs; `no-corridor` on the 3-bed (structural, above).
+
+---
+
+## Fire 7 — closets, and the dead-gate sweep, 2026-08-24
+
+Score **24 → 26 / 28**; floor 24 → 26.
+
+### The closet
+
+Bedroom 1 gives up its north 4 ft to a real closet room, opening off the
+circulation pocket — which is how Den draws them (a-frame-22 has two, off its
+Open Circulation) rather than a wardrobe standing in the bedroom, which is all
+we had.
+
+**I tried Bedroom 2 first and the gate refused it.** That room sits at the eave
+and is only 8 ft wide, so the cut left 66 sq ft above the 5 ft ceiling cutoff
+against a 70 sq ft minimum. My estimate had said 72 — because I measured the
+*loft* a-frame, whose ridge is 3 ft higher than the plain one. Bedroom 1 is 12 ft
+wide and keeps 114 sq ft after the same cut.
+
+Twice now a "thin but legal" margin has turned out to be illegal, both times
+because I sampled one variant and generalised. Measure the variant you are
+actually shipping.
+
+### The 3-bed gets no closet, and that is correct
+
+`has-closets` stays unmet for the 3-bed. There is no slack: carving 4 ft from any
+of its bedrooms drops that room to ~62 sq ft above the cutoff on the a-frame, and
+one layout serves all seven roof styles.
+
+Worth recording — **Den's own 3-bed has no closet rooms either.** outpost-medium
+lists Entry, Hallway, Kitchen, Living, Dining, Stair, Utility/Laundry, two
+Bathrooms and two Bedrooms. No closets. So the metric is over-demanding for this
+typology, and the remaining gap is partly the measure, not the plan.
+
+### The sweep
+
+Audited every gate script for which population it reads:
+
+| stored-only | legitimate? |
+|---|---|
+| check-den-seeds, check-licensing, check-drift, check-render-backfill | yes — they are *about* the stored artifacts |
+| check-code-advisory | covered: check-generation runs the advisory on generated plans |
+| check-drawing-standards | **open question** — generated plans are rendered too |
+| check-paired-geometry | the original dead gate; its rules now ported |
+
+Ported check-paired-geometry's integrity rules into `check-generation`. Then
+mutation-tested both halves, which corrected my own assumption:
+
+- **Dangling references are already covered.** `compileIntent` refuses a door
+  pointing at a nonexistent room, so the plan never reaches the gate. That half
+  is belt-and-braces.
+- **Uniqueness is the load-bearing half.** A duplicated *window* id is invisible
+  to every other rule — nothing references a window, so nothing notices two
+  answering to one name. 16 catches against 0 from the compiler.
+
+Nothing was broken today; all 33 briefs passed before the gate was added. It
+exists to fail the next rename.
+
+**Remaining known gap: `check-drawing-standards` never sees a generated plan.**
+That is the next thing to look at, and it is a gate question rather than a
+fidelity one.
+
+### Still unmet (2 of 28)
+
+`no-corridor` and `has-closets`, both on the 3-bed, both argued above as correct
+outcomes rather than open work.

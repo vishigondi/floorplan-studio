@@ -1599,8 +1599,19 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
       // band; the wet column sits behind it. Bedroom 2 is 8 ft rather than the
       // old 12 because the pocket takes the middle -- 128 sq ft with 96 of it
       // above the 5 ft cutoff even on the a-frame, checked before the change.
+      // The closet comes out of BEDROOM 1, not Bedroom 2. Den draws closets as
+      // enclosed rooms off circulation -- a-frame-22 has two -- rather than
+      // relying on a wardrobe standing in the bedroom, which is all we had.
+      //
+      // I tried Bedroom 2 first and the gate refused it: that room sits at the
+      // eave and is only 8 ft wide, so shrinking it left 66 sq ft above the 5 ft
+      // ceiling cutoff against a 70 sq ft minimum on the plain a-frame. My
+      // estimate had said 72 because I measured the LOFT a-frame, whose ridge is
+      // 3 ft higher. Bedroom 1 is 12 ft wide and keeps 114 sq ft after the same
+      // cut, which is margin rather than a coin toss.
       rooms.push(
-        { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 12, w: 12, d: 16 },
+        { id: 'room-closet', label: 'Closet', type: 'storage', x: 0, z: 12, w: 12, d: 4 },
+        { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 16, w: 12, d: 12 },
         { id: 'room-bed2', label: 'Bedroom 2', type: 'bedroom', x: 20, z: 12, w: 8, d: 16 },
         { id: 'room-bath', label: 'Bath', type: 'bathroom', x: 12, z: 20, w: 8, d: 4 },
         baths === 2
@@ -1608,7 +1619,8 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
           : { id: 'room-storage', label: 'Storage', type: 'storage', x: 12, z: 24, w: 8, d: 4 },
       );
       doors.push(
-        { id: 'door-bed1', fromRoomId: 'room-hall', toRoomId: 'room-bed1', openingType: 'interiorDoor', span: { x1: 12, z1: 14, x2: 12, z2: 16.5 } },
+        { id: 'door-bed1', fromRoomId: 'room-hall', toRoomId: 'room-bed1', openingType: 'interiorDoor', span: { x1: 12, z1: 16.75, x2: 12, z2: 19.25 } },
+        { id: 'door-closet', fromRoomId: 'room-hall', toRoomId: 'room-closet', openingType: 'interiorDoor', span: { x1: 12, z1: 13, x2: 12, z2: 15.5 } },
         { id: 'door-bed2', fromRoomId: 'room-hall', toRoomId: 'room-bed2', openingType: 'interiorDoor', span: { x1: 20, z1: 14, x2: 20, z2: 16.5 } },
         { id: 'door-bath', fromRoomId: 'room-hall', toRoomId: 'room-bath', openingType: 'interiorDoor', span: { x1: 14.75, z1: 20, x2: 17.25, z2: 20 } },
         baths === 2

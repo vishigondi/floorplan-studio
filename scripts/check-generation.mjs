@@ -195,6 +195,55 @@ for (const testCase of CASES) {
     check(`bath count ${testCase.expectBaths}`, bathsInPlan === testCase.expectBaths, `got ${bathsInPlan}`);
   }
 
+  // REFERENTIAL INTEGRITY. Every id unique, every reference resolving.
+  //
+  // These rules already existed -- in check-paired-geometry, which reads only
+  // the three STORED traced artifacts and has never seen a generated plan. That
+  // is the same blind spot that let a fixture ship with no wall anchor, so this
+  // is the sweep rather than another single patch: an id collision or a door
+  // pointing at a room that no longer exists is invisible to every geometric
+  // rule, and this generator has renamed its rooms repeatedly.
+  //
+  // Nothing is broken today -- all 33 briefs pass. It is here to fail the next
+  // rename, not to fix a current defect.
+  //
+  // Honest accounting of what this actually adds, after mutation-testing both
+  // halves: the REFERENCE half is redundant. Pointing a door at a room that
+  // does not exist is already refused by compileIntent ("references unknown
+  // room"), so the plan never reaches here. It is kept because it costs nothing
+  // and covers fixtures and windows, which that check does not read.
+  // The UNIQUENESS half is the load-bearing part: a duplicated window id is
+  // invisible to every other rule -- 16 catches here against 0 from the
+  // compiler -- because nothing references a window, so nothing notices two of
+  // them answering to one name.
+  {
+    const problems = [];
+    const roomIds = new Set((artifact.rooms ?? []).map((r) => r.id));
+    const allWalls = [...(artifact.exteriorWalls ?? []), ...(artifact.interiorWalls ?? [])];
+    const wallIds = new Set(allWalls.map((w) => w.id));
+    const seen = new Set();
+    for (const [kind, list] of [['room', artifact.rooms], ['door', artifact.doors],
+      ['window', artifact.windows], ['opening', artifact.openings],
+      ['fixture', artifact.fixtures], ['wall', allWalls]]) {
+      for (const item of (list ?? [])) {
+        if (!item.id) problems.push(`${kind} with no id`);
+        else if (seen.has(item.id)) problems.push(`duplicate id ${item.id}`);
+        else seen.add(item.id);
+      }
+    }
+    for (const o of [...(artifact.doors ?? []), ...(artifact.windows ?? []), ...(artifact.openings ?? [])]) {
+      for (const key of ['fromRoomId', 'toRoomId', 'roomId']) {
+        if (o[key] && o[key] !== 'exterior' && !roomIds.has(o[key])) problems.push(`${o.id}.${key} -> ${o[key]}`);
+      }
+    }
+    for (const f of (artifact.fixtures ?? [])) {
+      if (f.roomId && !roomIds.has(f.roomId)) problems.push(`fixture ${f.id} -> room ${f.roomId}`);
+      if (f.wallAnchor?.wallId && !wallIds.has(f.wallAnchor.wallId)) problems.push(`fixture ${f.id} -> wall ${f.wallAnchor.wallId}`);
+    }
+    check('ids are unique and every reference resolves', problems.length === 0,
+      [...new Set(problems)].slice(0, 5).join(', '));
+  }
+
   // AN OPENING MUST LIE INSIDE THE ROOM IT CLAIMS TO SERVE. A door carries the
   // ids of the rooms it joins AND a span; nothing checked that the two agree.
   // The front door was attributed to the Entry zone while drawn 2 ft outside it,
