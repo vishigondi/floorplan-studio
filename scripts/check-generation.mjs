@@ -195,6 +195,31 @@ for (const testCase of CASES) {
     check(`bath count ${testCase.expectBaths}`, bathsInPlan === testCase.expectBaths, `got ${bathsInPlan}`);
   }
 
+  // AN OPENING MUST LIE INSIDE THE ROOM IT CLAIMS TO SERVE. A door carries the
+  // ids of the rooms it joins AND a span; nothing checked that the two agree.
+  // The front door was attributed to the Entry zone while drawn 2 ft outside it,
+  // standing in the dining zone -- the plan said "enter here" about a wall
+  // somewhere else. Same class as a window crediting daylight to a room it does
+  // not touch, and invisible to every other rule: geometry was valid, ids were
+  // valid, only the relation between them was wrong.
+  {
+    const byId = new Map((artifact.rooms ?? []).map((r) => [r.id, r.bounds]));
+    const strays = [];
+    for (const o of [...(artifact.doors ?? []), ...(artifact.openings ?? [])]) {
+      if (!o.span) continue;
+      for (const roomId of [o.fromRoomId, o.toRoomId]) {
+        if (!roomId || roomId === 'exterior') continue;
+        const b = byId.get(roomId);
+        if (!b) continue;
+        const lo = (v, min, max) => v >= min - 0.26 && v <= max + 0.26;
+        const ok = lo(o.span.x1, b.x, b.x + b.w) && lo(o.span.x2, b.x, b.x + b.w)
+          && lo(o.span.z1, b.z, b.z + b.d) && lo(o.span.z2, b.z, b.z + b.d);
+        if (!ok) strays.push(`${o.id}~${roomId}`);
+      }
+    }
+    check('every opening lies on the rooms it connects', strays.length === 0, strays.join(', '));
+  }
+
   // EVERY PLAN MUST MODEL AT LEAST ONE ROOM-TO-ROOM CONNECTION. The app derives
   // its navigation graph from openings alone and warns "Semantic JSON has no
   // navigation connections" when there are none. A plan whose rooms adjoin

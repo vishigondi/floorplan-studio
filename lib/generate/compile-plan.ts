@@ -1467,8 +1467,13 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
     : { id: 'room-hall', label: 'Hall', type: 'hall', ...hallRect });
   // Entry sits on the inner (ridge-side) half of the living facade so the
   // door clears A-frame headroom; the living window takes the outer half.
-  // With zones, the door belongs to the 4 ft Entry zone and centres on it.
-  const entryMid = bedrooms === 3 ? livingW * 0.75 : livingW + 2;
+  //
+  // With zones the door belongs to the Entry zone, so it must be CENTRED ON
+  // THAT ZONE and not derived from livingW. `livingW + 2` was 18 while the
+  // Entry zone runs x 12-16, so the front door was drawn standing in the dining
+  // zone while claiming to open into the Entry. Read the zone's real centre.
+  const entryRoom = rooms.find((room) => room.id === 'room-entry');
+  const entryMid = entryRoom ? entryRoom.x + entryRoom.w / 2 : livingW * 0.75;
   doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: bedrooms === 3 ? 'room-living' : 'room-entry', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
   windows.push({ id: 'win-living-n', roomId: 'room-living', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
   // With a pocket there is no living/hall opening to punch. The living zone
