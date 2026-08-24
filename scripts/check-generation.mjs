@@ -20,6 +20,7 @@ const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
 const { codeAdvisoryReport, CODE_ADVISORY_RULES } = await import(join(root, 'lib/standards/code-advisory.ts'));
 const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
+const { buildElevationModel, facadeFor, drawnElevationViews } = await import(join(root, 'lib/elevations.ts'));
 const { codeAdvisoryInputFromHome } = await import(join(root, 'lib/standards/floorplan-standards.ts'));
 const { ceilingHeightAt, ceilingPlanesFromRoofPoints } = await import(join(root, 'lib/bim/envelope-clip.ts'));
 const ceilingPlanes = (artifact) => ceilingPlanesFromRoofPoints(artifact.roof?.planes ?? []);
@@ -193,6 +194,40 @@ for (const testCase of CASES) {
   if (testCase.expectBaths) {
     const bathsInPlan = artifact.rooms.filter((room) => room.type === 'bathroom').length;
     check(`bath count ${testCase.expectBaths}`, bathsInPlan === testCase.expectBaths, `got ${bathsInPlan}`);
+  }
+
+  // ELEVATION HONESTY: an elevation may not draw an opening the plan does not
+  // have. This rule exists in check-drawing-standards, which reads five STORED
+  // plans and has never seen a generated one -- the same blind spot as the
+  // fixture anchors and the integrity rules before it. It belongs here too,
+  // because a drawing that invents a window is a drawing a builder cannot use,
+  // and because this loop has moved almost every window and door: the entry
+  // door, the kitchen window's zone binding, and both bedroom windows.
+  //
+  // Nothing is wrong today -- 109 generated elevations across the matrix are
+  // honest. This fails the next time an opening moves without its elevation.
+  {
+    const strays = [];
+    const openingsAll = [...(artifact.doors ?? []), ...(artifact.windows ?? [])];
+    for (const side of drawnElevationViews(artifact.footprint, openingsAll)) {
+      const model = buildElevationModel(artifact, side);
+      const facade = facadeFor(side, artifact.footprint.widthFt, artifact.footprint.depthFt);
+      const onFacade = (span) => {
+        if (!span) return false;
+        const [c1, c2] = facade.axis === 'z' ? [span.z1, span.z2] : [span.x1, span.x2];
+        return Math.max(Math.abs(c1 - facade.atFt), Math.abs(c2 - facade.atFt)) < 1.6;
+      };
+      const centers = openingsAll.filter((o) => onFacade(o.span)).map((o) => {
+        const [a2, b2] = facade.axis === 'z' ? [o.span.x1, o.span.x2] : [o.span.z1, o.span.z2];
+        const along = (a2 + b2) / 2;
+        return facade.mirrored ? facade.spanFt - along : along;
+      });
+      for (const o of model.openings) {
+        if (!centers.some((c) => Math.abs(c - o.center) <= 0.5)) strays.push(`${side}:${o.id}`);
+        if (o.headFt > model.ridgeFt + 1e-6) strays.push(`${side}:${o.id} above ridge`);
+      }
+    }
+    check('elevations invent no openings', strays.length === 0, strays.slice(0, 5).join(', '));
   }
 
   // REFERENTIAL INTEGRITY. Every id unique, every reference resolving.

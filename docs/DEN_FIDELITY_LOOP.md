@@ -349,3 +349,48 @@ fidelity one.
 
 `no-corridor` and `has-closets`, both on the 3-bed, both argued above as correct
 outcomes rather than open work.
+
+---
+
+## Fire 8 — closing the sweep, 2026-08-24
+
+No fidelity change (26/28). This closes the one gap fire 7 left named.
+
+`check-drawing-standards` reads five STORED plans and had never seen a generated
+one. Auditing what it actually asserts split into two halves:
+
+- **Sheet elements** (title block, north arrow, scale bar, chained dimensions) —
+  already covered. The two plans it grades for sheets, `gen-001` and
+  `brief-aframe-2br`, are themselves `constrained_json` generated plans whose
+  stored render *is* the sheet. Checked rather than assumed.
+- **Elevation honesty** — genuinely uncovered, and now ported to the full brief
+  matrix in `check-generation`: an elevation may not draw an opening the plan
+  does not have, and no opening may sit above the ridge.
+
+That rule mattered here specifically because this loop moved almost every
+opening — the entry door, the kitchen window's zone binding, both bedroom
+windows. All 109 generated elevations are honest today; the gate is there to
+fail the next move.
+
+### A mutation test that failed usefully
+
+My first mutation shifted a window 0.9 ft along its facade and the gate did not
+fire. That was the *test* being wrong, not the gate: shifting the window moves
+the artifact and the elevation together, so they still agree. The rule measures
+DIVERGENCE between plan and drawing, not position.
+
+Mutating the elevation instead — drifting every drawn opening 1 ft, and pushing
+heads above the ridge — gave 36 catches each.
+
+Worth keeping as a habit: when a mutation does not fire, the first suspect is
+the mutation.
+
+### Sweep result
+
+Of seven stored-only gate scripts: four are legitimately about stored artifacts,
+one was covered elsewhere, one (`check-paired-geometry`) was ported in fire 7,
+and this one is now split and ported. **The dead-gate sweep is complete.**
+
+Four dead gates were found across the loop — fixture anchors, navigation
+connections, opening placement, elevation honesty — all the same shape: a rule
+that exists, passes, and cannot see the population that breaks it.
