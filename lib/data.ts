@@ -1910,7 +1910,14 @@ function pairedToDenHome(
 
   const roomLabelById = new Map(semanticArtifactRooms.map((room) => [room.id, cleanLabel(room.label, room.id)]));
   const connectionsByKey = new Map<string, RoomConnection>();
-  for (const opening of artifact.openings ?? []) {
+  // DOORS ARE CONNECTIONS. This read `artifact.openings` alone, so a plan whose
+  // rooms are joined by doors -- which is most plans -- reported no navigation
+  // connections at all unless it happened to also carry a wall opening. It went
+  // unnoticed while every generated plan had one; a plan that legitimately had
+  // none then surfaced "Semantic JSON has no navigation connections" in the app
+  // while the whole offline ladder stayed green. openingToConnection already
+  // classifies door vs open vs sliding, so doors only ever needed feeding to it.
+  for (const opening of [...(artifact.doors ?? []), ...(artifact.openings ?? [])]) {
     const connection = openingToConnection(opening, roomLabelById, coords.toFtSpan);
     if (!connection) continue;
     connectionsByKey.set(`${connection.from}->${connection.to}:${connection.type}:${connection.opening?.source ?? ''}`, connection);

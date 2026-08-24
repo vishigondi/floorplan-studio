@@ -1142,7 +1142,15 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
       // Ladder up from the hall (present in every program) at the loft band edge.
       (artifact.fixtures as unknown[]).push({
         id: 'fx-loft-ladder', roomId: 'room-hall', type: 'loft_access_ladder', floor: 0,
-        bounds: { x: Math.min(bounds.x, widthFt - 3), z: 12.5, w: 3, d: 3 },
+        // Clamp into the hall's ACTUAL rect. It used to clamp to the footprint,
+        // which was right only while the hall spanned the full width; with a
+        // circulation pocket that put the ladder outside the room it belongs to.
+        bounds: (() => {
+          const hall = (intent.rooms ?? []).find((room) => room.id === 'room-hall');
+          const lo = hall ? hall.x + 0.25 : 0;
+          const hi = hall ? hall.x + hall.w - 3.25 : widthFt - 3;
+          return { x: Math.max(lo, Math.min(bounds.x, hi)), z: 12.5, w: 3, d: 3 };
+        })(),
         clearance: { frontFt: 3, doorSwingClear: true, note: 'ladder up to loft' },
         sourceAnchorId: 'fx-loft-ladder',
       });
@@ -1433,14 +1441,43 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // claimed for the wrong space.
   const eastZoneId = bedrooms === 3 ? 'room-kitchen' : (rooms.some((r) => r.id === 'room-dining') ? 'room-dining' : 'room-kitchen');
   windows.push({ id: 'win-kitchen-e', roomId: eastZoneId, span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
-  rooms.push({ id: 'room-hall', label: 'Hall', type: 'hall', x: 0, z: 12, w: widthFt, d: 4 });
+  // CIRCULATION POCKET vs. full-width corridor.
+  //
+  // Den does not run a ribbon across the plan. a-frame-22 has no corridor at
+  // all -- it has a 7x8 ft "Open Circulation" ZONE (19% of the span) that the
+  // bedroom and bath open off, and outpost-medium's Hallway spans only 24 ft of
+  // a 48 ft plan. Our 4 ft x full-width hall was the outlier at 100%.
+  //
+  // So on the plans that can take it, the hall becomes an 8x8 pocket: square,
+  // reached straight off the Entry zone, with every rear room opening onto it.
+  // It is a semanticZone for the same reason Den types theirs as
+  // `open_circulation_zone` -- circulation and entry are one continuous space,
+  // so no wall is derived between them.
+  //
+  // It keeps the id `room-hall`: the id is referenced in over twenty places
+  // (every rear door, the loft ladder), and renaming it to match the new label
+  // would be a large rename for no behavioural gain -- exactly the kind of
+  // churn that hid a bug the last time a global room rename went through here.
+  const usePocket = widthFt === 28 && (bedrooms === 1 || bedrooms === 2);
+  const hallRect = usePocket
+    ? { x: 12, z: 12, w: 8, d: 8 }
+    : { x: 0, z: 12, w: widthFt, d: 4 };
+  rooms.push(usePocket
+    ? { id: 'room-hall', label: 'Circulation', type: 'hall', ...hallRect, semanticZone: true }
+    : { id: 'room-hall', label: 'Hall', type: 'hall', ...hallRect });
   // Entry sits on the inner (ridge-side) half of the living facade so the
   // door clears A-frame headroom; the living window takes the outer half.
   // With zones, the door belongs to the 4 ft Entry zone and centres on it.
   const entryMid = bedrooms === 3 ? livingW * 0.75 : livingW + 2;
   doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: bedrooms === 3 ? 'room-living' : 'room-entry', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
   windows.push({ id: 'win-living-n', roomId: 'room-living', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
-  {
+  // With a pocket there is no living/hall opening to punch. The living zone
+  // meets the pocket at a corner, not an edge; and the pocket's open edge to the
+  // Entry and Kitchen zones carries no WALL, so there is no aperture there to
+  // model -- an opening is a hole in a wall, and two zones of one continuous
+  // volume have neither. Emitting one anyway failed the standing rule that every
+  // opening sits on a wall, which was right to stop it.
+  if (!usePocket) {
     // Keep the opening inside the living zone it is attributed to; livingW
     // describes the walled 3-bed living room and overruns the 12 ft zone.
     const livingRoom = rooms.find((r) => r.id === 'room-living');
@@ -1451,7 +1488,31 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // Rear band (z 16 to depth; 12 ft deep on the standard 28 ft plans, 8 ft on
   // the compact 20x24 variant).
   const rearD = depthFt - 16;
-  if (bedrooms === 1) {
+  if (bedrooms === 1 && usePocket) {
+    // Rear band wraps the pocket on three sides. Every room opens directly onto
+    // it -- no room is reached through another habitable room.
+    // WET ROOMS STAY IN THE CENTRAL COLUMN. R305.1 gives bathrooms and laundry a
+    // hard 6 ft 8 in minimum measured at their LOWEST point -- unlike a bedroom,
+    // which may sit partly under a slope and is judged on the area clearing 5 ft.
+    // An 8x8 laundry out at x20-28 measured 2.4 ft at the eave and failed. Only
+    // storage and closets, which carry no ceiling rule at all, can take the
+    // eave edge.
+    rooms.push(
+      { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 12, w: 12, d: 16 },
+      { id: 'room-closet', label: 'Closet', type: 'storage', x: 20, z: 12, w: 8, d: 8 },
+      { id: 'room-bath', label: 'Bath', type: 'bathroom', x: 12, z: 20, w: 8, d: 4 },
+      { id: 'room-laundry', label: 'Laundry', type: 'laundry', x: 12, z: 24, w: 8, d: 4 },
+      { id: 'room-storage', label: 'Storage', type: 'storage', x: 20, z: 20, w: 8, d: 8 },
+    );
+    doors.push(
+      { id: 'door-bed1', fromRoomId: 'room-hall', toRoomId: 'room-bed1', openingType: 'interiorDoor', span: { x1: 12, z1: 14, x2: 12, z2: 16.5 } },
+      { id: 'door-closet', fromRoomId: 'room-hall', toRoomId: 'room-closet', openingType: 'interiorDoor', span: { x1: 20, z1: 14, x2: 20, z2: 16.5 } },
+      { id: 'door-bath', fromRoomId: 'room-hall', toRoomId: 'room-bath', openingType: 'interiorDoor', span: { x1: 14.75, z1: 20, x2: 17.25, z2: 20 } },
+      { id: 'door-laundry', fromRoomId: 'room-bath', toRoomId: 'room-laundry', openingType: 'interiorDoor', span: { x1: 14.75, z1: 24, x2: 17.25, z2: 24 } },
+      { id: 'door-storage', fromRoomId: 'room-closet', toRoomId: 'room-storage', openingType: 'interiorDoor', span: { x1: 22, z1: 20, x2: 24.5, z2: 20 } },
+    );
+    windows.push({ id: 'win-bed1-w', roomId: 'room-bed1', span: { x1: 0, z1: 18, x2: 0, z2: 22 } });
+  } else if (bedrooms === 1) {
     rooms.push(
       { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 16, w: 12, d: rearD },
       { id: 'room-bath', label: 'Bath', type: 'bathroom', x: 12, z: 16, w: 8, d: 4 },
@@ -1477,7 +1538,29 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
       );
     }
   } else if (bedrooms === 2) {
-    if (widthFt === 28) {
+    if (usePocket) {
+      // Bedrooms flank the pocket and run the full 16 ft depth of the rear
+      // band; the wet column sits behind it. Bedroom 2 is 8 ft rather than the
+      // old 12 because the pocket takes the middle -- 128 sq ft with 96 of it
+      // above the 5 ft cutoff even on the a-frame, checked before the change.
+      rooms.push(
+        { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 12, w: 12, d: 16 },
+        { id: 'room-bed2', label: 'Bedroom 2', type: 'bedroom', x: 20, z: 12, w: 8, d: 16 },
+        { id: 'room-bath', label: 'Bath', type: 'bathroom', x: 12, z: 20, w: 8, d: 4 },
+        baths === 2
+          ? { id: 'room-bath2', label: 'Bath 2', type: 'bathroom', x: 12, z: 24, w: 8, d: 4 }
+          : { id: 'room-storage', label: 'Storage', type: 'storage', x: 12, z: 24, w: 8, d: 4 },
+      );
+      doors.push(
+        { id: 'door-bed1', fromRoomId: 'room-hall', toRoomId: 'room-bed1', openingType: 'interiorDoor', span: { x1: 12, z1: 14, x2: 12, z2: 16.5 } },
+        { id: 'door-bed2', fromRoomId: 'room-hall', toRoomId: 'room-bed2', openingType: 'interiorDoor', span: { x1: 20, z1: 14, x2: 20, z2: 16.5 } },
+        { id: 'door-bath', fromRoomId: 'room-hall', toRoomId: 'room-bath', openingType: 'interiorDoor', span: { x1: 14.75, z1: 20, x2: 17.25, z2: 20 } },
+        baths === 2
+          // Ensuite: Bath 2 opens from Bedroom 2 through the shared wall.
+          ? { id: 'door-bath2', fromRoomId: 'room-bed2', toRoomId: 'room-bath2', openingType: 'interiorDoor', span: { x1: 20, z1: 25.25, x2: 20, z2: 27.75 } }
+          : { id: 'door-storage', fromRoomId: 'room-bath', toRoomId: 'room-storage', openingType: 'interiorDoor', span: { x1: 14.75, z1: 24, x2: 17.25, z2: 24 } },
+      );
+    } else if (widthFt === 28) {
       rooms.push(
         { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 16, w: 12, d: 12 },
         { id: 'room-bath', label: 'Bath', type: 'bathroom', x: 12, z: 16, w: 4, d: 8 },

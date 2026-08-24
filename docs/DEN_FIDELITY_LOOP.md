@@ -147,3 +147,68 @@ anchors on STORED plans only, so it could not see freshly generated ones.
 the last structural difference from Den, who reach bedrooms off the open volume);
 `has-closets` on three; `open-core`, `kitchen-adjacent-to-core`, `has-entry` and
 `bath-count-scales` on the 3-bed.
+
+---
+
+## Fire 5 — the corridor, 2026-08-23
+
+Score **17 → 20 / 28**; floor 17 → 20. `no-corridor` MET on all three plans that
+can take the change.
+
+### What the reference actually says
+
+"Den has no corridors" was too strong, and checking beat assuming again:
+**outpost-medium HAS a Hallway** — 24×4 ft. What makes it not a corridor in our
+sense is that it spans only **50%** of a 48 ft plan. And a-frame-22 has no
+corridor at all: it has a **7×8 ft "Open Circulation" zone** (19% of span),
+typed `open_circulation_zone` — squarish, not a ribbon.
+
+Ours was a 4 ft hall at **100%** of the span. That was the outlier, not the
+existence of circulation.
+
+So the hall becomes an **8×8 pocket** the rear rooms open off, and — following
+Den's own typing — a `semanticZone`, so no wall is derived between it and the
+Entry zone. Circulation and entry are one continuous space. Bedrooms now run the
+full 16 ft depth of the rear band and flank the pocket.
+
+It keeps the id `room-hall`: that id is referenced in 20+ places and a global
+room rename is exactly what hid a bug earlier in this loop.
+
+The metric was already geometric (`w >= span*0.8 && d <= 6`) and does **not**
+look at `semanticZone`, so the pocket passes on real geometry rather than on the
+flag. The 3-bed, still a 36×4 ribbon, is the in-run control: it reports NOT MET
+in the same run.
+
+### Applies to 28 ft 1-bed and 2-bed only
+
+The 3-bed and 4-bed keep the full-width hall. Their rear bands are tighter and
+the 3-bed is already the known-constrained plan; converting them is its own fire,
+not a rider on this one.
+
+### Two more code-vs-reality gaps
+
+- **Wet rooms cannot take the eave.** R305.1 gives bathrooms and laundry a hard
+  6 ft 8 in minimum at their LOWEST point, unlike bedrooms which are judged on
+  area clearing 5 ft. An 8×8 laundry at x20–28 measured 2.4 ft and failed. Only
+  storage and closets, which carry no ceiling rule, can sit at the eave.
+- **Doors were not counted as navigation connections.** Dropping the plan's only
+  wall opening surfaced "Semantic JSON has no navigation connections" in the
+  browser while the offline ladder stayed green. The cause was not the missing
+  opening: `connections` were derived from `artifact.openings` alone, so *any*
+  plan joined only by doors read as having no navigation. `openingToConnection`
+  already classified door/open/sliding — doors simply were never fed to it.
+  Fixed at the source rather than by re-adding an opening.
+
+  The first attempt WAS to re-add one, spanning the pocket's open edge. An
+  existing gate rejected it — "every door/window/opening sits on a wall" — and it
+  was right: an opening is a hole in a wall, and two zones of one continuous
+  volume have neither. That gate stopped a wrong fix.
+
+**Third instance of the dead-gate pattern this loop**, after the fixture anchors:
+a rule that exists, passes, and cannot see the population that breaks it. Now
+asserted in `check-generation`; mutation-tested at 22 catches.
+
+### Still unmet (8 of 28)
+
+`has-closets` on the two 2-bed briefs; and the 3-bed's five (`open-core`,
+`no-corridor`, `kitchen-adjacent-to-core`, `has-entry`, `bath-count-scales`).

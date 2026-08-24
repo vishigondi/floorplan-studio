@@ -195,6 +195,20 @@ for (const testCase of CASES) {
     check(`bath count ${testCase.expectBaths}`, bathsInPlan === testCase.expectBaths, `got ${bathsInPlan}`);
   }
 
+  // EVERY PLAN MUST MODEL AT LEAST ONE ROOM-TO-ROOM CONNECTION. The app derives
+  // its navigation graph from openings alone and warns "Semantic JSON has no
+  // navigation connections" when there are none. A plan whose rooms adjoin
+  // through wall-free edges still has to SAY so in the JSON -- an omission there
+  // reads as a building with no way through it. Caught in the browser, invisible
+  // offline: the same shape as the fixture-anchor gap below.
+  {
+    const conns = [...(artifact.doors ?? []), ...(artifact.openings ?? [])]
+      .filter((o) => o.fromRoomId && o.toRoomId
+        && o.fromRoomId !== 'exterior' && o.toRoomId !== 'exterior');
+    check('models at least one room-to-room connection', conns.length > 0,
+      `${(artifact.doors ?? []).length} door(s), ${(artifact.openings ?? []).length} opening(s)`);
+  }
+
   // EVERY WALL-HUNG FIXTURE MUST NAME ITS WALL. The app blocks a plan whose
   // fixture has no anchorWallId, and the whole offline ladder stayed green
   // while the browser showed "fx-kitchen-fridge is missing anchorWallId":
