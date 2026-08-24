@@ -393,7 +393,29 @@ function starterFixtures(intent: GenerationIntent, walls: WallSegment[], ceiling
     const slug = room.id.replace(/^room-/, '');
     if (/bed/.test(text) && !/bath/.test(text)) {
       if (room.w >= 7 && room.d >= 8) {
-        add(`fx-${slug}-bed`, room.id, 'queen_bed', cx - 2.5, room.z + room.d - 6.5, 5, 6.5, 'foot and sides clear', { x: cx, z: room.z + room.d });
+        // Centring the bed on the room is wrong where the room crosses a slope:
+        // on a 36 ft a-frame Bedroom 3 runs x 28-36 and clears the 5 ft a bed
+        // needs only to about x 32, so a centred bed stood half under the eave.
+        // Slide it into the middle of the widest stretch that DOES clear.
+        const BED_W = 5;
+        const bedMid = (() => {
+          if (!ceiling.length) return cx;
+          const zMid = room.z + room.d - 3.25;
+          let best = { lo: room.x, hi: room.x };
+          let runStart: number | null = null;
+          for (let x = room.x; x <= room.x + room.w + 1e-6; x += 0.5) {
+            const ok = envelopeCeilingHeightAt(ceiling, x, zMid) >= 5;
+            if (ok && runStart === null) runStart = x;
+            if ((!ok || x + 0.5 > room.x + room.w) && runStart !== null) {
+              const end = ok ? x : x - 0.5;
+              if (end - runStart > best.hi - best.lo) best = { lo: runStart, hi: end };
+              runStart = null;
+            }
+          }
+          if (best.hi - best.lo < BED_W) return cx;
+          return Math.min(Math.max((best.lo + best.hi) / 2, best.lo + BED_W / 2), best.hi - BED_W / 2);
+        })();
+        add(`fx-${slug}-bed`, room.id, 'queen_bed', bedMid - BED_W / 2, room.z + room.d - 6.5, BED_W, 6.5, 'foot and sides clear', { x: bedMid, z: room.z + room.d });
         // Wardrobe needs ~2 ft beyond the bed's 6.5 ft; skip in shallow rooms.
         if (room.w >= 9 && room.d >= 9) {
           add(`fx-${slug}-wardrobe`, room.id, 'closet_wardrobe', room.x + 1, room.z + 0.3, Math.min(4.5, room.w - 2), 1.9, 'sliding storage', { x: cx, z: room.z });
@@ -455,14 +477,27 @@ function starterFixtures(intent: GenerationIntent, walls: WallSegment[], ceiling
       // contiguous stretch of each edge that clears the work height, and lay
       // the run inside it.
       const MIN_WORK_HEADROOM_FT = 6.67;
+      // A run needs a wall AND headroom AT THE SAME POINT. Scoring headroom alone
+      // found the roomy middle of a zone whose only wall was out under the eave
+      // and laid the counter where nothing could support it -- on the 36 ft
+      // a-frame every kitchen fixture came back with no anchor.
+      const wallAt = (edge: typeof edges[number], t: number) => walls.some((wall) => {
+        const vertical = Math.abs(wall.span.x1 - wall.span.x2) < EPS;
+        if (edge.axis === 'x') {
+          if (!vertical || Math.abs(wall.span.x1 - edge.at) > 0.26) return false;
+          return t >= Math.min(wall.span.z1, wall.span.z2) - 0.01 && t <= Math.max(wall.span.z1, wall.span.z2) + 0.01;
+        }
+        if (vertical || Math.abs(wall.span.z1 - edge.at) > 0.26) return false;
+        return t >= Math.min(wall.span.x1, wall.span.x2) - 0.01 && t <= Math.max(wall.span.x1, wall.span.x2) + 0.01;
+      });
       const usable = (edge: typeof edges[number]) => {
-        if (!ceiling.length) return { lo: edge.lo, hi: edge.hi };
         let best = { lo: edge.lo, hi: edge.lo };
         let runStart: number | null = null;
         for (let t = edge.lo; t <= edge.hi + 1e-6; t += 0.5) {
           const px = edge.axis === 'z' ? t : edge.at + edge.inward * 1;
           const pz = edge.axis === 'z' ? edge.at + edge.inward * 1 : t;
-          const ok = envelopeCeilingHeightAt(ceiling, px, pz) >= MIN_WORK_HEADROOM_FT;
+          const ok = wallAt(edge, t)
+            && (!ceiling.length || envelopeCeilingHeightAt(ceiling, px, pz) >= MIN_WORK_HEADROOM_FT);
           if (ok && runStart === null) runStart = t;
           if ((!ok || t + 0.5 > edge.hi) && runStart !== null) {
             const end = ok ? t : t - 0.5;
@@ -1316,7 +1351,20 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
               : 'a-frame';
   // Second bath is supported on the primary footprints only (2-bed at 28 ft,
   // 3-bed at 36 ft); 1-bed programs stay single-bath.
-  const bathsRequested = bedrooms === 1 ? 1 : Math.max(1, Math.min(MAX_TEMPLATE_BATHS, Math.round(brief.baths ?? 1)));
+  // A 3-bed defaults to TWO baths. One bath for three bedrooms is not a normal
+  // house, and Den's own 3-bed (outpost-medium) has two; the default was 1 only
+  // because the old rear band could not host a second. It can now.
+  const bathsRequested = bedrooms === 1
+    ? 1
+    : Math.max(1, Math.min(MAX_TEMPLATE_BATHS, Math.round(brief.baths ?? (bedrooms >= 3 ? 2 : 1))));
+  // Can the OUTER 8 ft bay host a bedroom? On a 36 ft a-frame it cannot: the
+  // ceiling clears the 5 ft a bed needs across only 4.5 ft of x 28-36, so a
+  // queen there is half under the eave. Every other style keeps 8.5 ft clear
+  // (measured, not assumed). This decides the 3-bed layout, and with it whether
+  // a second bath fits -- the wide Bedroom 3 the a-frame needs consumes the
+  // column the second bath would have used. The a-frame is already the
+  // low-eave exception elsewhere here (it is refused outright at 4 bedrooms).
+  const outerBayHostsBedroom = () => style !== 'a-frame';
   const hostsTwoBaths = (w: number) => (bedrooms === 2 && w === 28) || (bedrooms === 3 && w === 36);
 
   // Candidate footprints, largest first. Gables offer narrow/shallow variants
@@ -1370,35 +1418,18 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // Front band (z 0-12) and full-width hall band (z 12-16). The living room
   // takes the west column; its width shrinks with the footprint.
   const livingW = (bedrooms === 3 ? widthFt === 36 : widthFt > 20) ? 16 : 12;
-  if (bedrooms === 3) {
-    // The bath used to sit BETWEEN the living room and the kitchen, splitting
-    // the one space Den always keeps whole and fronting the living area with a
-    // bathroom door. It moves to the east END of the front band, which is where
-    // Den puts them -- off circulation, at the edge of the plan -- leaving the
-    // core contiguous across the rest.
-    // THE 3-BED OPEN CORE IS BLOCKED, and the blocker is geometry rather than
-    // effort. The bath cannot go at either END of the front band: on a sloped
-    // roof both x-edges are under the eave, and an 8 ft bath there measures a
-    // 2.1 ft ceiling (IRC-R305.1). Moving it inboard to the REAR band then
-    // narrows the bedrooms to 12/6/9/9 -- off the 4 ft grid, and Bedroom 3 at
-    // the eave drops to 66 sq ft once the 5 ft sloped-ceiling cutoff applies,
-    // under the 70 sq ft minimum.
+  {
+    // THE 3-BED OPEN CORE IS NOT BLOCKED, and the claim here that it was should
+    // be read as retracted. What failed then was one particular layout: a 12 ft
+    // rear band with off-grid widths (12/6/9/9) and a bath pushed out to the
+    // eave. Using the FULL 16 ft rear depth -- which only became available once
+    // the corridor shrank -- the same 36 ft footprint takes an open core, three
+    // bedrooms over 70 sq ft and two baths clear of the eave. Checked against
+    // every roof style including the a-frame before this was written, rather
+    // than reasoned about a second time.
     //
-    // On a 36 ft sloped-roof plan you cannot have all three of: an open core, a
-    // rear bath, and three viable bedrooms. A wider footprint would buy it. Left
-    // split until then rather than loosening a habitability rule to claim a
-    // fidelity point.
-    rooms.push(
-      { id: 'room-living', label: 'Living Room', type: 'living', x: 0, z: 0, w: livingW, d: 12 },
-      { id: 'room-bath', label: 'Bath', type: 'bathroom', x: livingW, z: 0, w: 8, d: 12 },
-      { id: 'room-kitchen', label: 'Kitchen', type: 'kitchen', x: livingW + 8, z: 0, w: widthFt - livingW - 8, d: 12 },
-    );
-    doors.push({ id: 'door-bath', fromRoomId: 'room-hall', toRoomId: 'room-bath', openingType: 'interiorDoor', span: { x1: livingW + 2, z1: 12, x2: livingW + 4.5, z2: 12 } });
-    {
-      const span = snapOpeningToModule(livingW + 10, widthFt - 2);
-      openings.push({ id: 'open-kitchen-hall', fromRoomId: 'room-kitchen', toRoomId: 'room-hall', span: { x1: span.lo, z1: 12, x2: span.hi, z2: 12 } });
-    }
-  } else {
+    // So the 3-bed now uses the same zoned core as every other program, and the
+    // bath it used to wedge between living and kitchen moves to the rear band.
     // OPEN CORE, AS ZONES. Reading Den's own drawing corrected this: they do
     // NOT merge the core into one room labelled "Living / Dining / Kitchen".
     // a-frame-22 calls out Entry(1), Kitchen(2), Dining(3) and Living(4) as
@@ -1439,7 +1470,7 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // in the rear 4 ft of the band, so a window at z 4-8 stands in the dining
   // zone. A window attributed to a room it does not touch is a daylight credit
   // claimed for the wrong space.
-  const eastZoneId = bedrooms === 3 ? 'room-kitchen' : (rooms.some((r) => r.id === 'room-dining') ? 'room-dining' : 'room-kitchen');
+  const eastZoneId = rooms.some((room) => room.id === 'room-dining') ? 'room-dining' : 'room-kitchen';
   windows.push({ id: 'win-kitchen-e', roomId: eastZoneId, span: { x1: widthFt, z1: 4, x2: widthFt, z2: 8 } });
   // CIRCULATION POCKET vs. full-width corridor.
   //
@@ -1459,10 +1490,30 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // would be a large rename for no behavioural gain -- exactly the kind of
   // churn that hid a bug the last time a global room rename went through here.
   const usePocket = widthFt === 28 && (bedrooms === 1 || bedrooms === 2);
+  // A 3-bed on 36 ft cannot use a pocket -- a square pocket has only three free
+  // edges once one faces the core, and this program needs five rooms off the
+  // circulation. Den hit the same wall and answered it the same way:
+  // outpost-medium, their 3-bed, has a Hallway. It is a corridor only in shape,
+  // not in proportion, spanning 24 ft of a 48 ft plan. Ours spans 16 of 36.
+  // The 3-bed shortens its hall only where Bedroom 3 can take the outer bay.
+  // On the a-frame it cannot, so Bedroom 3 widens to 12 ft, the hall has no
+  // room to shorten, and it keeps the full-width form. That is a real limit of
+  // a 36 ft plan under a 1 ft eave, recorded rather than designed around: the
+  // a-frame 3-bed still gains the open core, it just keeps its corridor.
+  // THE 3-BED KEEPS ITS FULL-WIDTH HALL, and the reason is structural rather
+  // than stylistic. A floor needs an interior wall line covering 70% of the
+  // width or the joists span the whole 28 ft depth, and every door pierces that
+  // line: at z=16 the 3-bed spends four 2.5 ft doorways, so the run has to start
+  // at the full 36 ft to clear 25.2 ft after them. A hall stopping short of
+  // either wall caps the run at 28 ft, which cannot survive even one door.
+  // So no-corridor stays UNMET for this program. Shortening the hall here would
+  // mean either a plan the buildability gate refuses or a bedroom reached
+  // through another room, and neither is worth a fidelity point.
+  const useShortHall = false;
   const hallRect = usePocket
     ? { x: 12, z: 12, w: 8, d: 8 }
     : { x: 0, z: 12, w: widthFt, d: 4 };
-  rooms.push(usePocket
+  rooms.push(usePocket || useShortHall
     ? { id: 'room-hall', label: 'Circulation', type: 'hall', ...hallRect, semanticZone: true }
     : { id: 'room-hall', label: 'Hall', type: 'hall', ...hallRect });
   // Entry sits on the inner (ridge-side) half of the living facade so the
@@ -1474,7 +1525,7 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // zone while claiming to open into the Entry. Read the zone's real centre.
   const entryRoom = rooms.find((room) => room.id === 'room-entry');
   const entryMid = entryRoom ? entryRoom.x + entryRoom.w / 2 : livingW * 0.75;
-  doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: bedrooms === 3 ? 'room-living' : 'room-entry', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
+  doors.push({ id: 'door-entry', fromRoomId: 'exterior', toRoomId: entryRoom ? 'room-entry' : 'room-living', openingType: 'exteriorDoor', span: { x1: entryMid - 1.5, z1: 0, x2: entryMid + 1.5, z2: 0 } });
   windows.push({ id: 'win-living-n', roomId: 'room-living', span: livingW === 16 ? { x1: 4, z1: 0, x2: 8, z2: 0 } : { x1: 3, z1: 0, x2: 6, z2: 0 } });
   // With a pocket there is no living/hall opening to punch. The living zone
   // meets the pocket at a corner, not an edge; and the pocket's open edge to the
@@ -1482,7 +1533,7 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
   // model -- an opening is a hole in a wall, and two zones of one continuous
   // volume have neither. Emitting one anyway failed the standing rule that every
   // opening sits on a wall, which was right to stop it.
-  if (!usePocket) {
+  if (!usePocket && !useShortHall) {
     // Keep the opening inside the living zone it is attributed to; livingW
     // describes the walled 3-bed living room and overruns the 12 ft zone.
     const livingRoom = rooms.find((r) => r.id === 'room-living');
@@ -1601,6 +1652,50 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
     windows.push(
       { id: 'win-bed1-w', roomId: 'room-bed1', span: { x1: 0, z1: 20, x2: 0, z2: 24 } },
       { id: 'win-bed2-e', roomId: 'room-bed2', span: { x1: widthFt, z1: 20, x2: widthFt, z2: 24 } },
+    );
+  } else if (bedrooms === 3 && widthFt === 36) {
+    // THE BEARING LINE IS THE CONSTRAINT HERE, not the room sizes. A floor needs
+    // an interior wall line covering 70% of the width or the joists span the
+    // whole 28 ft depth. My first version ran Bedrooms 1 and 3 the full depth
+    // and left the walls at z=12 and z=16 broken into fragments -- 56% and 44%
+    // -- so the plan had no continuous line and was correctly refused as
+    // unbuildable. Holding every rear room to z 16-28 puts a real wall across
+    // z=16 instead.
+    // Bedroom 3 is 12 ft wide on EVERY roof, not just the a-frame. The narrow
+    // outer bay only works where the roof allows it, and the door budget on the
+    // bearing line does not allow a fifth doorway anyway -- so the wide bedroom
+    // and the stacked ensuite are the layout everywhere, and one shape serves
+    // all seven roof styles.
+    const bed3X = 24;
+    const twoBaths = baths === 2;
+    // Two baths side by side where the wet column is 8 ft, stacked where the
+    // wider Bedroom 3 narrows it to 4 -- the second then being an ensuite off
+    // Bedroom 3, the only room it touches.
+    const stacked = twoBaths;
+    rooms.push(
+      { id: 'room-bed1', label: 'Bedroom 1', type: 'bedroom', x: 0, z: 16, w: 12, d: 12 },
+      { id: 'room-bed2', label: 'Bedroom 2', type: 'bedroom', x: 12, z: 16, w: 8, d: 12 },
+      { id: 'room-bath', label: 'Bath', type: 'bathroom', x: 20, z: 16, w: 4, d: stacked ? 8 : 12 },
+      // Where the hall is short it stops at Bedroom 3's edge, so Bedroom 3
+      // reaches UP to z 12 and opens off the hall's east end. Where the hall
+      // runs full width, Bedroom 3 opens off its south side like the others.
+      { id: 'room-bed3', label: 'Bedroom 3', type: 'bedroom', x: bed3X, z: 16, w: widthFt - bed3X, d: 12 },
+    );
+    const bathMid = 22;
+    doors.push(
+      { id: 'door-bed1', fromRoomId: 'room-hall', toRoomId: 'room-bed1', openingType: 'interiorDoor', span: { x1: 8.75, z1: 16, x2: 11.25, z2: 16 } },
+      { id: 'door-bed2', fromRoomId: 'room-hall', toRoomId: 'room-bed2', openingType: 'interiorDoor', span: { x1: 14.75, z1: 16, x2: 17.25, z2: 16 } },
+      { id: 'door-bath', fromRoomId: 'room-hall', toRoomId: 'room-bath', openingType: 'interiorDoor', span: { x1: bathMid - 1.25, z1: 16, x2: bathMid + 1.25, z2: 16 } },
+      { id: 'door-bed3', fromRoomId: 'room-hall', toRoomId: 'room-bed3', openingType: 'interiorDoor', span: { x1: bed3X + 1.5, z1: 16, x2: bed3X + 4, z2: 16 } },
+    );
+    if (stacked) {
+      rooms.push({ id: 'room-bath2', label: 'Bath 2', type: 'bathroom', x: 20, z: 24, w: 4, d: 4 });
+      doors.push({ id: 'door-bath2', fromRoomId: 'room-bed3', toRoomId: 'room-bath2', openingType: 'interiorDoor', span: { x1: 24, z1: 25, x2: 24, z2: 27.5 } });
+    }
+    windows.push(
+      { id: 'win-bed1-w', roomId: 'room-bed1', span: { x1: 0, z1: 20, x2: 0, z2: 24 } },
+      { id: 'win-bed2-s', roomId: 'room-bed2', span: { x1: 14, z1: depthFt, x2: 18, z2: depthFt } },
+      { id: 'win-bed3-e', roomId: 'room-bed3', span: { x1: widthFt, z1: 20, x2: widthFt, z2: 24 } },
     );
   } else if (bedrooms === 3) {
     // With a second bath (36 ft only), Bedroom 2 narrows to 8 ft and the

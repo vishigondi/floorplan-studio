@@ -212,3 +212,73 @@ asserted in `check-generation`; mutation-tested at 22 catches.
 
 `has-closets` on the two 2-bed briefs; and the 3-bed's five (`open-core`,
 `no-corridor`, `kitchen-adjacent-to-core`, `has-entry`, `bath-count-scales`).
+
+---
+
+## Fire 6 — the 3-bed, 2026-08-24
+
+Score **20 → 24 / 28**; floor 20 → 24. The 3-bed went **1/7 → 5/7**.
+
+### Retraction
+
+Fire 1 concluded: *"On a 36 ft sloped-roof plan you cannot have all three of an
+open core, a rear bath, and three viable bedrooms."* **That was wrong**, and it
+was wrong in the way conclusions usually are here — a single failed attempt
+generalised into a law. What actually failed was one layout: a 12 ft rear band,
+off-grid widths (12/6/9/9), and a bath pushed to the eave.
+
+Using the full 16 ft rear depth, the same 36 ft footprint takes an open core,
+three bedrooms over 70 sq ft and **two** baths clear of the eave — on every roof
+style, a-frame included. Measured before writing the layout, not argued about.
+
+The lesson is procedural: the earlier claim was recorded in a commit message and
+a code comment as settled fact. It sat there for six days and would have stopped
+anyone else looking. **An impossibility claim needs the same standard of proof
+as a capability claim** — a probe, not a failed attempt.
+
+### What the buildability gate taught
+
+Two structural findings, both from gates rather than from reasoning:
+
+- **A bearing line must cover 70% of the width, and every door pierces it.** My
+  first version ran Bedrooms 1 and 3 the full depth, leaving the walls at z=12
+  and z=16 as fragments (56% and 44%) — no continuous line, a 28 ft joist span,
+  correctly refused. Holding every rear room to z 16-28 puts a real wall across
+  z=16.
+- **That is also why the 3-bed keeps its full-width hall.** At z=16 the plan
+  spends four 2.5 ft doorways, so the run must start at the full 36 ft to clear
+  25.2 ft after them. A hall stopping short of either wall caps the run at 28 ft,
+  which cannot survive even one door. `no-corridor` therefore stays UNMET for the
+  3-bed, and shortening the hall would mean either an unbuildable plan or a
+  bedroom reached through another room.
+
+Den agrees, incidentally: outpost-medium — their 3-bed — has a Hallway too.
+
+### Bedroom 3 and the a-frame
+
+The outer 8 ft bay is unusable on a 36 ft a-frame: the ceiling clears the 5 ft a
+bed needs across only 4.5 ft of x 28-36. Bedroom 3 is therefore 12 ft wide on
+every roof, and the second bath stacks behind the first as an ensuite. One shape
+serves all seven styles, which is better than the roof-dependent branching the
+first attempt grew.
+
+A 3-bed now defaults to **two** baths — a 3-bedroom house with one bath is not a
+normal house, and Den's has two. The default was 1 only because the old rear band
+could not host a second.
+
+### Fourth dead gate
+
+The front door carried `toRoomId: 'room-entry'` while its span sat 2 ft outside
+the Entry zone, in the dining zone. Mine, from fire 3. Geometry valid, ids valid,
+only the RELATION between them wrong — and nothing could see it.
+`check-generation` now asserts every door and opening lies on the rooms it
+connects. Mutation-tested at 35 catches.
+
+Running tally of dead gates this loop: fixture anchors, navigation connections,
+opening placement. **The pattern is stable enough to be worth a dedicated sweep:
+which other rules only ever run against stored plans, or check a value without
+checking its relation?**
+
+### Still unmet (4 of 28)
+
+`has-closets` on three briefs; `no-corridor` on the 3-bed (structural, above).

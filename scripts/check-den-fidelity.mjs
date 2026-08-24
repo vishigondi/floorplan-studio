@@ -190,7 +190,7 @@ const METRICS = {
 // Raise FLOOR as metrics land. It may never fall.
 // Measured baseline on 2026-08-18: 7/28. The 3-bed scores 0/7 -- the same plan
 // compared against Den's barnhouse-family in DEN_GAP_REVIEW.md.
-const FLOOR = Number(process.env.DEN_FIDELITY_FLOOR ?? 20);
+const FLOOR = Number(process.env.DEN_FIDELITY_FLOOR ?? 24);
 
 let met = 0;
 let total = 0;
