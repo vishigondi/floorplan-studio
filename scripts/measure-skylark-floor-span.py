@@ -63,7 +63,11 @@ def extents_mm(path):
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
     found = False
-    for obj in model.Objects:
+    # Indexed rather than iterated: File3dmObjectTable relies on __getitem__
+    # at runtime and declares no __iter__, so `for obj in model.Objects`
+    # works but fails static analysis. Same access, no type-checker noise.
+    for idx in range(len(model.Objects)):
+        obj = model.Objects[idx]
         geom = obj.Geometry
         bbox = None
         try:

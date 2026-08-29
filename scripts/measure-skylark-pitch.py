@@ -56,7 +56,11 @@ def measure(path, rhino3dm):
     hist, total = defaultdict(float), 0.0
     lo = [float("inf")] * 3
     hi = [float("-inf")] * 3
-    for obj in model.Objects:
+    # Indexed rather than iterated: File3dmObjectTable relies on __getitem__
+    # at runtime and declares no __iter__, so `for obj in model.Objects`
+    # works but fails static analysis. Same access, no type-checker noise.
+    for i in range(len(model.Objects)):
+        obj = model.Objects[i]
         geom = obj.Geometry
         box = geom.GetBoundingBox()
         if box is not None:
