@@ -50,3 +50,7 @@ next-env.d.ts
 
 # Ad-hoc visual QA captures (scripts/qa-shots.mjs) — scratch, not a gate
 .qa-shots/
+
+# Python bytecode from the measurement scripts
+__pycache__/
+*.pyc
