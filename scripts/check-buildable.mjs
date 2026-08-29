@@ -505,6 +505,40 @@ for (const brief of BRIEFS) {
   check('a-frame-22 bills one deck per LEVEL, not per floorPanels entry', qty === 90, `${qty}`);
 }
 
+// THE JOIST LIMIT MUST STAY TIED TO THE BLOCK LIBRARY.
+//
+// It was a bare `16` for a long time and nobody could say where it came from.
+// 16 ft corresponds to no Skylark block: F-S stops at 14.89 ft, so a 16 ft span
+// already requires an F-L, which reaches 18.83 ft. The number was arbitrary in
+// both directions and still looked authoritative.
+//
+// These assert the limit IS the longest block and not a round number that has
+// drifted back in, and that the class spans keep the exact relationship the
+// measurement established -- physical length 101.2 mm longer than the published
+// structural span, identically across all three classes. If a future Skylark
+// release changes the blocks, this fails rather than silently shipping a limit
+// describing geometry that no longer exists.
+{
+  const { SKYLARK150_FLOOR_SPANS_MM, SKYLARK150_MAX_FLOOR_SPAN_FT } = await import(join(root, 'lib/kit/skylark.ts'));
+  const spans = Object.values(SKYLARK150_FLOOR_SPANS_MM);
+  const longest = Math.max(...spans.map((b) => b.structuralSpanMm));
+  check('joist limit is the longest floor block, not a round number',
+    Math.abs(SKYLARK150_MAX_FLOOR_SPAN_FT - longest / 304.8) < 1e-6,
+    `${SKYLARK150_MAX_FLOOR_SPAN_FT} vs ${longest / 304.8}`);
+  check('the joist limit is not a suspiciously round number',
+    Math.abs(SKYLARK150_MAX_FLOOR_SPAN_FT - Math.round(SKYLARK150_MAX_FLOOR_SPAN_FT)) > 0.01,
+    `${SKYLARK150_MAX_FLOOR_SPAN_FT}`);
+  const offsets = spans.map((b) => Math.round((b.measuredLengthMm - b.structuralSpanMm) * 10) / 10);
+  check('every class keeps the same measured-vs-published bearing offset',
+    new Set(offsets).size === 1 && offsets[0] === 101.2, offsets.join(', '));
+  // Guards the inference the whole sourcing rests on: the 1200 mm stepping is
+  // what shows these are one family measured consistently.
+  const lens = spans.map((b) => b.measuredLengthMm).sort((a, b) => a - b);
+  const steps = lens.slice(1).map((v, i) => Math.round((v - lens[i]) * 10) / 10);
+  check('floor block lengths step by a uniform 1200 mm',
+    new Set(steps).size === 1 && steps[0] === 1200, steps.join(', '));
+}
+
 if (failures) {
   console.error(`\n${failures} buildable check(s) failed`);
   process.exit(1);

@@ -10,6 +10,7 @@ import type {
 // Node, which cannot resolve extensionless value imports (`./types` above is
 // erased at compile time, so it is exempt).
 import { roofPitchDeg as sharedRoofPitchDeg } from './roof-geometry.ts';
+import { SKYLARK150_MAX_FLOOR_SPAN_FT } from './kit/skylark.ts';
 
 const FT_PER_M = 3.280839895;
 // The planner's structural module is a 4 ft grid (≈ 1.22 m) — every room, wall,
@@ -20,7 +21,30 @@ const PANEL_WIDTH_FT = 4;
 const PANEL_TOLERANCE_FT = 0.16;
 const WALL_HEIGHT_SKUS_FT = [2.4 * FT_PER_M, 3.0 * FT_PER_M];
 const WALL_HEIGHT_TOLERANCE_FT = 0.18;
-const MAX_JOIST_SPAN_FT = 16;
+// The longest span any single Skylark 150 floor block covers. Not a round
+// number chosen for comfort: F-L is the largest floor block in the library at a
+// 5738 mm structural span, and nothing reaches further without a beam or an
+// intermediate bearing wall — which is exactly what this rule tells a builder to
+// add.
+//
+// This was `16` with no provenance, in a file that otherwise refuses unsourced
+// numbers. 16 ft turns out to correspond to NO block: a 16 ft span already needs
+// an F-L, because F-S stops at 14.89 ft. It sat between two classes, arbitrary in
+// both directions — refusing spans of 16-18.83 ft that the kit can actually
+// build, while sounding like a limit somebody had derived.
+//
+// Sourcing it required rejecting the obvious answer first. WikiHouse publish
+// floor span tables, but under "250 series" and "200 series", and Skylark v1.0's
+// README says those are the PREVIOUS generation ("Previous versions had standard
+// insulation thicknesses of 200mm and 250mm. This version is thinner, with wall
+// thicknesses of 150mm and 200mm"). No 150 table exists. So the blocks we bill
+// were measured instead — see SKYLARK150_FLOOR_SPANS_MM and
+// scripts/measure-skylark-floor-span.py — and came out in exact 1200 mm steps,
+// each precisely 101.2 mm longer than the published 250-series span for the same
+// size class. Three exact matches is bearing, not coincidence, and it is the
+// evidence that the size classes carry the same structural span across series.
+
+const MAX_JOIST_SPAN_FT = SKYLARK150_MAX_FLOOR_SPAN_FT;
 const ROOF_PITCH_SKUS_DEG = [0, 12, 25, 45, 60, 72];
 const ROOF_PITCH_TOLERANCE_DEG = 2.5;
 

@@ -68,6 +68,55 @@ export const SKYLARK150_BLOCKS = {
 export const SKYLARK_ROOF_PITCHES_DEG: readonly number[] = [0, 42];
 
 /**
+ * Floor block spans for SKYLARK150 — MEASURED, then cross-checked against
+ * WikiHouse's own published figures.
+ *
+ * THE PUBLISHED TABLES DO NOT COVER THIS LIBRARY. WikiHouse's structural
+ * engineering guide gives floor block spans under headings "250 series" and
+ * "200 series", and it is tempting to read a number off them. Skylark v1.0's
+ * README rules that out: "Previous versions had standard insulation thicknesses
+ * of 200mm and 250mm. This version is thinner, with wall thicknesses of 150mm
+ * and 200mm." Those tables describe the PREVIOUS generation. The guide carries
+ * no 150 table, so for the blocks we actually bill there is no published span.
+ *
+ * So scripts/measure-skylark-floor-span.py reads the detailed assemblies from
+ * the same pinned commit the roof pitches came from and measures them. The
+ * field blocks come out in exact 1200 mm steps:
+ *
+ *   F-XXS  3439.2 mm    F-S  4639.2 mm    F-L  5839.2 mm   (physical length)
+ *
+ * and each is EXACTLY 101.2 mm longer than the published 250-series span for
+ * the same size class (3338 / 4538 / 5738 mm). Three exact matches is a
+ * systematic offset — physical length versus structural span, i.e. bearing —
+ * not a coincidence, and it is the evidence that the size classes carry the same
+ * structural span across series even though the wall thickness changed.
+ *
+ * `structuralSpanMm` is therefore WikiHouse's published figure for the class;
+ * `measuredLengthMm` is what the geometry actually is. They differ by bearing.
+ *
+ * THE E- BLOCKS ARE DELIBERATELY ABSENT. Measured, they come out at 6621 /
+ * 7587 / 8504 mm with irregular steps (966, 917) and 1672 mm wide against the
+ * F blocks' clean 1200 mm steps at 720 mm wide. That irregularity says the
+ * detailed file holds more than one spanning member — plausibly the widened end
+ * block plus its removable pocket panel, both v1.0 changes — so no span claim is
+ * made for them until that is understood. An unexplained number is not evidence.
+ *
+ * Source: github.com/wikihouseproject/Skylark @ 6581cc1de0f4daef81a6b5c5a2eaed3c537d1d8f
+ * (SKYLARK150/Floors/*&#47;*_detailed/*.3dm), measured 2026-08-29. CC BY-SA 4.0 —
+ * we vendor no WikiHouse files, only these measurements of them.
+ */
+export const SKYLARK150_FLOOR_SPANS_MM: Readonly<Record<string, { measuredLengthMm: number; structuralSpanMm: number }>> = {
+  'F-XXS': { measuredLengthMm: 3439.2, structuralSpanMm: 3338 },
+  'F-S': { measuredLengthMm: 4639.2, structuralSpanMm: 4538 },
+  'F-L': { measuredLengthMm: 5839.2, structuralSpanMm: 5738 },
+};
+
+/** The longest span any single Skylark 150 floor block covers: F-L, 5738 mm
+ * = 18.83 ft. Nothing in the library reaches further without a beam or a
+ * bearing wall, so this is the ceiling on any joist-span limit we set. */
+export const SKYLARK150_MAX_FLOOR_SPAN_FT = 5738 / 304.8;
+
+/**
  * What each roof block measures. `pitchSharePct` is the share of in-plane edge
  * length lying at `pitchDeg` — the evidence that this is the block's pitch and
  * not an incidental angle. The plain blocks are flat roofs carrying a 1 deg

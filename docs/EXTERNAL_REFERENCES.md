@@ -36,6 +36,24 @@ Also published per class: section modulus at the dovetail joint (Wⱼ) and at
 mid-span, effective modulus of inertia (I), and rotational stiffness at the
 dovetail (kᵣ).
 
+> ### ⚠️ SUPERSEDED — these tables do not describe the blocks we bill
+>
+> **Resolved 2026-08-29, and the conclusion below was wrong.** The Skylark v1.0
+> README states: *"Previous versions had standard insulation thicknesses of 200mm
+> and 250mm. This version is thinner, with wall thicknesses of 150mm and 200mm."*
+> The "250 series" and "200 series" tables are the **PREVIOUS generation**. The
+> guide carries **no 150 table**, and the repo at our pinned commit ships only
+> `SKYLARK150`. So there is no published span for the blocks we count.
+>
+> The blocks were measured instead — `scripts/measure-skylark-floor-span.py` —
+> and the result cross-checks the published figures rather than replacing them:
+> the field blocks come out in exact 1200 mm steps, each **exactly 101.2 mm**
+> longer than the 250-series span for the same class (bearing, not coincidence).
+> `MAX_JOIST_SPAN_FT` is now `SKYLARK150_MAX_FLOOR_SPAN_FT` = F-L's 5738 mm =
+> **18.83 ft**.
+>
+> The original reasoning, kept because the error is instructive:
+
 > **BEARS ON `MAX_JOIST_SPAN_FT = 16` in `lib/build-validator.ts`.** That constant
 > carries no provenance comment, which is conspicuous in a codebase where the
 > roof pitches got a measurement script, a pinned commit hash and a licence note.
@@ -50,6 +68,17 @@ dovetail (kᵣ).
 > Asserting `E-L` = 250-L would be the same unverified inference this project
 > keeps catching. The work is: establish the mapping from the Skylark repo, then
 > replace the constant with per-class spans and a provenance comment.
+>
+> **What the error was.** I read a span table, matched the size-class letters to
+> ours, and reasoned about safety margins — without checking which *version* of
+> the system the table described. The letters matched; the system did not. That
+> is the third time in this survey a number was taken from the wrong variant (the
+> loft a-frame instead of the plain one; ÖÖD's homepage instead of its product
+> pages). **Matching labels are not matching provenance.**
+>
+> It also cut the other way from what I claimed: 16 ft was not "possibly unsafe",
+> it was needlessly conservative, and it corresponded to no block at all — F-S
+> stops at 14.89 ft, so a 16 ft span already required an F-L reaching 18.83 ft.
 
 ### WikiHouse General Assembly Guide  *(verified)*
 <https://www.wikihouse.cc/assembly/before-you-start>
