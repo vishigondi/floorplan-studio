@@ -105,6 +105,39 @@ export interface JurisdictionPack {
   siteAdvisories: JurisdictionSiteAdvisory[];
   /** Replaces the generic "no lot specified" detail for ZON rules. */
   zoningStatus?: string;
+  /** Envelope thermal targets, where the jurisdiction's energy code sets them.
+   * Absent means we have not sourced them for this jurisdiction — NOT that none
+   * apply. A missing target must never be read as "no requirement". */
+  thermalEnvelope?: ThermalEnvelopeTargets;
+}
+
+/**
+ * Prescriptive envelope R-values, as a PERFORMANCE TARGET rather than a product.
+ *
+ * This exists so a panel schedule can say "R-15 wall" instead of "6.5 inch
+ * panel". The distinction is the whole point: R-15 is quotable by every SIP
+ * manufacturer in their own core, while a thickness is one manufacturer's
+ * product line and locks the buyer to it. EPS at R-3.9/in reaches R-15 in
+ * 4.5 in; polyurethane at R-7/in reaches it in 3 in. Same requirement, two
+ * products, one document.
+ *
+ * `ci` is continuous insulation, the alternative compliance path the code
+ * offers alongside a cavity-only value. Both are carried because a SIP is
+ * closer to continuous insulation than to a framed cavity, and which path a
+ * plan reviewer accepts is theirs to decide, not ours to pre-empt.
+ */
+export interface ThermalEnvelopeTargets {
+  /** IECC/ASHRAE climate zone, e.g. '4A'. */
+  climateZone: string;
+  /** Minimum R for wood-frame walls, cavity path. */
+  wallR: number;
+  /** Continuous-insulation alternative, where the code states one. */
+  wallAlternative?: string;
+  /** Minimum R for ceilings. */
+  ceilingR: number;
+  ceilingAlternative?: string;
+  /** Where these numbers come from. Printed with them, never separated. */
+  citation: string;
 }
 
 export const JURISDICTION_PACKS: JurisdictionPack[] = [
@@ -121,6 +154,22 @@ export const JURISDICTION_PACKS: JurisdictionPack[] = [
     // Primary sources, retrieved 2026-06-11: NC OSFM "Codes - Current and Past"
     // (2018 Residential Code effective Jan 1 2019); NCRC 2018 (IRC 2015 base).
     codeEdition: '2018 North Carolina Residential Code (IRC 2015 base), in force since Jan 1, 2019',
+    // Cherokee County sits in climate zone 4A. The NCECC amends the 2015 IECC
+    // rather than adopting it verbatim, and the amendment matters here: NC's
+    // zone 4 wall is R-15, where the unamended IECC 2015 asks R-20 or R-13+5ci.
+    // Reading the model code instead of the state amendment would have
+    // over-specified every wall in the jurisdiction we actually serve.
+    thermalEnvelope: {
+      climateZone: '4A',
+      wallR: 15,
+      wallAlternative: 'R-13 + 2.5 ci',
+      ceilingR: 38,
+      ceilingAlternative: 'R-30 ci',
+      citation: 'NCECC 2018 (2015 IECC with North Carolina amendments, effective Jan 1 2019) '
+        + 'Table R402.1.2, climate zone 4. Verified against NAIMA Insulation Institute\'s '
+        + 'published NCECC summary, retrieved 2026-08-29. Confirm the in-force edition and '
+        + 'zone with Cherokee County Building Code Enforcement before permitting.',
+    },
     transitionNote:
       'The 2024 NC State Building Code adoption was delayed past April 2026 (Disaster Recovery Act of 2025). Confirm the in-force edition with Cherokee County Building Code Enforcement (828-837-5527) before permitting.',
     citationByRule: {
