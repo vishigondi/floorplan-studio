@@ -21,7 +21,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { thicknessOptions, recommendThickness, compareBids, REGIONAL_SUPPLIERS, CORE_R_PER_INCH } =
+const { thicknessOptions, recommendThickness, assessCompetition, compareBids,
+  REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER, CORE_MAX_PANEL_WIDTH_FT } =
   await import(join(root, 'lib/kit/sourcing.ts'));
 const { JURISDICTION_PACKS } = await import(join(root, 'lib/standards/code-advisory.ts'));
 
@@ -45,7 +46,7 @@ console.log('sourcing: the wall target keeps competition at the thinnest standar
   // the wall either; it is just cheaper than on the roof (1.5 in against 3.75).
   check('competition on the wall costs 1.5 in, not nothing',
     rec.interchangeabilityCostIn === 1.5, String(rec.interchangeabilityCostIn));
-  check('and the thinnest compliant wall is the single-source 3 in',
+  check('and the thinnest compliant wall is the single-source 3 in (polyurethane only)',
     rec.thinnestCompliant?.thicknessIn === 3 && rec.thinnestCompliant?.singleSource === true);
   check('3 in is flagged as a single-source trap',
     rec.lockInTraps.some((t) => t.thicknessIn === 3), rec.lockInTraps.map((t) => t.thicknessIn).join(', '));
@@ -53,22 +54,59 @@ console.log('sourcing: the wall target keeps competition at the thinnest standar
 
 console.log('\nsourcing: THE ROOF IS WHERE THE LOCK-IN HIDES');
 {
+  // CORRECTED. An earlier version asserted 10.25 in "keeps two cores bidding"
+  // at R-38. It does not: polyurethane is not manufactured above 8.125 in, so at
+  // 10.25 in only EPS exists. Reasoning from R-per-inch alone produced a
+  // recommendation no supplier could fill, and these checks now pin the product
+  // ladder as well as the physics.
   const rec = recommendThickness(nc.ceilingR); // R-38
-  // 6.5 in complies at R-46 in polyurethane and R-25 in EPS. It is the obvious
-  // panel and it has one supplier. If this check ever goes quiet, the analysis
-  // has stopped doing the only thing it was built for.
-  const trap = rec.lockInTraps.find((t) => t.thicknessIn === 6.5);
-  check('6.5 in roof is identified as single-source', Boolean(trap), rec.lockInTraps.map((t) => t.thicknessIn).join(', '));
-  check('and names polyurethane as the only bidder', trap?.bidders.join(',') === 'polyurethane', trap?.bidders.join(','));
-  check('8.25 in is also single-source', rec.lockInTraps.some((t) => t.thicknessIn === 8.25));
-  check('recommendation moves to 10.25 in to keep two bidders', rec.recommended?.thicknessIn === 10.25, String(rec.recommended?.thicknessIn));
-  check('the interchangeability cost is stated in inches', rec.interchangeabilityCostIn === 3.75, String(rec.interchangeabilityCostIn));
-  check('the note explains the trade rather than hiding it',
-    /price of being able to re-tender/i.test(rec.note ?? ''));
-  // Overshoot is what the buyer pays for competition: at 10.25 in polyurethane
-  // is R-72 against a R-38 target. Real money, and it should be visible.
-  check('overshoot is quantified for the over-specified core',
-    (rec.recommended?.overshootR.polyurethane ?? 0) > 30, String(rec.recommended?.overshootR.polyurethane));
+  check('no single thickness gives the roof two bidders at R-38',
+    rec.recommended === undefined, String(rec.recommended?.thicknessIn));
+  check('6.5 in is single-source (polyurethane only reaches R-38 there)',
+    rec.lockInTraps.some((t) => t.thicknessIn === 6.5 && t.bidders.join() === 'polyurethane'));
+  check('10.25 in is ALSO single-source — EPS only, since PU is not made that thick',
+    rec.lockInTraps.some((t) => t.thicknessIn === 10.25 && t.bidders.join() === 'eps'));
+  check('the note says the target is single-source or custom',
+    /single-source or custom/i.test(rec.note));
+}
+
+console.log('\nsourcing: competition without interchangeability is its own answer');
+{
+  const wall = assessCompetition(nc.wallR); // R-15
+  check('wall is interchangeable at a common thickness', wall.mode === 'interchangeable', wall.mode);
+  check('and names that common thickness', wall.commonThicknessIn === 4.5, String(wall.commonThicknessIn));
+
+  // The roof is the case the yes/no model could not express: both cores CAN
+  // bid, just at different depths. Returning "no recommendation" reads as
+  // failure when it is in fact the correct specification.
+  const roof = assessCompetition(nc.ceilingR); // R-38
+  check('roof is competitive but NOT interchangeable', roof.mode === 'competitive', roof.mode);
+  check('both cores can still bid the roof', roof.capableCores.length === 2, roof.capableCores.join(','));
+  check('at different thicknesses', roof.thicknessByCore.eps === 10.25 && roof.thicknessByCore.polyurethane === 6.5,
+    JSON.stringify(roof.thicknessByCore));
+  check('and the note says tender per build, not mid-build',
+    /per build, not mid-build/i.test(roof.note));
+
+  // The ci path the code also allows: still competitive, and thinner for both.
+  const ci = assessCompetition(30);
+  check('the R-30ci ceiling path is also competitive', ci.mode === 'competitive', ci.mode);
+  check('and lets both cores use a thinner panel',
+    ci.thicknessByCore.eps === 8.25 && ci.thicknessByCore.polyurethane === 4.5,
+    JSON.stringify(ci.thicknessByCore));
+}
+
+console.log('\nsourcing: product ladders constrain who can bid, not just R/inch');
+{
+  check('polyurethane is not manufactured above 8.125 in',
+    !CORE_THICKNESS_LADDER.polyurethane.some((t) => t > 8.125));
+  check('EPS is manufactured to 12.25 in', CORE_THICKNESS_LADDER.eps.includes(12.25));
+  check('only 4.5 and 6.5 are common to both ladders',
+    CORE_THICKNESS_LADDER.eps.filter((t) => CORE_THICKNESS_LADDER.polyurethane.includes(t)).join() === '4.5,6.5');
+  // Our 4 ft structural grid, inherited from WikiHouse, is also the widest
+  // module BOTH cores are made in. Designing to 8 ft would silently exclude
+  // the polyurethane supplier.
+  check('a 4 ft module keeps both cores in the race',
+    Math.min(...Object.values(CORE_MAX_PANEL_WIDTH_FT)) === 4);
 }
 
 console.log('\nsourcing: an impossible target is called impossible');

@@ -39,6 +39,41 @@ export const CORE_R_PER_INCH: Readonly<Record<string, number>> = {
  * non-standard thickness is a custom order, which is its own lock-in. */
 export const STANDARD_THICKNESS_IN: readonly number[] = [3, 4.5, 6.5, 8.25, 10.25, 12.25];
 
+/**
+ * WHAT EACH CORE IS ACTUALLY MANUFACTURED IN — and this is the correction that
+ * matters most in this file.
+ *
+ * An earlier version of this analysis reasoned about cores as if R-per-inch were
+ * the only constraint, and concluded a 10.25 in roof "keeps two cores bidding"
+ * at R-38. It does not. Polyurethane tops out at 8.125 in as a custom order;
+ * nobody makes a 10.25 in polyurethane panel. So at R-38 the roof is
+ * single-source at EVERY thickness: below 8.125 in only polyurethane reaches the
+ * R, and at 10.25 in and above only EPS is manufactured at all.
+ *
+ * The lesson is that R-per-inch describes physics and a product ladder describes
+ * what you can buy, and a specification has to satisfy both. Reasoning from
+ * physics alone produced a recommendation no supplier could fill.
+ *
+ * Ladders barely overlap: polyurethane runs 3 / 4.5 / 6.5 / 8.125, EPS runs
+ * 4.5 / 6.5 / 8.25 / 10.25 / 12.25. Only 4.5 and 6.5 are common to both.
+ *
+ * Sources: eco-panels product information (verified) for polyurethane;
+ * Insulspan published range 4.5-12.25 in (search-summary) for EPS.
+ */
+export const CORE_THICKNESS_LADDER: Readonly<Record<string, readonly number[]>> = {
+  eps: [4.5, 6.5, 8.25, 10.25, 12.25],
+  polyurethane: [3, 4.5, 6.5, 8.125],
+};
+
+/** Widest panel each core is made in. Eco-Panels cap at 4 ft; Insulspan reach
+ * 8 ft "jumbo" panels. Designing to a 4 ft module therefore keeps BOTH in the
+ * race, which is what our 4 ft structural grid already does — inherited from
+ * WikiHouse, and it happens to be the intersection-compatible choice here too. */
+export const CORE_MAX_PANEL_WIDTH_FT: Readonly<Record<string, number>> = {
+  eps: 8,
+  polyurethane: 4,
+};
+
 export interface ThicknessChoice {
   thicknessIn: number;
   /** Cores that can reach the target at this thickness — i.e. who may bid. */
@@ -53,14 +88,104 @@ export interface ThicknessChoice {
 /** Every standard thickness scored against a target, thinnest first. */
 export function thicknessOptions(minR: number): ThicknessChoice[] {
   return STANDARD_THICKNESS_IN.map((thicknessIn) => {
+    // A core qualifies only if it BOTH reaches the R and is manufactured at
+    // this thickness. Dropping the second test is what produced a roof
+    // recommendation nobody could supply.
     const bidders = Object.entries(CORE_R_PER_INCH)
-      .filter(([, rPerIn]) => rPerIn * thicknessIn >= minR)
+      .filter(([core, rPerIn]) => rPerIn * thicknessIn >= minR
+        && (CORE_THICKNESS_LADDER[core] ?? []).includes(thicknessIn))
       .map(([core]) => core);
     const overshootR = Object.fromEntries(
       bidders.map((core) => [core, Math.round((CORE_R_PER_INCH[core] * thicknessIn - minR) * 10) / 10]),
     );
     return { thicknessIn, bidders, overshootR, singleSource: bidders.length === 1 };
   });
+}
+
+/**
+ * How much competition a target can support, which is NOT a yes/no.
+ *
+ * 'interchangeable' — two or more cores meet the target at the SAME standard
+ *   thickness. Best case: bids are comparable and a supplier can be swapped
+ *   without moving a dimension.
+ * 'competitive' — two or more cores meet it, but each at their own thickness.
+ *   You still get real bids; you cannot switch mid-element, because the two
+ *   quotes describe walls of different depth.
+ * 'single-source' — one core can meet it at all. The tender is decorative.
+ *
+ * The middle case is the one the earlier model could not express, and it is
+ * where the roof actually lives.
+ */
+export type CompetitionMode = 'interchangeable' | 'competitive' | 'single-source' | 'unbuildable';
+
+export interface CompetitionAssessment {
+  mode: CompetitionMode;
+  /** Cores that can meet the target somewhere in their range. */
+  capableCores: string[];
+  /** Thickness each capable core would use — differs in 'competitive'. */
+  thicknessByCore: Record<string, number>;
+  /** Present only when a single thickness serves two or more cores. */
+  commonThicknessIn?: number;
+  note: string;
+}
+
+/**
+ * What competition is available for a target, given real product ladders.
+ *
+ * Written because `recommendThickness` answers "which single thickness do I
+ * write down", and for the roof the honest answer is "don't write one" — say
+ * the R and let each bidder reach it their own way. A function that can only
+ * return a thickness cannot express that, and returning `undefined` reads as
+ * failure when it is actually the correct specification.
+ */
+export function assessCompetition(minR: number): CompetitionAssessment {
+  const thicknessByCore: Record<string, number> = {};
+  for (const [core, rPerIn] of Object.entries(CORE_R_PER_INCH)) {
+    const fit = (CORE_THICKNESS_LADDER[core] ?? []).find((t) => rPerIn * t >= minR);
+    if (fit !== undefined) thicknessByCore[core] = fit;
+  }
+  const capableCores = Object.keys(thicknessByCore);
+  const common = thicknessOptions(minR).find((o) => o.bidders.length >= 2);
+
+  if (capableCores.length === 0) {
+    return {
+      mode: 'unbuildable',
+      capableCores,
+      thicknessByCore,
+      note: `No core reaches R-${minR} within any manufactured thickness. The target needs a `
+        + 'different assembly — added continuous insulation, or a different system entirely.',
+    };
+  }
+  if (capableCores.length === 1) {
+    return {
+      mode: 'single-source',
+      capableCores,
+      thicknessByCore,
+      note: `Only ${capableCores[0]} reaches R-${minR} within a manufactured thickness, so this `
+        + 'target has one bidder however it is written. Lower the target, accept a thicker '
+        + 'assembly, or accept the single source knowingly.',
+    };
+  }
+  if (common) {
+    return {
+      mode: 'interchangeable',
+      capableCores,
+      thicknessByCore,
+      commonThicknessIn: common.thicknessIn,
+      note: `R-${minR} is met by ${common.bidders.join(' and ')} at a common ${common.thicknessIn} in, `
+        + 'so bids are comparable AND a supplier can be changed without moving a dimension.',
+    };
+  }
+  return {
+    mode: 'competitive',
+    capableCores,
+    thicknessByCore,
+    note: `R-${minR} is reachable by ${capableCores.join(' and ')}, but at different thicknesses `
+      + `(${Object.entries(thicknessByCore).map(([c, t]) => `${c} ${t} in`).join(', ')}). `
+      + 'Specify the R and let each bidder reach it their own way: the quotes are genuinely '
+      + 'competitive, but they describe assemblies of different depth, so a supplier cannot be '
+      + 'swapped part-way through this element. Tender it per build, not mid-build.',
+  };
 }
 
 export interface ThicknessRecommendation {
