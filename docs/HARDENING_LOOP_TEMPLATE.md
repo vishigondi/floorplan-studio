@@ -11,7 +11,7 @@ the three blanks.
 ---
 
 ```
-In ~/projects/wikihouse-planner — <ONE-LINE GOAL>. Work in
+In ~/projects/floorplan-studio — <ONE-LINE GOAL>. Work in
 my REAL Chrome (tabs_context_mcp, dev localhost:3002). ONE verifiable
 capability per fire, in this order:
 

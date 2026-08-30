@@ -1125,7 +1125,7 @@ Recent drift files show:
 
 2026-05-31 A-frame 22 annotation checkpoint:
 
-- Archived the local rollback file `a-frame-22-proposal-paired-v10.paired.json.bak-1780196347027` out of the active paired data folder to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260531-active-paired-backups/`.
+- Archived the local rollback file `a-frame-22-proposal-paired-v10.paired.json.bak-1780196347027` out of the active paired data folder to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260531-active-paired-backups/`.
 - Kept current paired JSON, source image, render SVG, drift JSON, QA report, screenshots, and repair bundles active. They are current failure evidence, not cruft.
 - Fixed the next false layer classification after the dashed-void repair:
   - `scripts/recompute-visual-drift.mjs` now treats dimension primitives as annotation/presentation when source dimension edges are covered but the renderer adds extra tick/label edges.
@@ -1244,14 +1244,14 @@ Verification after this cleanup:
 
 - Removed stale generated `artifacts/` evidence and `.next/`; both are regenerated rather than treated as source.
 - Removed unused old-manifest symlinks and the hidden cron-loop helper from the active tree.
-- Archived heavyweight local evidence and BIM provider downloads to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-132324`.
+- Archived heavyweight local evidence and BIM provider downloads to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-132324`.
 - Left only the small BIM component catalogs in `public/data/bim-components`; provider/staging payloads are ignored local cache unless promoted as licensed release assets.
 - Restarted the dev server on `http://127.0.0.1:3002` after clearing `.next`.
 - Regenerated deterministic renders and visual drift for the three active plans.
 - Regenerated browser QA evidence from the live app.
 - Regenerated the repair queue from fresh QA only.
 - Added `npm run style:sweep` so the existing measured style sweep is reachable as a first-class command.
-- Archived stale paired backup/review files to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-140318-stale-paired-files`.
+- Archived stale paired backup/review files to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-140318-stale-paired-files`.
 - Validation files were restored after an over-broad archive because the active manifest still references them. Cleanup now needs an explicit manifest-reference check before moving validation artifacts.
 
 Fresh repair queue:
@@ -1262,7 +1262,7 @@ Fresh repair queue:
 Active bundle cleanup:
 
 - `artifacts/brochure-qa/repair-bundles-all` is now the canonical repair-bundle directory.
-- The older one-layer `artifacts/brochure-qa/repair-bundles` directory was archived to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-active-bundle-cleanup`.
+- The older one-layer `artifacts/brochure-qa/repair-bundles` directory was archived to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-active-bundle-cleanup`.
 - Mis-keyed `a-frame-22-*a-frame-bunk*product-packet.json` QA packets were archived with the old bundles. Fresh QA should regenerate packets under the correct plan/proposal names.
 
 Fresh checks:
@@ -1274,7 +1274,7 @@ Fresh checks:
 
 2026-05-30 paired cruft archive:
 
-- Moved stale paired-directory backups and browser/debug screenshots to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-162917-paired-cruft`.
+- Moved stale paired-directory backups and browser/debug screenshots to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-162917-paired-cruft`.
 - Archived only files that were not active manifests, paired JSON, deterministic renders, roof/elevation JSON, validation files, visual drift files, or repair bundles.
 - The active `public/data/den-image-loop` symlink now has no `*.bak-*`, `*.sweepbak`, `app-browser`, or `chatgpt-cdp-state` files inside paired artifact folders.
 - Keep this cleanup policy: archive stale evidence with a manifest; do not silently delete active source-of-truth artifacts.
@@ -1291,7 +1291,7 @@ Fresh checks:
 
 2026-05-30 active-path archive:
 
-- Moved the remaining active-path temp/backup artifacts to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-170703-active-path-cruft`.
+- Moved the remaining active-path temp/backup artifacts to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-170703-active-path-cruft`.
 - Archived files:
   - `outpost-medium-proposal-paired-v11.drawing-style.json.tmp-before-width-sweep`
   - `a-frame-22-proposal-paired-v10.paired.json.bak-1780174310959`
@@ -1335,7 +1335,7 @@ Fresh checks:
   - dimensions
   - drawing style profile
   - level frames
-- Archived stale `a-frame-22` browser/debug screenshots and old patch-loop output to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-175156-a-frame-22-debug-output`.
+- Archived stale `a-frame-22` browser/debug screenshots and old patch-loop output to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-175156-a-frame-22-debug-output`.
 - Smoke still passes after the archive. The active manifest-linked paired JSON, source images, renders, validation files, visual drift files, and repair bundles were not moved.
 
 2026-05-30 manifest-aware in-place archive:
@@ -1382,7 +1382,7 @@ Latest verification after archive/evaluator changes:
 
 2026-05-30 handoff-output archive:
 
-- Moved generated `paired-handoff/output` scaffolds out of the active data tree to `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-paired-handoff-output`.
+- Moved generated `paired-handoff/output` scaffolds out of the active data tree to `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-paired-handoff-output`.
 - Archived:
   - `outpost-medium-output`
   - `a-frame-bunk-output`
@@ -1435,8 +1435,8 @@ Latest verification after archive/evaluator changes:
 - No active paired `.bak`, `.tmp`, or `.sweep-runtime-bak` files remain outside paired archives.
 - No generated `paired-handoff/output` files remain in the active Den image-loop tree.
 - The old tracked legacy harness files currently deleted from the worktree were archived from `HEAD` for reversibility:
-  - `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-203903-removed-legacy-tracked-files/deleted-files.txt`
-  - `/Users/openclaw/.openclaw/archive/wikihouse-planner/20260530-203903-removed-legacy-tracked-files/deleted-files-from-head.tar`
+  - `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-203903-removed-legacy-tracked-files/deleted-files.txt`
+  - `/Users/openclaw/.openclaw/archive/floorplan-studio/20260530-203903-removed-legacy-tracked-files/deleted-files-from-head.tar`
 - This archive contains 26 removed tracked files, including old static home JSON, old SpatialIR manifests, pre-paired generator/analyzer scripts, and stale `.best` component snapshots. The active app should not load them.
 - `chatgpt-handoff/generated` images remain active because the proposal manifest references those source proposal images. Do not archive the whole handoff directory unless the manifest is updated to point at a replacement source-image location.
 - Fresh verification after the archive checkpoint:

@@ -1,6 +1,21 @@
 # Floorplan Studio
 
-Product-facing browser viewer for the Den Outdoors paired floorplan loop. The app starts from a Drafted-style gallery, opens each paired artifact as a customer-facing product page, and keeps repair/export/debug tools available without making them the default surface.
+Turns a one-line brief into a code-checked floor plan, and the plan into a
+tender document two panel manufacturers can quote against.
+
+A brief becomes a dimensioned plan with elevations, a semantic BIM and an IFC
+export, checked against the in-force residential code for its jurisdiction. From
+there the geometry becomes a **provider-neutral panel specification**: wall runs,
+rough openings, roof planes and a required R-value — never a thickness, a core or
+a brand, because naming any of those hands the job to one supplier by definition.
+
+The kit is structural insulated panels. It was WikiHouse Skylark until the block
+library stopped matching what the generator produced — Skylark ships roof blocks
+at 0 and 42 degrees, and six of seven roof styles here are neither.
+
+The browser app remains the review surface: a gallery of generated and traced
+plans, each opening as a customer-facing product page with repair, export and
+debug tools available but not default.
 
 ## Status Docs
 

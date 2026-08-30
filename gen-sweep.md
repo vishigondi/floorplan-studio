@@ -509,7 +509,7 @@ would quietly stop proving anything if the brief ever changed.
 Mutation-tested: count across the span again -> fails; one plane instead of two
 -> fails. Both restore green.
 
-## Moved the project to ~/projects/wikihouse-planner (2026-08-17)
+## Moved the project to ~/projects/floorplan-studio (2026-08-17)
 
 At the user's request. 2.1 GB moved with the working tree intact — git history,
 remote and the one uncommitted change all preserved, `npm run gates` and
