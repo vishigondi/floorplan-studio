@@ -50,8 +50,17 @@ export interface WallRunSpec {
   profile: 'plate' | 'gable-end' | 'slope';
   lengthFt: number;
   heightFt: number;
-  /** Rough openings in this run, positioned from the run's start. */
-  openings: Array<{ id: string; type: 'door' | 'window'; offsetFt: number; widthFt: number; headFt: number }>;
+  /** Panel area to manufacture, with the gable triangle already taken off, so
+   * two bidders cannot arrive at different quantities for the same building.
+   * A 'slope' run is 0 — it is roof, not wall. Openings are NOT deducted:
+   * openingAreaSqFt reports them separately, so a bidder's deduction policy
+   * changes their price without changing the quantity everyone is pricing. */
+  grossAreaSqFt: number;
+  openingAreaSqFt: number;
+  /** Rough openings in this run, positioned from the run's start. Sill and head
+   * are both given because a panel is cut from both: a head alone does not
+   * locate the opening. */
+  openings: Array<{ id: string; type: 'door' | 'window'; offsetFt: number; widthFt: number; sillFt: number; headFt: number }>;
 }
 
 export interface RoofPlaneSpec {
@@ -255,6 +264,7 @@ export function adaptArtifactToPanelGeometry(artifact: ArtifactLike): AdaptedGeo
       // Offset from the run's start, in the facade's own direction.
       offsetFt: Math.round((o.center - o.widthFt / 2) * 100) / 100,
       widthFt: o.widthFt,
+      sillFt: o.sillFt,
       headFt: o.headFt,
     })));
   }
@@ -268,6 +278,18 @@ export function adaptArtifactToPanelGeometry(artifact: ArtifactLike): AdaptedGeo
     const constantZ = Math.abs(span.z1 - span.z2) < 0.01;
     return ridgeAlongZ ? constantZ : !constantZ;
   };
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  // A gable end is a rectangle to the plate plus a triangle to the ridge.
+  // 1/2 x base x height holds whether the apex is centred (gable) or at one end
+  // (shed), so this does not need to know which roof it is under.
+  const grossArea = (profile: WallRunSpec['profile'], lengthFt: number) => {
+    if (profile === 'slope') return 0;
+    const rect = lengthFt * eaveFt;
+    return round2(profile === 'gable-end' ? rect + (lengthFt * Math.max(0, ridgeFt - eaveFt)) / 2 : rect);
+  };
+  const openingArea = (openings: WallRunSpec['openings']) =>
+    round2(openings.reduce((a, o) => a + o.widthFt * Math.max(0, o.headFt - o.sillFt), 0));
 
   const wallRuns: WallRunSpec[] = [];
   for (const wall of artifact.exteriorWalls ?? []) {
@@ -291,13 +313,18 @@ export function adaptArtifactToPanelGeometry(artifact: ArtifactLike): AdaptedGeo
       // openings; plate walls the plate, because that is the panel. A slope
       // reports the stub it actually is, and its openings belong to the roof.
       heightFt: gable ? ridgeFt : eaveFt,
+      grossAreaSqFt: grossArea(profile, lengthFt),
+      openingAreaSqFt: openingArea(openingsByWall.get(wall.id) ?? []),
       openings: openingsByWall.get(wall.id) ?? [],
     });
   }
   for (const wall of artifact.interiorWalls ?? []) {
     const lengthFt = Math.round(lengthOf(wall.span) * 100) / 100;
     if (lengthFt <= 0) continue;
-    wallRuns.push({ id: wall.id, kind: 'interior', profile: 'plate', lengthFt, heightFt: eaveFt, openings: [] });
+    wallRuns.push({
+      id: wall.id, kind: 'interior', profile: 'plate', lengthFt, heightFt: eaveFt,
+      grossAreaSqFt: grossArea('plate', lengthFt), openingAreaSqFt: 0, openings: [],
+    });
   }
 
   const roofPlanes: RoofPlaneSpec[] = (artifact.roof.planes ?? [])
@@ -313,7 +340,8 @@ export function adaptArtifactToPanelGeometry(artifact: ArtifactLike): AdaptedGeo
     notes.push(
       `${gableEnds.map((r) => r.id).join(', ')} are GABLE ENDS: triangular, rising to the `
       + `${ridgeFt} ft ridge. Their reported height is the apex, so panel area is NOT length x `
-      + 'height and needs its own take-off. Remaining walls are quoted to the '
+      + 'height — grossAreaSqFt already carries the triangle taken off for you, and is the '
+      + 'quantity to price. Remaining walls are quoted to the '
       + `${eaveFt} ft plate, where a wall panel stops.`,
     );
   }

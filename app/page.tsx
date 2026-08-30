@@ -18,8 +18,9 @@ import { localBimAssetSummary, localVisualAssetAttributions } from '@/lib/bim/co
 import { buildableBimFromHome, buildableBimSummary } from '@/lib/bim/buildable-bim';
 import { standardsRegistrySummary, validateStandards, codeAdvisoryReportForHome, lotFromArtifact } from '@/lib/standards/floorplan-standards';
 import { buildElevationModel, drawnElevationViews as drawnViewsFor, elevationSvgString, type ElevationArtifactInput, type ElevationView } from '@/lib/elevations';
+import { assessCompetition } from '@/lib/kit/sourcing';
 import { LOOKS, buildLookRenderPrompt, lookRenderSpecFromArtifact, type LookId, type LookRenderMode } from '@/lib/look-render';
-import { CODE_ADVISORY_RULES, type CodeAdvisoryFinding } from '@/lib/standards/code-advisory';
+import { CODE_ADVISORY_RULES, JURISDICTION_PACKS, type CodeAdvisoryFinding } from '@/lib/standards/code-advisory';
 import { parseBrief, briefToPromptFields } from '@/lib/brief';
 import { countDrawingPrimitives, diffSourceToSemanticDrawingPrimitives, extractSourceDrawingPrimitives } from '@/lib/drawing-primitives';
 import {
@@ -256,7 +257,32 @@ function PairedStatusPanel({ home, renderedBounds }: { home: DenHome | null; ren
               ))}
             </div>
           )}
-
+          {(() => {
+            // The open-kit verdict, in SIP terms. Under Skylark the customer's
+            // question was "can I cut this from stock blocks?". Under a specified
+            // kit it is "will more than one supplier bid this?" — and that is the
+            // whole product, so it belongs on screen and not only in a battery.
+            //
+            // 'single-source' is the state worth showing loudest. It is not a
+            // failure: the plan is buildable and will get a price. It means the
+            // envelope target admits exactly one core, so the tender has one
+            // bidder however it is written, and the lock-in the kit exists to
+            // avoid has quietly happened.
+            const kit = openKitVerdict(home);
+            if (!kit) return null;
+            const tone = kit.mode === 'interchangeable' ? 'text-emerald-700'
+              : kit.mode === 'competitive' ? 'text-emerald-600'
+                : kit.mode === 'single-source' ? 'text-amber-700' : 'text-red-700';
+            return (
+              <div className="mt-2 border border-stone-200 bg-stone-50 p-2" data-kit-status={kit.mode}>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-stone-400">panel sourcing</span>
+                  <span className={`font-mono ${tone}`}>{kit.mode}</span>
+                </div>
+                <div className="text-[9px] leading-snug text-stone-600">{kit.note}</div>
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <div className="mt-2 text-[10px] leading-snug text-stone-400">
@@ -282,6 +308,23 @@ function planNotes(home: DenHome | null): string[] {
   return Array.isArray(raw?.notes) ? raw.notes.filter((note): note is string => typeof note === 'string') : [];
 }
 
+
+/**
+ * How many suppliers can bid this plan's envelope?
+ *
+ * Reads the jurisdiction's wall target rather than the plan geometry, because
+ * that is what decides it: competition is a property of the R-value asked for,
+ * not of the shape. A plan can be perfectly buildable and still have one bidder.
+ */
+function openKitVerdict(home: DenHome | null) {
+  if (!home) return null;
+  // The report carries only a jurisdiction summary, so the targets come from the
+  // pack it names — one lookup, rather than widening the report for one caller.
+  const id = codeAdvisoryReportForHome(home)?.jurisdiction?.id;
+  const targets = JURISDICTION_PACKS.find((pack) => pack.id === id)?.thermalEnvelope;
+  if (!targets?.wallR) return null;
+  return assessCompetition(targets.wallR);
+}
 
 function liveGeometryAudit(home: DenHome | null): PairedGeometryAudit | undefined {
   if (!home?.pairedArtifact) return undefined;
@@ -1200,6 +1243,13 @@ function validationGroups(home: DenHome | null, renderedBounds: RenderedModelBou
     const brochure = brochureQualityIssues(home);
     brochure.blockers.forEach((item) => block('brochure-quality', item));
     brochure.warnings.forEach((item) => warn('brochure-quality', item));
+    // Sourcing competition rides in the manufacturing lane as a WARNING, not a
+    // blocker: a plan only one supplier can quote is still buildable, it just
+    // is not an open kit, and that is the buyer's decision to make knowingly.
+    const kit = openKitVerdict(home);
+    if (kit && kit.mode !== 'interchangeable' && kit.mode !== 'competitive') {
+      warn('build', `panel sourcing (${kit.mode}): ${kit.note}`);
+    }
     const bim = buildableBimSummary(buildableBimFromHome(home));
     bim.blockers.forEach((item) => block('bim', item));
     for (const item of bim.warnings.slice(0, 6)) {
@@ -5473,6 +5523,25 @@ export default function Home() {
                 <div className="font-mono text-[9px] text-stone-400">
                   {displayHome.pairedArtifactInfo?.reviewStatus ?? 'pending'} - {displayHome.pairedProposalId}
                 </div>
+                {(() => {
+                  // The one question a buyer of a SPECIFIED kit has: will more
+                  // than one supplier bid this? It belongs on the card they can
+                  // see, not behind Review Tools — the verdict was gated for a
+                  // whole fire while showing nowhere, and when the kit changed
+                  // from Skylark to SIPs this card was deleted with it, which
+                  // put it back to showing nowhere for a second time.
+                  const kit = openKitVerdict(displayHome);
+                  if (!kit) return null;
+                  const tone = kit.mode === 'interchangeable' || kit.mode === 'competitive'
+                    ? 'text-emerald-600'
+                    : kit.mode === 'single-source' ? 'text-amber-600' : 'text-red-600';
+                  return (
+                    <div className="border-t border-stone-200 pt-1" data-kit-status={kit.mode} title={kit.note}>
+                      <span className="text-stone-400">panel sourcing: </span>
+                      <span className={`font-medium ${tone}`}>{kit.mode}</span>
+                    </div>
+                  );
+                })()}
 
                 {(() => {
                   // Where the plan differs from its brief, said out loud on the

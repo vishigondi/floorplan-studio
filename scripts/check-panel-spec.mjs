@@ -141,7 +141,45 @@ for (const brief of BRIEFS) {
       gables.every((r) => Math.abs(r.heightFt - ridge) < 0.01), gables.map((r) => r.heightFt).join(','));
     check(`${brief}: the note warns area is not length x height`,
       g.notes.some((n) => /NOT length x height/i.test(n)));
+    // The take-off itself. A gable end is a rectangle to the plate plus a
+    // triangle to the ridge; quoting length x apex over-states it by the
+    // triangle's own area again, which on a 6 ft rise is a quarter of the wall.
+    // Two bidders taking this off by hand is exactly the variance that makes
+    // their prices incomparable, which is the point of sending a spec at all.
+    for (const r of gables) {
+      const want = r.lengthFt * eave + (r.lengthFt * (ridge - eave)) / 2;
+      check(`${brief}: ${r.id} area is the rectangle plus the triangle`,
+        Math.abs(r.grossAreaSqFt - want) < 0.02, `${r.grossAreaSqFt} vs ${want.toFixed(2)}`);
+      check(`${brief}: ${r.id} is not quoted as length x apex`,
+        r.grossAreaSqFt < r.lengthFt * r.heightFt - 0.02,
+        `${r.grossAreaSqFt} vs naive ${(r.lengthFt * r.heightFt).toFixed(2)}`);
+    }
   }
+  // Plate walls are the simple case, and the one a refactor is most likely to
+  // break while the gable maths still passes.
+  check(`${brief}: plate areas are length x plate height`,
+    extRuns.filter((r) => r.profile === 'plate')
+      .every((r) => Math.abs(r.grossAreaSqFt - r.lengthFt * eave) < 0.02));
+  // A slope facade is roof. Quoting it as wall area sells panels for a wall
+  // that does not exist.
+  check(`${brief}: slope facades carry no wall area`,
+    extRuns.filter((r) => r.profile === 'slope').every((r) => r.grossAreaSqFt === 0));
+  // A manufacturer cuts a rough opening from BOTH edges. A head with no sill
+  // does not locate the hole, so the panel cannot be cut from this document.
+  check(`${brief}: every opening carries a sill as well as a head`,
+    extRuns.every((r) => r.openings.every((o) => typeof o.sillFt === 'number' && o.headFt > o.sillFt)),
+    extRuns.flatMap((r) => r.openings.filter((o) => !(o.headFt > o.sillFt)).map((o) => o.id)).join(','));
+  // On a real wall the holes cannot exceed the wall. A slope facade is exempt
+  // because it HAS no wall: its openings are cut into the roof plane, so they
+  // are reported but must never be netted against wall area.
+  check(`${brief}: openings never exceed the wall they are cut from`,
+    extRuns.filter((r) => r.profile !== 'slope')
+      .every((r) => r.openingAreaSqFt <= r.grossAreaSqFt + 0.02
+        && (r.openings.length > 0) === (r.openingAreaSqFt > 0)));
+  check(`${brief}: a slope facade's openings are roof cuts, not wall deductions`,
+    extRuns.filter((r) => r.profile === 'slope')
+      .every((r) => r.grossAreaSqFt === 0 && r.openingAreaSqFt >= 0));
+
   // An a-frame has no plate-height wall at all; saying so is the honest output.
   if (eave < 4) {
     check(`${brief}: a ${eave} ft eave is called out as having no plate wall`,
