@@ -28,12 +28,56 @@
 // the STRUCTURE of the comparison — which terms belong in it, and which
 // specification choices quietly delete a bidder.
 
-/** Published R per inch. EPS from Mighty Small Homes' supplier disclosure;
- * polyurethane from eco-panels' product information. Retrieved 2026-08-28. */
+/**
+ * PUBLISHED R PER THICKNESS — not a rate, and this is the second correction of
+ * the same kind in this file.
+ *
+ * We first modelled R as (R-per-inch x thickness). Insulspan publish the actual
+ * assembly values in their MasterFormat specification, and they are materially
+ * lower than 3.9/in predicts:
+ *
+ *      4.5 in  R-15.0   (rate model said 17.6)
+ *      6.5 in  R-22.6   (25.3)
+ *     8.25 in  R-29.2   (32.2)
+ *    10.25 in  R-36.8   (40.0)
+ *    12.25 in  R-44.4   (47.8)
+ *
+ * The rate over-states every thickness by 2.6-3.4, because R per inch is not
+ * constant: the OSB skins contribute a fixed amount, so effective R/in climbs
+ * from 3.33 to 3.62 across the range. That pushed every EPS roof answer one full
+ * step too thin. R-38 needs 12.25 in, not the 10.25 we had; the R-30ci path
+ * needs 10.25 in, not 8.25.
+ *
+ * Rates are for reasoning. Published assembly values are for specifying. This
+ * file has now been wrong twice by preferring the former — once on product
+ * ladders, once on R — and both times the published document settled it.
+ *
+ * EPS: Insulspan MasterFormat Section 06 12 00, thermal resistance at 75F mean,
+ * OSB surface spline or insulated block spline. VERIFIED at source 2026-08-29.
+ *
+ * Polyurethane: eco-panels product information, VERIFIED, but published as
+ * RANGES (4.5 in "R-26 to 31.5"). The conservative end is carried, because a
+ * compliance decision taken on the optimistic end of someone's marketing range
+ * is not a compliance decision.
+ */
+export const CORE_R_BY_THICKNESS: Readonly<Record<string, Readonly<Record<number, number>>>> = {
+  eps: { 4.5: 15.0, 6.5: 22.6, 8.25: 29.2, 10.25: 36.8, 12.25: 44.4 },
+  polyurethane: { 3: 21, 4.5: 26, 6.5: 40, 8.125: 60 },
+};
+
+/** Nominal rate, retained ONLY for rough reasoning and clearly not for
+ * specifying. Every compliance test uses CORE_R_BY_THICKNESS. */
 export const CORE_R_PER_INCH: Readonly<Record<string, number>> = {
   eps: 3.9,
   polyurethane: 7.0,
 };
+
+/** The R a core actually delivers at a thickness, or undefined if it is not
+ * made in that thickness. No interpolation: a thickness nobody publishes is a
+ * thickness nobody sells. */
+export function publishedR(core: string, thicknessIn: number): number | undefined {
+  return CORE_R_BY_THICKNESS[core]?.[thicknessIn];
+}
 
 /** Thicknesses the industry actually stocks. A target met only at a
  * non-standard thickness is a custom order, which is its own lock-in. */
@@ -91,12 +135,13 @@ export function thicknessOptions(minR: number): ThicknessChoice[] {
     // A core qualifies only if it BOTH reaches the R and is manufactured at
     // this thickness. Dropping the second test is what produced a roof
     // recommendation nobody could supply.
-    const bidders = Object.entries(CORE_R_PER_INCH)
-      .filter(([core, rPerIn]) => rPerIn * thicknessIn >= minR
-        && (CORE_THICKNESS_LADDER[core] ?? []).includes(thicknessIn))
-      .map(([core]) => core);
+    // Published assembly value, and membership of the product ladder. Both, or
+    // the answer describes a panel that is not for sale.
+    const bidders = Object.keys(CORE_R_BY_THICKNESS)
+      .filter((core) => (publishedR(core, thicknessIn) ?? -1) >= minR)
+      .map((core) => core);
     const overshootR = Object.fromEntries(
-      bidders.map((core) => [core, Math.round((CORE_R_PER_INCH[core] * thicknessIn - minR) * 10) / 10]),
+      bidders.map((core) => [core, Math.round(((publishedR(core, thicknessIn) ?? 0) - minR) * 10) / 10]),
     );
     return { thicknessIn, bidders, overshootR, singleSource: bidders.length === 1 };
   });
@@ -140,8 +185,8 @@ export interface CompetitionAssessment {
  */
 export function assessCompetition(minR: number): CompetitionAssessment {
   const thicknessByCore: Record<string, number> = {};
-  for (const [core, rPerIn] of Object.entries(CORE_R_PER_INCH)) {
-    const fit = (CORE_THICKNESS_LADDER[core] ?? []).find((t) => rPerIn * t >= minR);
+  for (const core of Object.keys(CORE_R_BY_THICKNESS)) {
+    const fit = (CORE_THICKNESS_LADDER[core] ?? []).find((t) => (publishedR(core, t) ?? -1) >= minR);
     if (fit !== undefined) thicknessByCore[core] = fit;
   }
   const capableCores = Object.keys(thicknessByCore);

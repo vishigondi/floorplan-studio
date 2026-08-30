@@ -22,7 +22,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { thicknessOptions, recommendThickness, assessCompetition, compareBids,
-  REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER, CORE_MAX_PANEL_WIDTH_FT } =
+  REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER, CORE_MAX_PANEL_WIDTH_FT,
+  CORE_R_BY_THICKNESS, publishedR } =
   await import(join(root, 'lib/kit/sourcing.ts'));
 const { JURISDICTION_PACKS } = await import(join(root, 'lib/standards/code-advisory.ts'));
 
@@ -64,8 +65,8 @@ console.log('\nsourcing: THE ROOF IS WHERE THE LOCK-IN HIDES');
     rec.recommended === undefined, String(rec.recommended?.thicknessIn));
   check('6.5 in is single-source (polyurethane only reaches R-38 there)',
     rec.lockInTraps.some((t) => t.thicknessIn === 6.5 && t.bidders.join() === 'polyurethane'));
-  check('10.25 in is ALSO single-source — EPS only, since PU is not made that thick',
-    rec.lockInTraps.some((t) => t.thicknessIn === 10.25 && t.bidders.join() === 'eps'));
+  check('12.25 in is ALSO single-source — EPS only, since PU is not made that thick',
+    rec.lockInTraps.some((t) => t.thicknessIn === 12.25 && t.bidders.join() === 'eps'));
   check('the note says the target is single-source or custom',
     /single-source or custom/i.test(rec.note));
 }
@@ -82,7 +83,7 @@ console.log('\nsourcing: competition without interchangeability is its own answe
   const roof = assessCompetition(nc.ceilingR); // R-38
   check('roof is competitive but NOT interchangeable', roof.mode === 'competitive', roof.mode);
   check('both cores can still bid the roof', roof.capableCores.length === 2, roof.capableCores.join(','));
-  check('at different thicknesses', roof.thicknessByCore.eps === 10.25 && roof.thicknessByCore.polyurethane === 6.5,
+  check('at different thicknesses', roof.thicknessByCore.eps === 12.25 && roof.thicknessByCore.polyurethane === 6.5,
     JSON.stringify(roof.thicknessByCore));
   check('and the note says tender per build, not mid-build',
     /per build, not mid-build/i.test(roof.note));
@@ -90,9 +91,8 @@ console.log('\nsourcing: competition without interchangeability is its own answe
   // The ci path the code also allows: still competitive, and thinner for both.
   const ci = assessCompetition(30);
   check('the R-30ci ceiling path is also competitive', ci.mode === 'competitive', ci.mode);
-  check('and lets both cores use a thinner panel',
-    ci.thicknessByCore.eps === 8.25 && ci.thicknessByCore.polyurethane === 4.5,
-    JSON.stringify(ci.thicknessByCore));
+  check('and lets EPS use a thinner panel than R-38 needs',
+    ci.thicknessByCore.eps === 10.25, JSON.stringify(ci.thicknessByCore));
 }
 
 console.log('\nsourcing: product ladders constrain who can bid, not just R/inch');
@@ -131,6 +131,29 @@ console.log('\nsourcing: bids rank on total delivered cost, not panel price');
   check('total is the sum of all three terms',
     ranked[0].totalDelivered === 21000 + 900 + 120 * 55, String(ranked[0].totalDelivered));
   check('results are ordered cheapest-first', ranked[0].totalDelivered <= ranked[1].totalDelivered);
+}
+
+console.log('\nsourcing: compliance uses PUBLISHED R, never a rate');
+{
+  // The rate model over-stated every EPS thickness by 2.6-3.4 R, because R per
+  // inch is not constant -- the OSB skins are a fixed contribution, so effective
+  // R/in climbs 3.33 -> 3.62 across the range. That pushed every roof answer a
+  // full step too thin. These pin the published values so the rate cannot creep
+  // back into a compliance decision.
+  check('4.5 in EPS is the published R-15.0, not the rate model 17.6',
+    publishedR('eps', 4.5) === 15.0, String(publishedR('eps', 4.5)));
+  check('10.25 in EPS is R-36.8 and therefore does NOT meet R-38',
+    publishedR('eps', 10.25) === 36.8 && publishedR('eps', 10.25) < 38);
+  check('R-38 in EPS needs 12.25 in', publishedR('eps', 12.25) >= 38, String(publishedR('eps', 12.25)));
+  check('a thickness nobody publishes returns undefined, not an interpolation',
+    publishedR('eps', 7) === undefined && publishedR('polyurethane', 10.25) === undefined);
+  // Effective R/inch rises with thickness; a single rate cannot express that.
+  const eff = Object.entries(CORE_R_BY_THICKNESS.eps).map(([t, r]) => r / Number(t));
+  check('effective R/inch is not constant across the EPS range',
+    Math.max(...eff) - Math.min(...eff) > 0.2, `${Math.min(...eff).toFixed(2)}-${Math.max(...eff).toFixed(2)}`);
+  // Polyurethane is published as ranges; we carry the conservative end.
+  check('polyurethane 4.5 in uses the low end of its published range',
+    CORE_R_BY_THICKNESS.polyurethane[4.5] === 26);
 }
 
 console.log('\nsourcing: supplier data is honest about what was verified');
