@@ -17,9 +17,8 @@ import { ceilingHeightAt as envelopeCeilingHeightAt, type CeilingPlane as Envelo
 import { resolveEgressWindow } from './place-openings.ts';
 import { resolveFixtureSet } from './place-fixtures.ts';
 import { ceilingPlanesFromRoofPoints } from '../bim/envelope-clip.ts';
-// The kit is discrete: its pitches are measured from the real Skylark blocks,
+// The kit is structural insulated panels, which impose no pitch restriction,
 // so a "buildable from the kit" request constrains geometry, not marketing.
-import { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG } from '../kit/skylark.ts';
 import { ridgeHeightForPitchFt, roofPitchDeg } from '../roof-geometry.ts';
 
 export interface IntentRoom {
@@ -83,7 +82,6 @@ export interface GenerationIntent {
    * silently exceed) a cap no template is small enough to meet. */
   requestedMaxSqft?: number;
   /** Brief asked for a home the open WikiHouse kit can actually build. */
-  kitBuildable?: boolean;
   /** Storeys the brief asked for, RAW. The generator builds one storey plus an
    *  optional loft, so anything more must be refused rather than quietly
    *  delivered as a bungalow. */
@@ -622,20 +620,11 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
     );
   }
 
-  // A kit request is a REQUEST, and the kit is discrete. Building a hip roof for
-  // someone who asked for a WikiHouse home and quietly shipping something no
-  // block set can cut is the same silent-mismatch class as clamping a bedroom
-  // count. The kit module decides — never a second copy of its rules here.
-  if (intent.kitBuildable) {
-    const pitchDeg = roofPitchDeg(intent.roof, { widthFt, depthFt });
-    const kit = assessSkylarkKit({ roofStyle: intent.roof.style, roofPitchDeg: pitchDeg });
-    if (kit.status !== 'buildable') {
-      errors.push(
-        `${/^[aeiou]/.test(intent.roof.style) ? 'an' : 'a'} ${intent.roof.style} roof cannot be built from the WikiHouse kit — ${kit.reasons.join(' ')} `
-        + `The kit builds a flat roof or a ${KIT_PITCH_DEG}° gable; ask for one of those, or drop the kit requirement.`,
-      );
-    }
-  }
+  // NO KIT-BUILDABILITY REFUSAL. This used to reject any roof the WikiHouse
+  // Skylark block set could not cut — which was six of the seven styles this
+  // generator produces, because Skylark ships 0 and 42 degree blocks and we
+  // build 15.9, 23.2, 29.7 and 50.5. A SIP imposes no pitch restriction, so
+  // every style is panelisable and there is nothing left to refuse.
 
   // A footprint that cannot sit inside the lot's buildable envelope is a hard
   // design failure, not an advisory: refuse to compile rather than emit a plan
@@ -1270,7 +1259,6 @@ export function compileIntent(intent: GenerationIntent, planId: string, brief: s
  * compileIntent reports the honest envelope failure.
  */
 /** The kit's pitched archetype, in degrees — measured, not chosen by us. */
-const KIT_PITCH_DEG = SKYLARK_ROOF_PITCHES_DEG.filter((p) => p > 0).slice(-1)[0] ?? 0;
 
 /**
  * Ridge height for the a-frame/gable family.
@@ -1321,19 +1309,12 @@ function ridgeForGridAlignedLoft(
 function gableRidgeFt(
   style: string,
   widthFt: number,
-  brief: { hasLoft?: boolean; kitBuildable?: boolean },
+  brief: { hasLoft?: boolean },
 ): number {
   if (style === 'a-frame') {
     return brief.hasLoft
       ? ridgeForGridAlignedLoft({ style, ridgeAxis: 'z', eaveHeightFt: 1 }, 18, widthFt, widthFt)
       : 18;
-  }
-  if (brief.kitBuildable && KIT_PITCH_DEG > 0) {
-    return ridgeHeightForPitchFt(
-      { style, ridgeAxis: 'z', ridgeHeightFt: 0, eaveHeightFt: 8 },
-      { widthFt, depthFt: widthFt },
-      KIT_PITCH_DEG,
-    );
   }
   return brief.hasLoft
     ? ridgeForGridAlignedLoft({ style, ridgeAxis: 'z', eaveHeightFt: 8 }, 20, widthFt, widthFt)
@@ -1863,7 +1844,6 @@ export function mockIntentFromBrief(brief: { bedrooms?: number; baths?: number; 
     // Carry the ≤ sqft cap so compile can refuse a cap no template can meet,
     // instead of silently shipping a footprint larger than the user allowed.
     requestedMaxSqft: brief.maxSqft,
-    kitBuildable: brief.kitBuildable,
     requestedLevels: brief.levels,
     // Carry the RAW requested roof style so compile can refuse an unimplemented
     // style instead of silently substituting the a-frame flattened above.

@@ -1,3 +1,7 @@
+import {
+  CORE_R_BY_THICKNESS, CORE_THICKNESS_LADDER, CORE_R_PER_INCH, publishedR,
+} from './sip.ts';
+
 // SOURCING ANALYSIS — choosing a specification that keeps suppliers competing.
 //
 // The panel spec says what to build. This says how to write it so more than one
@@ -28,95 +32,19 @@
 // the STRUCTURE of the comparison — which terms belong in it, and which
 // specification choices quietly delete a bidder.
 
-/**
- * PUBLISHED R PER THICKNESS — not a rate, and this is the second correction of
- * the same kind in this file.
- *
- * We first modelled R as (R-per-inch x thickness). Insulspan publish the actual
- * assembly values in their MasterFormat specification, and they are materially
- * lower than 3.9/in predicts:
- *
- *      4.5 in  R-15.0   (rate model said 17.6)
- *      6.5 in  R-22.6   (25.3)
- *     8.25 in  R-29.2   (32.2)
- *    10.25 in  R-36.8   (40.0)
- *    12.25 in  R-44.4   (47.8)
- *
- * The rate over-states every thickness by 2.6-3.4, because R per inch is not
- * constant: the OSB skins contribute a fixed amount, so effective R/in climbs
- * from 3.33 to 3.62 across the range. That pushed every EPS roof answer one full
- * step too thin. R-38 needs 12.25 in, not the 10.25 we had; the R-30ci path
- * needs 10.25 in, not 8.25.
- *
- * Rates are for reasoning. Published assembly values are for specifying. This
- * file has now been wrong twice by preferring the former — once on product
- * ladders, once on R — and both times the published document settled it.
- *
- * EPS: Insulspan MasterFormat Section 06 12 00, thermal resistance at 75F mean,
- * OSB surface spline or insulated block spline. VERIFIED at source 2026-08-29.
- *
- * Polyurethane: eco-panels product information, VERIFIED, but published as
- * RANGES (4.5 in "R-26 to 31.5"). The conservative end is carried, because a
- * compliance decision taken on the optimistic end of someone's marketing range
- * is not a compliance decision.
- */
-export const CORE_R_BY_THICKNESS: Readonly<Record<string, Readonly<Record<number, number>>>> = {
-  eps: { 4.5: 15.0, 6.5: 22.6, 8.25: 29.2, 10.25: 36.8, 12.25: 44.4 },
-  polyurethane: { 3: 21, 4.5: 26, 6.5: 40, 8.125: 60 },
-};
+// Panel facts live in ./sip.ts. This module decides WHO CAN BID; it does not
+// keep its own copy of what a panel is. CORE_R_PER_INCH used to be defined here
+// and again in panel-spec.ts — two copies of a number that must never disagree.
+export {
+  CORE_R_BY_THICKNESS, CORE_THICKNESS_LADDER, CORE_R_PER_INCH,
+  CORE_MAX_PANEL_FT, publishedR, coresMeeting,
+} from './sip.ts';
 
-/** Nominal rate, retained ONLY for rough reasoning and clearly not for
- * specifying. Every compliance test uses CORE_R_BY_THICKNESS. */
-export const CORE_R_PER_INCH: Readonly<Record<string, number>> = {
-  eps: 3.9,
-  polyurethane: 7.0,
-};
-
-/** The R a core actually delivers at a thickness, or undefined if it is not
- * made in that thickness. No interpolation: a thickness nobody publishes is a
- * thickness nobody sells. */
-export function publishedR(core: string, thicknessIn: number): number | undefined {
-  return CORE_R_BY_THICKNESS[core]?.[thicknessIn];
-}
-
-/** Thicknesses the industry actually stocks. A target met only at a
- * non-standard thickness is a custom order, which is its own lock-in. */
-export const STANDARD_THICKNESS_IN: readonly number[] = [3, 4.5, 6.5, 8.25, 10.25, 12.25];
-
-/**
- * WHAT EACH CORE IS ACTUALLY MANUFACTURED IN — and this is the correction that
- * matters most in this file.
- *
- * An earlier version of this analysis reasoned about cores as if R-per-inch were
- * the only constraint, and concluded a 10.25 in roof "keeps two cores bidding"
- * at R-38. It does not. Polyurethane tops out at 8.125 in as a custom order;
- * nobody makes a 10.25 in polyurethane panel. So at R-38 the roof is
- * single-source at EVERY thickness: below 8.125 in only polyurethane reaches the
- * R, and at 10.25 in and above only EPS is manufactured at all.
- *
- * The lesson is that R-per-inch describes physics and a product ladder describes
- * what you can buy, and a specification has to satisfy both. Reasoning from
- * physics alone produced a recommendation no supplier could fill.
- *
- * Ladders barely overlap: polyurethane runs 3 / 4.5 / 6.5 / 8.125, EPS runs
- * 4.5 / 6.5 / 8.25 / 10.25 / 12.25. Only 4.5 and 6.5 are common to both.
- *
- * Sources: eco-panels product information (verified) for polyurethane;
- * Insulspan published range 4.5-12.25 in (search-summary) for EPS.
- */
-export const CORE_THICKNESS_LADDER: Readonly<Record<string, readonly number[]>> = {
-  eps: [4.5, 6.5, 8.25, 10.25, 12.25],
-  polyurethane: [3, 4.5, 6.5, 8.125],
-};
-
-/** Widest panel each core is made in. Eco-Panels cap at 4 ft; Insulspan reach
- * 8 ft "jumbo" panels. Designing to a 4 ft module therefore keeps BOTH in the
- * race, which is what our 4 ft structural grid already does — inherited from
- * WikiHouse, and it happens to be the intersection-compatible choice here too. */
-export const CORE_MAX_PANEL_WIDTH_FT: Readonly<Record<string, number>> = {
-  eps: 8,
-  polyurethane: 4,
-};
+/** Every thickness any core is made in, ascending — derived from the ladders
+ * rather than restated, so a ladder change cannot leave this list stale. */
+export const STANDARD_THICKNESS_IN: readonly number[] = [
+  ...new Set(Object.values(CORE_THICKNESS_LADDER).flat()),
+].sort((a, b) => a - b);
 
 export interface ThicknessChoice {
   thicknessIn: number;
@@ -349,7 +277,6 @@ export function compareBids(bids: BidInput[]): BidComparison[] {
     })
     .sort((a, b) => a.totalDelivered - b.totalDelivered);
 }
-
 
 // ---------------------------------------------------------------------------
 // BID PACKAGES — the actual deliverable.

@@ -22,8 +22,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { thicknessOptions, recommendThickness, assessCompetition, compareBids,
-  REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER, CORE_MAX_PANEL_WIDTH_FT,
-  CORE_R_BY_THICKNESS, publishedR, bidPackages } =
+  REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER,
+  CORE_R_BY_THICKNESS, publishedR, bidPackages, CORE_MAX_PANEL_FT } =
   await import(join(root, 'lib/kit/sourcing.ts'));
 const { JURISDICTION_PACKS } = await import(join(root, 'lib/standards/code-advisory.ts'));
 
@@ -105,8 +105,13 @@ console.log('\nsourcing: product ladders constrain who can bid, not just R/inch'
   // Our 4 ft structural grid, inherited from WikiHouse, is also the widest
   // module BOTH cores are made in. Designing to 8 ft would silently exclude
   // the polyurethane supplier.
+  // The module must not exceed the narrowest panel any core makes, or the grid
+  // itself excludes a bidder before anyone quotes.
   check('a 4 ft module keeps both cores in the race',
-    Math.min(...Object.values(CORE_MAX_PANEL_WIDTH_FT)) === 4);
+    Math.min(...Object.values(CORE_MAX_PANEL_FT).map((p) => p.widthFt)) === 4,
+    Object.values(CORE_MAX_PANEL_FT).map((p) => p.widthFt).join(','));
+  check('and the span limit matches the shortest panel made',
+    Math.min(...Object.values(CORE_MAX_PANEL_FT).map((p) => p.lengthFt)) === 16);
 }
 
 console.log('\nsourcing: an impossible target is called impossible');

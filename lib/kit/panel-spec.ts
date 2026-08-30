@@ -149,19 +149,8 @@ export function buildPanelSpec(input: {
   };
 }
 
-/** Cores a buyer might be quoted, for checking a fixed thickness is reachable.
- * Published R per inch: EPS from Mighty Small Homes' supplier disclosure,
- * polyurethane from eco-panels' product information. Both retrieved 2026-08-28. */
-export const CORE_R_PER_INCH: Readonly<Record<string, number>> = {
-  eps: 3.9,
-  polyurethane: 7.0,
-};
-
-/** Which cores can reach `minR` inside `thicknessIn` — i.e. who can actually bid.
- * A thickness nobody can meet is a specification with one supplier and no
- * competition, which is the failure this whole document exists to avoid. */
-export function coresMeeting(minR: number, thicknessIn: number): string[] {
-  return Object.entries(CORE_R_PER_INCH)
-    .filter(([, rPerIn]) => rPerIn * thicknessIn >= minR)
-    .map(([core]) => core);
-}
+// Core data and the "who can meet this" helper live in ./sip.ts. This module
+// previously carried its own CORE_R_PER_INCH and coresMeeting, which is exactly
+// the kind of duplicate that drifts: two files disagreeing about a number a
+// compliance decision rests on.
+export { CORE_R_PER_INCH, coresMeeting } from './sip.ts';

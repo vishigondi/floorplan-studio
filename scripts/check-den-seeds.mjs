@@ -214,16 +214,26 @@ assert(!dataModuleSource.includes('pairedGeometryAudit:'), 'paired conversion sh
 assert(!typesSource.includes('abstractLens') && !typesSource.includes('abstractLenses') && !typesSource.includes('dualLoop'), 'DenHome/types should not retain abstract lens or dual-loop research fields');
 assert(!dataModuleSource.includes('abstractLens') && !dataModuleSource.includes('abstractLenses') && !dataModuleSource.includes('dualLoop'), 'paired data conversion should not carry abstract lens or dual-loop research artifacts');
 assert(!appPageSource.includes('ProductPerspectiveView') && !appPageSource.includes('data-perspective-transform'), 'product 3D should not use the old CSS perspective fallback');
-// The Skylark sheet is 2440x1220 mm (lib/kit/skylark.ts, measured from the CNC
+// The 4 ft structural module (lib/kit/sip.ts) is the widest panel both SIP
 // layer name) and 1220 mm = 4.003 ft, so the structural grid is 4 ft — the rule
 // the rest of the product gates on as WH-GRID-4FT. This assertion demanded the
 // literal `1.2 * FT_PER_M`, the wrong figure that 9fb3825 corrected in the
 // validator, so it has failed on every run since — unnoticed, because this
 // battery (`npm run paired:smoke`) is NOT in the gate ladder and nothing runs
 // it. Six more assertions here are stale for the same reason; see gen-sweep.md.
-assert(buildValidatorSource.includes('PANEL_WIDTH_FT = 4'), 'build validator should use the 4 ft (1220 mm sheet) panel module');
-assert(buildValidatorSource.includes('WALL_HEIGHT_SKUS_FT') && buildValidatorSource.includes('2.4 * FT_PER_M') && buildValidatorSource.includes('3.0 * FT_PER_M'), 'build validator should enforce 2.4m/3.0m wall height SKUs');
-assert(buildValidatorSource.includes('MAX_JOIST_SPAN_FT') && buildValidatorSource.includes('ROOF_PITCH_SKUS_DEG'), 'build validator should cover floor span and roof pitch constraints');
+// These used to grep the validator's SOURCE for literals — `PANEL_WIDTH_FT = 4`,
+// `2.4 * FT_PER_M`. That is a brittle way to test a constant: the value can stay
+// correct while the expression changes, which is exactly what happened when the
+// kit moved to SIPs and the module became SIP_MODULE_FT. Assert the VALUES the
+// module exports instead, so a rename cannot fail the check and a wrong number
+// cannot pass it.
+{
+  const { PANEL_MODULE_FT, MAX_PANEL_SPAN_FT, WALL_PANEL_HEIGHTS_FT } =
+    await import(resolve(ROOT, 'lib/kit/sip.ts'));
+  assert(PANEL_MODULE_FT === 4, 'the structural module should be the 4 ft panel grid');
+  assert(MAX_PANEL_SPAN_FT === 16, 'span limit should be the shortest max panel length (16 ft)');
+  assert(WALL_PANEL_HEIGHTS_FT.includes(8), 'stocked SIP wall heights should include 8 ft');
+}
 assert(buildValidatorSource.includes('fitsOnePanel') && buildValidatorSource.includes('alignsToJoints'), 'build validator should check opening fit/joint alignment');
 assert(buildValidatorSource.includes('bom') && buildValidatorSource.includes('componentsUsed'), 'build validator should output BOM and componentsUsed');
 assert(appPageSource.includes("useState<ViewPreset>('presentation-3d')"), 'product should default to the rotatable 3D presentation view');

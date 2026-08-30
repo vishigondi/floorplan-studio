@@ -25,13 +25,18 @@
 // quietly rounds those things away, and rendering them at equal weight is the
 // point rather than a concession.
 //
-// NO SHEET COUNT. The obvious next number — "your house is N sheets of plywood"
-// — is absent on purpose. We know the sheet stock (2440x1220x18 spruce ply) and
-// we know the block families, but the repo carries no sheets-per-block figure,
-// so any total would be a guess wearing a unit. It stays out until that data is
-// measured the way the roof pitches were.
+// NO PANEL COUNT. The obvious next number — "your house is N panels" — is
+// absent on purpose, and now for a stronger reason than before. Panel
+// subdivision is the MANUFACTURER'S decision: eco-panels cap at 4x16 and
+// Insulspan reach 8x24, so the same wall is a different number of panels
+// depending on who quotes it. A count here would be one supplier's answer
+// printed as if it were the building's.
+//
+// The counts below are 4 ft modules, which is the grid the plan is designed to
+// and the widest panel both cores are made in. How those modules are grouped
+// into panels belongs in the tender, not here.
 
-import { SKYLARK_SHEET_MM, SKYLARK150_BLOCKS } from './skylark.ts';
+import { PANEL_MODULE_FT, CORE_THICKNESS_LADDER, CORE_MAX_PANEL_FT } from './sip.ts';
 
 export interface KitScheduleLine {
   componentId: string;
@@ -68,8 +73,13 @@ export interface KitSchedule {
   omissions: string[];
   /** Named so an absence is never read as an implied inclusion. */
   notSupplied: string[];
-  sheetStock: { lengthMm: number; widthMm: number; thicknessMm: number; material: string };
-  blockFamilies: Record<string, number>;
+  /** The module these counts are expressed in, and why it is 4 ft. */
+  panelBasis: { moduleFt: number; rationale: string };
+  /** Thicknesses available per core, so a reader can see the spec is not
+   * written to one supplier's product line. */
+  thicknessOptionsIn: Record<string, readonly number[]>;
+  /** Largest panel each core makes — the reason subdivision is not ours. */
+  maxPanelFt: Record<string, { widthFt: number; lengthFt: number }>;
   pricing?: KitSchedulePricing;
 }
 
@@ -176,15 +186,14 @@ export function buildKitSchedule(input: {
     totalPieces,
     omissions: [...(input.omissions ?? [])],
     notSupplied: [...NOT_SUPPLIED],
-    sheetStock: {
-      lengthMm: SKYLARK_SHEET_MM.length,
-      widthMm: SKYLARK_SHEET_MM.width,
-      thicknessMm: SKYLARK_SHEET_MM.thickness,
-      material: 'spruce plywood',
+    panelBasis: {
+      moduleFt: PANEL_MODULE_FT,
+      rationale: `Counts are ${PANEL_MODULE_FT} ft modules — the grid the plan is designed to, and `
+        + 'the widest panel both core types are manufactured in. Grouping modules into panels is '
+        + 'the manufacturer\'s job and differs between them.',
     },
-    blockFamilies: Object.fromEntries(
-      Object.entries(SKYLARK150_BLOCKS).map(([family, list]) => [family, (list as readonly string[]).length]),
-    ),
+    thicknessOptionsIn: { ...CORE_THICKNESS_LADDER },
+    maxPanelFt: { ...CORE_MAX_PANEL_FT },
   };
 
   // PRICING IS ARITHMETIC ON THE USER'S OWN NUMBER, and only exists when they

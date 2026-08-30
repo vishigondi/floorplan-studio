@@ -69,11 +69,6 @@ const CASES = [
   { name: 'barely fits envelope', brief: '2-bed a-frame, 40×58 lot, 5 ft setbacks', bedrooms: 2, style: 'a-frame', hasLot: true, expectWidth: 28 },
   { name: 'cannot fit envelope', brief: '3-bed a-frame ≤1200 sqft, 30×40 lot, 5 ft setbacks', expectCompileError: /exceeds the buildable envelope/ },
   { name: 'default brief (no program)', brief: 'cozy cabin near the creek', bedrooms: 2, style: 'a-frame', hasLot: false, expectWidth: 28 },
-  // Kit-buildable gable: the ridge is DERIVED from Skylark's measured 42° pitch
-  // (20.61 ft on a 28 ft span), so it runs the whole per-plan invariant set at a
-  // roof angle no other case covers — headroom bands, egress, fixtures and the
-  // drawing set all shift with pitch.
-  { name: 'kit-buildable 42° gable', brief: '2 bed skylark gable, 60x90 lot, 10 ft setbacks', bedrooms: 2, style: 'gable', hasLot: true, expectWidth: 28 },
   // Footprint-fit capability: gables shrink to the lot envelope / maxSqft.
   { name: 'small-lot 1-bed gable shrinks to 20x24', brief: '1-bed gable cabin, 30x50 lot, 5 ft setbacks', bedrooms: 1, style: 'gable', hasLot: true, expectWidth: 20, expectDepth: 24 },
   { name: 'maxSqft shrinks 2-bed gable to 24 ft', brief: '2-bed gable, ≤700 sqft', bedrooms: 2, style: 'gable', hasLot: false, expectWidth: 24 },

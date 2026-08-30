@@ -18,7 +18,6 @@ import { localBimAssetSummary, localVisualAssetAttributions } from '@/lib/bim/co
 import { buildableBimFromHome, buildableBimSummary } from '@/lib/bim/buildable-bim';
 import { standardsRegistrySummary, validateStandards, codeAdvisoryReportForHome, lotFromArtifact } from '@/lib/standards/floorplan-standards';
 import { buildElevationModel, drawnElevationViews as drawnViewsFor, elevationSvgString, type ElevationArtifactInput, type ElevationView } from '@/lib/elevations';
-import { assessSkylarkKitForPlan } from '@/lib/kit/skylark';
 import { LOOKS, buildLookRenderPrompt, lookRenderSpecFromArtifact, type LookId, type LookRenderMode } from '@/lib/look-render';
 import { CODE_ADVISORY_RULES, type CodeAdvisoryFinding } from '@/lib/standards/code-advisory';
 import { parseBrief, briefToPromptFields } from '@/lib/brief';
@@ -257,25 +256,7 @@ function PairedStatusPanel({ home, renderedBounds }: { home: DenHome | null; ren
               ))}
             </div>
           )}
-          {(() => {
-            // The open-kit verdict. `unverified` is a real third state — a kit
-            // whose pitches we have not measured must not read as either yes or no.
-            const kit = kitAssessmentForHome(home);
-            if (!kit) return null;
-            const tone = kit.status === 'buildable' ? 'text-emerald-700'
-              : kit.status === 'not-buildable' ? 'text-amber-700' : 'text-stone-500';
-            return (
-              <div className="mt-2 border border-stone-200 bg-stone-50 p-2" data-kit-status={kit.status}>
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-stone-400">wikihouse kit</span>
-                  <span className={`font-mono ${tone}`}>{kit.status}</span>
-                </div>
-                {kit.reasons.slice(0, 2).map((reason) => (
-                  <div key={reason} className="text-[9px] leading-snug text-stone-600">{reason}</div>
-                ))}
-              </div>
-            );
-          })()}
+
         </div>
       ) : (
         <div className="mt-2 text-[10px] leading-snug text-stone-400">
@@ -301,20 +282,6 @@ function planNotes(home: DenHome | null): string[] {
   return Array.isArray(raw?.notes) ? raw.notes.filter((note): note is string => typeof note === 'string') : [];
 }
 
-/**
- * Can this plan be built from the open WikiHouse kit?
- *
- * The verdict already existed and was gated, but nothing showed it — so the one
- * question a WikiHouse customer actually has ("can I cut this from stock
- * blocks?") had no answer on screen. Reads the compiled artifact, so the badge
- * and the batteries judge identical geometry.
- */
-function kitAssessmentForHome(home: DenHome | null) {
-  if (!home) return null;
-  const raw = rawObject(home.pairedArtifactJson) as unknown as Parameters<typeof assessSkylarkKitForPlan>[0] | null;
-  if (!raw?.roof || !raw.footprint) return null;
-  return assessSkylarkKitForPlan(raw);
-}
 
 function liveGeometryAudit(home: DenHome | null): PairedGeometryAudit | undefined {
   if (!home?.pairedArtifact) return undefined;
@@ -1233,13 +1200,6 @@ function validationGroups(home: DenHome | null, renderedBounds: RenderedModelBou
     const brochure = brochureQualityIssues(home);
     brochure.blockers.forEach((item) => block('brochure-quality', item));
     brochure.warnings.forEach((item) => warn('brochure-quality', item));
-    // Open-kit buildability rides in the manufacturing lane, as a WARNING not a
-    // blocker: a plan the Skylark blocks cannot cut is still a real, code-checked
-    // house — it just is not this kit. Saying nothing at all was the defect.
-    const kit = kitAssessmentForHome(home);
-    if (kit && kit.status !== 'buildable') {
-      kit.reasons.forEach((reason) => warn('build', `WikiHouse kit (${kit.status}): ${reason}`));
-    }
     const bim = buildableBimSummary(buildableBimFromHome(home));
     bim.blockers.forEach((item) => block('bim', item));
     for (const item of bim.warnings.slice(0, 6)) {
@@ -5513,22 +5473,7 @@ export default function Home() {
                 <div className="font-mono text-[9px] text-stone-400">
                   {displayHome.pairedArtifactInfo?.reviewStatus ?? 'pending'} - {displayHome.pairedProposalId}
                 </div>
-                {(() => {
-                  // The one question a WikiHouse customer has: can this be cut
-                  // from stock blocks? It belongs on the card they can see, not
-                  // behind Review Tools — the verdict was gated for a whole fire
-                  // while showing nowhere.
-                  const kit = kitAssessmentForHome(displayHome);
-                  if (!kit) return null;
-                  const tone = kit.status === 'buildable' ? 'text-emerald-600'
-                    : kit.status === 'not-buildable' ? 'text-amber-600' : 'text-stone-500';
-                  return (
-                    <div className="border-t border-stone-200 pt-1" data-kit-status={kit.status} title={kit.reasons.join(' ')}>
-                      <span className="text-stone-400">wikihouse kit: </span>
-                      <span className={`font-medium ${tone}`}>{kit.status}</span>
-                    </div>
-                  );
-                })()}
+
                 {(() => {
                   // Where the plan differs from its brief, said out loud on the
                   // plan itself — not only to whoever happened to POST it.

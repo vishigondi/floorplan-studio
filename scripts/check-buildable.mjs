@@ -58,91 +58,34 @@ const toHome = (artifact) => pairedArtifactToLocalHome(artifact);
 
 const PANEL_FIT_RULES = ['wall-module', 'wall-height', 'openings', 'floor-span'];
 
-// --- Skylark kit envelope (pitches measured 2026-08-16) ----------------------
-// We build against the open WikiHouse Skylark 150 kit rather than authoring
-// joinery. The kit's roof pitches are now MEASURED from the real 3DM assemblies
-// (scripts/measure-skylark-pitch.py, pinned commit): TWO archetypes, a flat roof
-// at 0° (R-L/R-S/R-XXS, carrying a 1° fall) and a 42° pitched roof (the -42
-// variants). Nothing else, at any angle.
+// --- SIP panel envelope ----------------------------------------------------
+// The kit is structural insulated panels. Unlike the WikiHouse Skylark block set
+// this replaces, a SIP imposes NO pitch restriction — so there is no pitch gate
+// here. The old one refused six of the seven roof styles this generator
+// produces, which is why it went out with the kit it described.
 //
-// This gate proves the whole truth table, not just honesty: which styles the kit
-// can build, which it cannot, and WHY — so neither the constants nor the
-// assessment can drift from the measurements without failing here.
-const { assessSkylarkKit, SKYLARK_ROOF_PITCHES_DEG, SKYLARK_ROOF_BLOCKS, SKYLARK_MODULE_FT, SKYLARK150_BLOCKS } =
-  await import(join(root, 'lib/kit/skylark.ts'));
+// What stays geometric is the module and the span, both sized to the SMALLEST
+// supplier who has to meet them: a limit only one bidder can satisfy is the
+// lock-in the tender exists to avoid.
+const { roofPitchDeg: pitchOf, roofRunFt } = await import(join(root, 'lib/roof-geometry.ts'));
+// Artifact-shaped wrapper: the shared helper takes (roof, footprint) separately.
+const roofPitchDeg = (a) => pitchOf(a.roof, { widthFt: a.footprint.widthFt, depthFt: a.footprint.depthFt });
+const { PANEL_MODULE_FT, MAX_PANEL_SPAN_FT, MAX_PANEL_SPAN_SINGLE_SOURCE_FT,
+  CORE_MAX_PANEL_FT, WALL_PANEL_HEIGHTS_FT } = await import(join(root, 'lib/kit/sip.ts'));
 
-// The battery must measure pitch the way the product does, or it grades a
-// different building than the one that ships.
-const { roofPitchDeg: sharedRoofPitchDeg, roofRunFt } = await import(join(root, 'lib/roof-geometry.ts'));
-const roofPitchDeg = (artifact) => sharedRoofPitchDeg(
-  {
-    style: artifact.roof?.style ?? 'gable',
-    ridgeAxis: artifact.roof?.ridgeAxis ?? 'z',
-    ridgeHeightFt: artifact.roof?.ridgeHeightFt ?? 0,
-    eaveHeightFt: artifact.roof?.eaveHeightFt ?? 0,
-  },
-  { widthFt: artifact.footprint.widthFt, depthFt: artifact.footprint.depthFt },
-);
+console.log('sip: the panel envelope is set by the smallest supplier');
+check('module is the 4 ft grid', PANEL_MODULE_FT === 4, String(PANEL_MODULE_FT));
+check('span limit is the shortest max panel length',
+  MAX_PANEL_SPAN_FT === Math.min(...Object.values(CORE_MAX_PANEL_FT).map((p) => p.lengthFt)),
+  String(MAX_PANEL_SPAN_FT));
+check('the single-source span is recorded and is larger',
+  MAX_PANEL_SPAN_SINGLE_SOURCE_FT > MAX_PANEL_SPAN_FT,
+  `${MAX_PANEL_SPAN_FT} vs ${MAX_PANEL_SPAN_SINGLE_SOURCE_FT}`);
+check('the module excludes no core',
+  Object.values(CORE_MAX_PANEL_FT).every((p) => p.widthFt >= PANEL_MODULE_FT),
+  Object.values(CORE_MAX_PANEL_FT).map((p) => p.widthFt).join(','));
+check('wall heights are stocked SIP panel lengths', WALL_PANEL_HEIGHTS_FT.includes(8));
 
-console.log('skylark: kit envelope + honest not-buildable marking');
-// The 4 ft grid must equal the real Skylark sheet width (1220 mm), not 1.2 m.
-check('Skylark module matches the 4 ft structural grid', Math.abs(SKYLARK_MODULE_FT - 4) < 0.01, `${SKYLARK_MODULE_FT.toFixed(3)} ft`);
-check('Skylark 150 block index is present (58 blocks)',
-  Object.values(SKYLARK150_BLOCKS).reduce((n, group) => n + group.length, 0) === 58);
-
-// The constants must not drift from the measurements they came from.
-check('Skylark pitch set matches the measured blocks',
-  JSON.stringify([...SKYLARK_ROOF_PITCHES_DEG].sort((x, y) => x - y))
-  === JSON.stringify([...new Set(SKYLARK_ROOF_BLOCKS.map((b) => b.pitchDeg))].sort((x, y) => x - y)),
-  `${SKYLARK_ROOF_PITCHES_DEG.join(',')} vs blocks ${SKYLARK_ROOF_BLOCKS.map((b) => b.pitchDeg).join(',')}`);
-check('every measured pitch is evidenced by a majority of the block\'s edge length',
-  SKYLARK_ROOF_BLOCKS.every((b) => b.pitchSharePct >= 70),
-  SKYLARK_ROOF_BLOCKS.map((b) => `${b.block} ${b.pitchSharePct}%`).join(', '));
-check('all six Skylark 150 roof blocks are measured', SKYLARK_ROOF_BLOCKS.length === 6);
-
-// What the kit can and cannot build, per style, with the reason. Expected values
-// come from the measurements, so a wrong constant fails rather than passes.
-//   flat  0.0° -> matches the flat blocks
-//   a-frame 50.5°, gable 23.2° -> archetype exists, pitch does not
-//   shed/hip/gambrel/barn -> no blocks at any angle
-const KIT_EXPECTATIONS = {
-  flat: { status: 'buildable', because: /pitch and wall modules match/i },
-  'a-frame': { status: 'not-buildable', because: /not one of the Skylark pitches/i },
-  gable: { status: 'not-buildable', because: /not one of the Skylark pitches/i },
-  shed: { status: 'not-buildable', because: /no shed roof blocks/i },
-  hip: { status: 'not-buildable', because: /no hip roof blocks/i },
-  gambrel: { status: 'not-buildable', because: /no gambrel roof blocks/i },
-  barn: { status: 'not-buildable', because: /no barn roof blocks/i },
-};
-
-for (const style of ['a-frame', 'gable', 'flat', 'shed', 'hip', 'gambrel', 'barn']) {
-  const res = compileIntent(mockIntentFromBrief(parseBrief(`2 bed ${style} roof, 80x100 lot, 10 ft setbacks`)), 'skylark-test', style);
-  if (!res.ok) { check(`${style}: compiles`, false, res.errors.join('; ')); continue; }
-  const a = res.artifact;
-  const wallLengthsFt = (a.exteriorWalls ?? []).filter((w) => w.span)
-    .map((w) => Math.hypot(w.span.x2 - w.span.x1, w.span.z2 - w.span.z1));
-  const kit = assessSkylarkKit({ roofStyle: a.roof.style, roofPitchDeg: roofPitchDeg(a), wallLengthsFt });
-  const want = KIT_EXPECTATIONS[style];
-
-  // Every assessment must give the user a reason, not a bare verdict.
-  check(`${style}: kit assessment states a reason`, kit.reasons.length > 0);
-  check(`${style}: kit verdict is ${want.status}`, kit.status === want.status, `${kit.status} — ${kit.reasons.join(' ')}`);
-  check(`${style}: verdict is explained`, kit.reasons.some((r) => want.because.test(r)), kit.reasons.join(' | '));
-  // A plan the kit cannot build must never be silently sold as buildable.
-  check(`${style}: never claims buildable on an unmeasured pitch set`,
-    SKYLARK_ROOF_PITCHES_DEG.length > 0 || kit.status !== 'buildable', kit.status);
-}
-
-// A kit REQUEST must produce a kit-buildable home or an honest refusal. Sourcing
-// the pitches is only worth anything if a customer can act on them: asking for a
-// WikiHouse home has to yield geometry the blocks can actually cut.
-// ONE definition of pitch, and it must know a mono-pitch roof from a ridged one.
-// Every local copy divided the span in half, so a shed — whose single plane
-// rises across the WHOLE span — was reported at twice its real angle.
-// THE BILL MUST COVER THE BUILDING. Wall panels were counted from `sourceWalls`,
-// which are the SOLID stretches between openings, so no panel was billed for the
-// wall a door or window sits in — a 28x28 plan billed 24 exterior panels for a
-// 112 ft perimeter, 19 ft short, leaving a builder 4-5 panels down.
 console.log('bom: wall panels cover every foot of wall run');
 {
   const { pairedArtifactToLocalHome } = await import(join(root, 'lib/data.ts'));
@@ -190,53 +133,6 @@ for (const [style, expectDeg] of [['flat', 0], ['shed', 8.1], ['gable', 23.2], [
   check(`${style}: rise is measured over the ${style === 'shed' ? 'whole' : 'half'} span`,
     Math.abs(roofRunFt(a.roof, { widthFt: a.footprint.widthFt, depthFt: a.footprint.depthFt })
       - (style === 'shed' ? across : across / 2)) < 1e-9);
-}
-
-console.log('skylark: a kit request yields a kit-buildable plan, or refuses');
-{
-  const kitBrief = (text) => compileIntent(mockIntentFromBrief(parseBrief(text)), 'kit-test', text);
-
-  for (const [style, brief] of [
-    ['gable', '2 bed skylark gable, 60x90 lot, 10 ft setbacks'],
-    ['flat', '2 bed wikihouse flat roof, 60x90 lot, 10 ft setbacks'],
-  ]) {
-    const res = kitBrief(brief);
-    check(`kit ${style}: compiles`, res.ok, (res.errors ?? []).join('; '));
-    if (!res.ok) continue;
-    const a = res.artifact;
-    const walls = (a.exteriorWalls ?? []).filter((w) => w.span)
-      .map((w) => Math.hypot(w.span.x2 - w.span.x1, w.span.z2 - w.span.z1));
-    const pitch = roofPitchDeg(a);
-    const kit = assessSkylarkKit({ roofStyle: a.roof.style, roofPitchDeg: pitch, wallLengthsFt: walls });
-    check(`kit ${style}: pitch is a MEASURED Skylark pitch (${pitch.toFixed(1)}°)`,
-      SKYLARK_ROOF_PITCHES_DEG.some((p) => Math.abs(p - pitch) <= 0.5), `${pitch.toFixed(2)}°`);
-    check(`kit ${style}: assessed buildable end to end`, kit.status === 'buildable', `${kit.status} — ${kit.reasons.join(' ')}`);
-  }
-
-  // Styles the kit cannot cut must REFUSE, not quietly ship something else — the
-  // same silent-mismatch rule as the bedroom and sqft caps.
-  for (const style of ['a-frame', 'shed', 'hip', 'gambrel', 'barn']) {
-    const res = kitBrief(`2 bed skylark ${style} roof, 80x100 lot, 10 ft setbacks`);
-    check(`kit ${style}: refused (the kit has no such roof)`, !res.ok, 'compiled anyway');
-    check(`kit ${style}: refusal explains and offers the alternative`,
-      !res.ok && res.errors.some((e) => /WikiHouse kit/.test(e) && /flat roof or a 42° gable/.test(e)),
-      (res.errors ?? []).join(' | ').slice(0, 120));
-  }
-
-  // REGRESSION GUARD: a plain gable is untouched by any of this.
-  const plain = kitBrief('2 bed gable, 60x90 lot, 10 ft setbacks');
-  check('plain gable keeps its 14 ft ridge (kit changes nothing unasked)',
-    plain.ok && Math.abs(plain.artifact.roof.ridgeHeightFt - 14) < 1e-9,
-    plain.ok ? String(plain.artifact.roof.ridgeHeightFt) : 'refused');
-}
-
-// The pitch the kit DOES ship must qualify — otherwise the whole set is dead
-// letters and 'buildable' is unreachable, which is not honesty, just a bug.
-{
-  const at42 = assessSkylarkKit({ roofStyle: 'gable', roofPitchDeg: 42, wallLengthsFt: [28, 28] });
-  check('a 42° gable on-module IS kit-buildable', at42.status === 'buildable', `${at42.status} — ${at42.reasons.join(' ')}`);
-  const offModule = assessSkylarkKit({ roofStyle: 'gable', roofPitchDeg: 42, wallLengthsFt: [27.3] });
-  check('a 42° gable off-module is not', offModule.status === 'not-buildable', offModule.status);
 }
 
 // Every roof style × a representative bedroom span, single level (loft walls are
@@ -384,7 +280,7 @@ for (const brief of BRIEFS) {
   // THE BILL MUST NAME WHAT IT LEAVES OUT. Gable-end infill is enclosed in the
   // model (buildable-bim extrudes gable-end walls to the ridge) but panels are
   // counted from plan-view runs at a storey SKU, so the apex triangle is in no
-  // line. Skylark publishes no apex block, so it is stated, not invented.
+  // line. No supplier stocks an apex panel, so it is stated, not invented.
   const omissions = shippedReport.omissions ?? [];
   check(`${brief} — the bill states what it omits`, omissions.length > 0, 'no omissions declared');
   const claimsGable = omissions.some((line) => /gable/i.test(line));
@@ -505,38 +401,21 @@ for (const brief of BRIEFS) {
   check('a-frame-22 bills one deck per LEVEL, not per floorPanels entry', qty === 90, `${qty}`);
 }
 
-// THE JOIST LIMIT MUST STAY TIED TO THE BLOCK LIBRARY.
+// THE JOIST LIMIT MUST STAY TIED TO A REAL PANEL, not a round number.
 //
-// It was a bare `16` for a long time and nobody could say where it came from.
-// 16 ft corresponds to no Skylark block: F-S stops at 14.89 ft, so a 16 ft span
-// already requires an F-L, which reaches 18.83 ft. The number was arbitrary in
-// both directions and still looked authoritative.
+// It was a bare `16`, then Skylark's F-L block at 18.83 ft, and is now the
+// shortest max panel length across suppliers — 16 ft again, but for a reason
+// that survives the kit change: a panel cannot span further than it is long,
+// and eco-panels top out at 16 ft.
 //
-// These assert the limit IS the longest block and not a round number that has
-// drifted back in, and that the class spans keep the exact relationship the
-// measurement established -- physical length 101.2 mm longer than the published
-// structural span, identically across all three classes. If a future Skylark
-// release changes the blocks, this fails rather than silently shipping a limit
-// describing geometry that no longer exists.
+// Note the direction. Dropping WikiHouse TIGHTENED this by 2.83 ft rather than
+// relaxing it, because the Skylark block reached further than the smallest SIP.
 {
-  const { SKYLARK150_FLOOR_SPANS_MM, SKYLARK150_MAX_FLOOR_SPAN_FT } = await import(join(root, 'lib/kit/skylark.ts'));
-  const spans = Object.values(SKYLARK150_FLOOR_SPANS_MM);
-  const longest = Math.max(...spans.map((b) => b.structuralSpanMm));
-  check('joist limit is the longest floor block, not a round number',
-    Math.abs(SKYLARK150_MAX_FLOOR_SPAN_FT - longest / 304.8) < 1e-6,
-    `${SKYLARK150_MAX_FLOOR_SPAN_FT} vs ${longest / 304.8}`);
-  check('the joist limit is not a suspiciously round number',
-    Math.abs(SKYLARK150_MAX_FLOOR_SPAN_FT - Math.round(SKYLARK150_MAX_FLOOR_SPAN_FT)) > 0.01,
-    `${SKYLARK150_MAX_FLOOR_SPAN_FT}`);
-  const offsets = spans.map((b) => Math.round((b.measuredLengthMm - b.structuralSpanMm) * 10) / 10);
-  check('every class keeps the same measured-vs-published bearing offset',
-    new Set(offsets).size === 1 && offsets[0] === 101.2, offsets.join(', '));
-  // Guards the inference the whole sourcing rests on: the 1200 mm stepping is
-  // what shows these are one family measured consistently.
-  const lens = spans.map((b) => b.measuredLengthMm).sort((a, b) => a - b);
-  const steps = lens.slice(1).map((v, i) => Math.round((v - lens[i]) * 10) / 10);
-  check('floor block lengths step by a uniform 1200 mm',
-    new Set(steps).size === 1 && steps[0] === 1200, steps.join(', '));
+  const shortest = Math.min(...Object.values(CORE_MAX_PANEL_FT).map((p) => p.lengthFt));
+  check('joist limit equals the shortest max panel length', MAX_PANEL_SPAN_FT === shortest,
+    `${MAX_PANEL_SPAN_FT} vs ${shortest}`);
+  check('no supplier is asked to span further than they manufacture',
+    Object.values(CORE_MAX_PANEL_FT).every((p) => p.lengthFt >= MAX_PANEL_SPAN_FT));
 }
 
 if (failures) {

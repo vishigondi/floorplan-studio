@@ -99,18 +99,28 @@ console.log('\nkit schedule: pricing is arithmetic on the user\'s number, and sa
     /not covered/i.test(priced.pricing?.basis ?? ''));
 }
 
-console.log('\nkit schedule: no invented sheet count');
+console.log('\nkit schedule: no invented panel count');
 {
-  // We know the sheet stock and the block families but hold no sheets-per-block
-  // figure, so a sheet total would be a guess wearing a unit. This asserts the
-  // absence, because the tempting number is exactly the one we cannot support.
+  // The tempting number is the one we cannot support. Under Skylark it was a
+  // sheet count (no sheets-per-block data); under SIPs it is a panel count, and
+  // the reason is stronger: panel subdivision is the MANUFACTURER'S decision.
+  // eco-panels cap at 4x16 and Insulspan reach 8x24, so the same wall is a
+  // different number of panels depending on who quotes it. A count here would
+  // be one supplier's answer printed as if it were the building's.
   const res = compileIntent(mockIntentFromBrief(parseBrief('2 bed gable roof, 80x100 lot, 10 ft setbacks')), 'kit', 'b');
   const home = pairedArtifactToLocalHome(res.artifact);
   const s = buildKitSchedule({ bom: home.buildValidation?.bom ?? [] });
   const text = JSON.stringify(s).toLowerCase();
-  check('no sheet-count field is published', !/"sheets?(count|total)"|sheetcount|sheetstotal/.test(text));
-  check('sheet stock is stated as stock, not as a total',
-    s.sheetStock.lengthMm === 2440 && s.sheetStock.widthMm === 1220 && s.sheetStock.thicknessMm === 18);
+  check('no panel-count field is published',
+    !/"panels?(count|total)"|panelcount|panelstotal|sheetcount/.test(text));
+  check('counts are expressed in the 4 ft module', s.panelBasis.moduleFt === 4, String(s.panelBasis.moduleFt));
+  check('and the basis says subdivision is the manufacturer\'s',
+    /manufacturer/i.test(s.panelBasis.rationale));
+  // Showing both ladders is what stops the schedule reading as one product line.
+  check('thickness options are given per core, not as one list',
+    Object.keys(s.thicknessOptionsIn).length >= 2, Object.keys(s.thicknessOptionsIn).join(','));
+  check('max panel size is recorded per core',
+    Object.values(s.maxPanelFt).every((p) => p.widthFt > 0 && p.lengthFt > 0));
 }
 
 console.log('');

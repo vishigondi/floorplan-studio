@@ -27,10 +27,9 @@ export interface ParsedBrief {
   levels?: number;
   /** Brief asked for a loft. The compiler builds one only if the roof supports headroom. */
   hasLoft?: boolean;
-  /** Brief asked for a home buildable from the open WikiHouse (Skylark) kit.
+  /** Retired with the WikiHouse kit. The token is still consumed by the parser
    *  The kit is discrete: it ships a flat roof and a 42° pitched roof, nothing
    *  else, so this constrains the roof rather than decorating the plan. */
-  kitBuildable?: boolean;
   footprintWidthFt?: number;
   footprintDepthFt?: number;
   lot?: ParsedLot;
@@ -102,11 +101,11 @@ export function parseBrief(text: string): ParsedBrief {
   const loft = take(lower.match(/\blofts?\b/));
   if (loft) result.hasLoft = true;
 
-  // "wikihouse", "skylark", "kit-built" — build it from the open kit. Consumed
-  // so it never lands in `unparsed`; what the kit can actually build is the
-  // compiler's call, and it refuses rather than quietly ignoring the request.
-  const kit = take(lower.match(/\b(?:(?:wikihouse|skylark)(?:\s+kit)?|kit[\s-]?buil(?:t|dable))\b/));
-  if (kit) result.kitBuildable = true;
+  // The "wikihouse"/"skylark"/"kit-built" token is still CONSUMED so it never
+  // lands in `unparsed` and never reads as an unrecognised brief — people will
+  // keep typing it. It no longer sets a flag: the kit is SIPs now, which impose
+  // no pitch restriction, so there is nothing for the compiler to refuse.
+  take(lower.match(/\b(?:(?:wikihouse|skylark)(?:\s+kit)?|kit[\s-]?buil(?:t|dable))\b/));
 
   // Lot: "40x60 lot", "lot 40 x 60", "40' x 60' lot"
   const lot = take(

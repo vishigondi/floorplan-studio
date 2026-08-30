@@ -10,41 +10,26 @@ import type {
 // Node, which cannot resolve extensionless value imports (`./types` above is
 // erased at compile time, so it is exempt).
 import { roofPitchDeg as sharedRoofPitchDeg } from './roof-geometry.ts';
-import { SKYLARK150_MAX_FLOOR_SPAN_FT } from './kit/skylark.ts';
+import { MAX_PANEL_SPAN_FT, PANEL_MODULE_FT as SIP_MODULE_FT, WALL_PANEL_HEIGHTS_FT } from './kit/sip.ts';
 
 const FT_PER_M = 3.280839895;
 // The planner's structural module is a 4 ft grid (≈ 1.22 m) — every room, wall,
 // and opening is authored and gated to it (WH-GRID-4FT). Buildability is measured
 // against that real module, not a separate 1.2 m sheet dimension the system never
 // uses; a 4 ft panel is the WikiHouse 1.2 m sheet trimmed to the imperial grid.
-const PANEL_WIDTH_FT = 4;
+const PANEL_WIDTH_FT = SIP_MODULE_FT;
 const PANEL_TOLERANCE_FT = 0.16;
-const WALL_HEIGHT_SKUS_FT = [2.4 * FT_PER_M, 3.0 * FT_PER_M];
+const WALL_HEIGHT_SKUS_FT: number[] = [...WALL_PANEL_HEIGHTS_FT];
 const WALL_HEIGHT_TOLERANCE_FT = 0.18;
-// The longest span any single Skylark 150 floor block covers. Not a round
-// number chosen for comfort: F-L is the largest floor block in the library at a
-// 5738 mm structural span, and nothing reaches further without a beam or an
-// intermediate bearing wall — which is exactly what this rule tells a builder to
-// add.
+// The longest a panel may span between bearing lines. A panel cannot span
+// further than it is long, and the smallest supplier's longest panel is 16 ft
+// (eco-panels; Insulspan reach 24). Sized to the smaller because a limit only
+// one bidder can meet is the lock-in this project exists to avoid.
 //
-// This was `16` with no provenance, in a file that otherwise refuses unsourced
-// numbers. 16 ft turns out to correspond to NO block: a 16 ft span already needs
-// an F-L, because F-S stops at 14.89 ft. It sat between two classes, arbitrary in
-// both directions — refusing spans of 16-18.83 ft that the kit can actually
-// build, while sounding like a limit somebody had derived.
-//
-// Sourcing it required rejecting the obvious answer first. WikiHouse publish
-// floor span tables, but under "250 series" and "200 series", and Skylark v1.0's
-// README says those are the PREVIOUS generation ("Previous versions had standard
-// insulation thicknesses of 200mm and 250mm. This version is thinner, with wall
-// thicknesses of 150mm and 200mm"). No 150 table exists. So the blocks we bill
-// were measured instead — see SKYLARK150_FLOOR_SPANS_MM and
-// scripts/measure-skylark-floor-span.py — and came out in exact 1200 mm steps,
-// each precisely 101.2 mm longer than the published 250-series span for the same
-// size class. Three exact matches is bearing, not coincidence, and it is the
-// evidence that the size classes carry the same structural span across series.
-
-const MAX_JOIST_SPAN_FT = SKYLARK150_MAX_FLOOR_SPAN_FT;
+// This REPLACES the Skylark F-L block's 18.83 ft, and is tighter rather than
+// looser — dropping WikiHouse constrained the floor span, it did not relax it.
+// Generated plans already sit at exactly 16.0 ft, so nothing moves.
+const MAX_JOIST_SPAN_FT = MAX_PANEL_SPAN_FT;
 const ROOF_PITCH_SKUS_DEG = [0, 12, 25, 45, 60, 72];
 const ROOF_PITCH_TOLERANCE_DEG = 2.5;
 
@@ -278,7 +263,7 @@ export function buildKitBomExport(home: DenHome): {
 
 export function validateBuildability(home: DenHome): BuildValidationReport {
   const assumptions = [
-    `panel module: ${PANEL_WIDTH_FT.toFixed(2)}ft (4 ft structural grid = the 1220 mm Skylark sheet, 4.003 ft)`,
+    `panel module: ${PANEL_WIDTH_FT.toFixed(2)}ft (4 ft structural grid = the widest panel both SIP cores are made in)`,
     `wall height SKUs: ${WALL_HEIGHT_SKUS_FT.map((sku) => `${sku.toFixed(2)}ft`).join(', ')}`,
     `maximum simple floor joist span: ${MAX_JOIST_SPAN_FT}ft`,
   ];
@@ -313,7 +298,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
     const inferred = inferredWallHeight(home, wall);
     const sku = nearestSku(inferred.height, WALL_HEIGHT_SKUS_FT);
     if (sku.delta > WALL_HEIGHT_TOLERANCE_FT) {
-      rules.wallHeight.blockers.push(`${label} ${inferred.source} height ${inferred.height.toFixed(2)}ft is not a 2.4m/3.0m wall SKU.`);
+      rules.wallHeight.blockers.push(`${label} ${inferred.source} height ${inferred.height.toFixed(2)}ft is not a stocked SIP wall panel height (${WALL_HEIGHT_SKUS_FT.join('/')} ft).`);
     }
   }
   // (moved below the run reconstruction, so the message can count runs)
@@ -562,7 +547,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   }
   const roofComponent = componentForRoof(home, pitch);
   // Pitched-roof modules repeat ALONG THE RIDGE; the span picks which block
-  // class (Skylark ships R-L / R-S / R-XXS, plus -42 variants), it does not set
+  // class, it does not set
   // the count. This counted `ceil(width/4)` regardless of ridge axis, which is
   // the dimension the roof SPANS whenever the ridge runs along z — right only
   // for a square plan by coincidence. A 48x28 gable billed 24 modules where the
@@ -586,7 +571,7 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
       home.roofStyle === 'flat'
         ? `Flat deck tiled over ${home.footprint.width}x${home.footprint.depth}ft.`
         : `${roofModulesPerPlane} module(s) per plane along the ${ridgeParallelFt}ft ridge, 2 planes. `
-          + 'Span sets the block class (Skylark R-L/R-S/R-XXS), not the count; slope length is not subdivided.',
+          + 'Span sets the panel class, not the count; slope length is not subdivided.',
       home.roofSemantics?.status === 'validated' ? 'Uses paired roof/elevation semantics.' : 'Roof quantity is provisional until roof/elevation JSON is validated.',
     ],
   });
@@ -597,14 +582,14 @@ export function validateBuildability(home: DenHome): BuildValidationReport {
   // the ridge (buildable-bim: heightPolicy 'full-height-gable-end'), so the
   // building IS closed in the model — but panels are counted from plan-view wall
   // RUNS at a storey-height SKU, so the triangle above storey height is not in
-  // any line here. Skylark publishes no gable block to bill it against
-  // (SKYLARK150_BLOCKS lists roofs and wall columns, nothing for the apex), and
+  // any line here. A gable apex is not a rectangular panel and no supplier
+  // stocks one, so it is take-off work rather than a catalogue line, and
   // inventing a component to make the bill look complete is exactly the kind of
   // fabricated source this project forbids. So it is named instead.
   const pitched = home.roofStyle !== 'flat';
   const omissions = [
     ...(pitched
-      ? [`gable-end infill above storey height (${home.roofStyle} roof): enclosed in the 3D model but not billed — Skylark publishes no apex block to count it against`]
+      ? [`gable-end infill above storey height (${home.roofStyle} roof): enclosed in the 3D model but not billed — no supplier stocks an apex panel to count it against`]
       : []),
     'site works, foundations below the sill, services and finishes',
   ];
