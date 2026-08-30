@@ -65,7 +65,7 @@ Alexander's 1977 work contains 253 interconnected patterns for architecture at e
 ### Tatami Module (910mm x 1820mm)
 - *What it is:* The tatami mat (approximately 3ft x 6ft / 910mm x 1820mm) is the fundamental unit of Japanese spatial design. Rooms are sized as whole multiples of tatami mats, creating a universal grid.
 - *How it prevents waste:* When all rooms are integer multiples of the module, walls align perfectly, material cuts are minimized, and no fractional dead zones appear between rooms.
-- *Encodable constraint:* All room dimensions must be integer multiples of `module_unit` (600mm for WikiHouse, 1220mm/4ft for imperial). `room.width % module == 0 AND room.length % module == 0`.
+- *Encodable constraint:* All room dimensions must be integer multiples of `module_unit` (1220mm / 4 ft — the SIP panel module). `room.width % module == 0 AND room.length % module == 0`.
 
 ### Ken Grid System (1 Ken = 1.82m / ~6ft)
 - *What it is:* The structural bay spacing of traditional Japanese architecture. Column centers are placed on a regular Ken grid, and all spatial subdivision happens within this grid.
@@ -91,11 +91,10 @@ Alexander's 1977 work contains 253 interconnected patterns for architecture at e
 - *How it prevents waste:* A building on a 1200mm grid means every wall panel, floor panel, and roof panel is a whole sheet or exact half-sheet. Cut waste approaches zero. A 4ft grid achieves the same for imperial sheet goods.
 - *Encodable constraint:* `planning_grid = 600mm` (metric) or `planning_grid = 1220mm` (imperial). All wall lengths must be `n * grid_unit` where n is a positive integer. Room widths must be `>= 2 * grid_unit`.
 
-### WikiHouse Skylark Grid (600mm)
-- *What it is:* WikiHouse Skylark uses a 600x600mm planning grid. Wall blocks are 600mm increments. Heights increase in 300mm increments. All components are CNC-cut from standard 1220x2440mm plywood sheets.
-- *How it prevents waste:* The 600mm grid means every plywood sheet yields exactly 2x4 grid units with no waste. The entire building is assembled from a library of ~20 unique panel shapes.
-- *Encodable constraint:* `wall_length % 600mm == 0`. `wall_height % 300mm == 0`. `min_solid_wall_run >= 1800mm per 6000mm of wall` (3 continuous blocks per 10 blocks for structural bracing). `max_unique_panel_types <= 25`.
-
+### SIP Panel Grid (4 ft)
+- *What it is:* Structural insulated panels are stocked in a 4 ft module. eco-panels cap at 4 ft wide, Insulspan reach 8 ft "jumbo" panels — so 4 ft is the widest module BOTH are made in, and designing to 8 ft silently excludes a supplier.
+- *How it prevents waste:* Panels arrive cut to size, so waste moves from the site to the factory nesting stage. The design contribution is keeping runs on the module so no panel is trimmed twice.
+- *Encodable constraint:* `wall_length % 4ft == 0`. `panel_span <= 16ft` (a panel cannot span further than it is long; eco-panels stop at 16 ft, Insulspan at 24). Wall heights from the stocked set: 8, 9, 10, 12, 16 ft.
 ---
 
 ## 4. Passive House / Performance Principles
@@ -122,15 +121,15 @@ Alexander's 1977 work contains 253 interconnected patterns for architecture at e
 
 ---
 
-## 5. Kit-of-Parts / WikiHouse Principles
+## 5. Kit-of-Parts Principles
 
 ### Standardized Component Library
-- *What it is:* The entire building is assembled from a finite set of standardized components (wall blocks, floor cassettes, roof panels, connection details). WikiHouse Skylark uses roughly 20 unique panel shapes.
+- *What it is:* The entire building is assembled from a finite set of standardized components (wall blocks, floor cassettes, roof panels, connection details). A SIP kit has no shape catalogue at all — panels are cut to size — so the discipline moves from reusing shapes to keeping the geometry on one module.
 - *How it prevents waste:* Mass production of identical parts. No custom cuts on site. Every offcut from CNC cutting is predictable and minimized at the nesting stage.
 - *Encodable constraint:* `unique_component_types <= 25`. Every wall, floor, and roof element must be selected from a predefined catalog. `custom_components == 0`.
 
 ### Orthogonal-Only Plan Forms
-- *What it is:* WikiHouse only allows straight walls at 90-degree angles because 3-axis CNC machines cut at 90 degrees. No curves, no angles other than 90.
+- *What it is:* Straight walls at 90 degrees. SIPs can be cut to other angles, but every non-orthogonal joint is a custom spline detail priced per corner, so orthogonality stays a cost discipline rather than a machine limit.
 - *How it prevents waste:* Orthogonal plans mean all panels are rectangular. Nesting on plywood sheets is trivial. No complex geometry = no complex waste patterns.
 - *Encodable constraint:* `all_wall_angles ∈ {0, 90, 180, 270} degrees`. No diagonal walls. No curved walls. All rooms must be rectangular.
 
@@ -240,8 +239,8 @@ These are the highest-priority constraints that combine multiple traditions into
 
 ### Grid & Module
 ```
-GRID_UNIT = 600mm  # WikiHouse Skylark compatible
-STRUCTURAL_BAY = 2400mm  # 4 grid units = standard plywood width
+GRID_UNIT = 1220mm  # 4 ft — the widest SIP module both cores are made in
+MAX_PANEL_SPAN = 4877mm  # 16 ft — a panel cannot span further than it is long
 ALL room.width % GRID_UNIT == 0
 ALL room.length % GRID_UNIT == 0
 ALL wall.position % GRID_UNIT == 0
@@ -345,11 +344,11 @@ great_room.privacy_level <= 2
 - [Thermal Bridge Free Design - Passipedia](https://passipedia.org/basics/building_physics_-_basics/what_defines_thermal_bridge_free_design)
 - [Form Factor Energy Reduction - Modelur](https://modelur.com/use-form-factor-to-reduce-energy-consumption-of-buildings/)
 - [Passive House Shape - e-genius](https://www.e-genius.at/fileadmin/user_upload/lernfelder/energieeffiziente_gebaeudekonzepte/alt/en/web/what_shape_is_particularly_advantageous_for_a_passive_house.html)
-- [WikiHouse Design Guide](https://www.wikihouse.cc/design/designing-for-wikihouse)
-- [WikiHouse Structure](https://www.wikihouse.cc/design/how-the-structure-works)
-- [WikiHouse Skylark Technical Spec (PDF)](https://cdn.prod.website-files.com/6118e2d27c92cc41c39747a0/6734731aafda7cecf84adcfe_WikiHouse%20Skylark%20Technical%20Specification%202025.pdf)
-- [WikiHouse Manufacturing Guide](https://www.wikihouse.cc/guides/manufacturing)
-- [Skylark 250 Blocks](https://www.wikihouse.cc/blocks/skylark-250)
+- Panel-system sources — manufacturer specs, published R-values, span and
+  connection data, and what each was verified against — live in
+  [docs/EXTERNAL_REFERENCES.md](docs/EXTERNAL_REFERENCES.md) rather than being
+  duplicated here. The WikiHouse links this list used to carry described the kit
+  that was removed on 2026-08-29.
 - [Neufert Architects' Data - Bookey Summary](https://www.bookey.app/book/neufert-architects'-data,-third-edition)
 - [Neufert 4th Ed - Residential (Scribd)](https://www.scribd.com/document/711732643/Neufert-4th-edition-RESIDENTIAL)
 - [Neufert 4th Ed - Accommodation (Scribd)](https://www.scribd.com/document/711682919/Neufert-4th-edition-ACCOMMODATION)

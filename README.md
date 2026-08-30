@@ -21,7 +21,6 @@ debug tools available but not default.
 
 - [PROJECT_STATUS.md](PROJECT_STATUS.md) is the current handoff: active architecture, target plans, current blockers, metrics, cleanup stance, and next work.
 - [OPERATING_PRINCIPLES.md](OPERATING_PRINCIPLES.md) captures the relevant engineering principles for this repo: lossless paired artifacts, boundary validation, browser QA, bug-shape audits, and semantic/presentation separation.
-- [RENDER_FIX_PLAN.md](RENDER_FIX_PLAN.md) tracks the active source/render fidelity plan.
 
 ## Current Role
 

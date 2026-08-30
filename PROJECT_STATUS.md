@@ -4,6 +4,13 @@ Last updated: 2026-06-24 (Manufacturability + 3D sweep — every generated plan 
 
 ## 2026-06-24 Manufacturability + 3D Sweep — Shipped
 
+> **Kit changed 2026-08-29.** The passages below describe the WikiHouse Skylark
+> era. Skylark ships roof blocks at 0 and 42 degrees only and six of seven
+> generated roof styles are neither, so it was removed in favour of structural
+> insulated panels. The loops and their findings still stand; the kit they were
+> run against does not. See `lib/kit/sip.ts`.
+
+
 Turned the discipline on whether a generated plan can actually be CUT AND
 ASSEMBLED as a WikiHouse plywood panel kit, and whether its 3D model matches the
 2D/code truth. Drove every plan through `lib/build-validator.ts` + the 3D
@@ -83,7 +90,7 @@ Drove the real running app (clicking real flows, reading the console) to find
 usability bugs, generalized each to its CLASS, added a failing interactive-sweep
 assertion that guards the whole class, then fixed the ROOT CAUSE. 12 classes
 fixed across 13 fires, then two consecutive clean verification sweeps (fires 14
-& 15) with the full ladder green. Living log: `ux-sweep.md`.
+& 15) with the full ladder green. That loop closed after 76 fires with the app converged; its log is in git history.
 
 The 12 classes (each: bug → class → gate → root-cause fix, all verified live):
 1. **Destructive Delete had no confirmation** → shared `ConfirmButton`

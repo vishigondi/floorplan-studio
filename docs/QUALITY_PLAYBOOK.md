@@ -506,6 +506,13 @@ clears) — or refuses honestly. Hand-to-an-architect quality across the matrix.
 
 ## 13. The manufacturability + 3D era (2026-06-22 → 06-24)
 
+> **Kit changed 2026-08-29.** The passages below describe the WikiHouse Skylark
+> era. Skylark ships roof blocks at 0 and 42 degrees only and six of seven
+> generated roof styles are neither, so it was removed in favour of structural
+> insulated panels. The loops and their findings still stand; the kit they were
+> run against does not. See `lib/kit/sip.ts`.
+
+
 After the generation pipeline produced architecturally-sound, code-checked plans
 (§12), this loop asked the harder product question: can the plan actually be CUT
 AND ASSEMBLED as a WikiHouse plywood panel kit, and does the 3D model match the

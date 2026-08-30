@@ -446,7 +446,7 @@ note(namelessHome.length === 0 && namelessDetail.length === 0,
 // (4g) feed-card action controls stay comfortably tappable on mobile. Class: a
 // touch target under 24px tall (WCAG 2.5.8) is hard to hit. Scope: the
 // customer-facing feed (the dense desktop review chrome is a separate density
-// tradeoff, logged in ux-sweep). Assert every interactive control inside a feed
+// tradeoff, logged during the UX sweep). Assert every interactive control inside a feed
 // card is >= 24px tall at 390px (gates assert MORE).
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });

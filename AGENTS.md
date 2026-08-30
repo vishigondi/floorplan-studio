@@ -1,6 +1,6 @@
 # Agent Notes
 
-This repo is currently the Den paired floorplan product workflow, not the old SpatialIR/WikiHouse algorithm harness. Work from the paired artifact architecture unless a task explicitly says otherwise.
+This repo turns a one-line brief into a code-checked plan and the plan into a provider-neutral SIP tender document. The kit is structural insulated panels — WikiHouse Skylark was removed on 2026-08-29. Work from the paired artifact architecture unless a task explicitly says otherwise.
 
 ## Source Of Truth
 
@@ -62,7 +62,6 @@ Local code validates and orchestrates. GPT performs visual reasoning only throug
 
 - [PROJECT_STATUS.md](PROJECT_STATUS.md): current state and next work.
 - [OPERATING_PRINCIPLES.md](OPERATING_PRINCIPLES.md): engineering rules learned from this and adjacent projects.
-- [RENDER_FIX_PLAN.md](RENDER_FIX_PLAN.md): active source/render fidelity plan.
 - [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md): architectural design constraints and standards background.
 
 ## Current Regression Plans
