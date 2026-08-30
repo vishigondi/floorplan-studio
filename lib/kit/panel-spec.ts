@@ -40,6 +40,13 @@ export interface WallRunSpec {
   id: string;
   /** 'exterior' runs carry the thermal target; 'interior' do not. */
   kind: 'exterior' | 'interior';
+  /** 'plate' is a rectangle to the top plate — area is length x height.
+   * 'gable-end' is triangular to the ridge; heightFt is the APEX, so area is
+   * not length x height and the bidder must take it off separately.
+   * 'slope' is an eave-side facade on a plan whose eave is too low to be a wall
+   * at all — an a-frame's 1 ft stub. Openings on it are cut into the ROOF
+   * PLANE, not into a wall panel, and it must not be quoted as wall area. */
+  profile: 'plate' | 'gable-end' | 'slope';
   lengthFt: number;
   heightFt: number;
   /** Rough openings in this run, positioned from the run's start. */
