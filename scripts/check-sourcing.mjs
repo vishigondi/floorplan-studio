@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { thicknessOptions, recommendThickness, assessCompetition, compareBids,
   REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER, CORE_MAX_PANEL_WIDTH_FT,
-  CORE_R_BY_THICKNESS, publishedR } =
+  CORE_R_BY_THICKNESS, publishedR, bidPackages } =
   await import(join(root, 'lib/kit/sourcing.ts'));
 const { JURISDICTION_PACKS } = await import(join(root, 'lib/standards/code-advisory.ts'));
 
@@ -154,6 +154,38 @@ console.log('\nsourcing: compliance uses PUBLISHED R, never a rate');
   // Polyurethane is published as ranges; we carry the conservative end.
   check('polyurethane 4.5 in uses the low end of its published range',
     CORE_R_BY_THICKNESS.polyurethane[4.5] === 26);
+}
+
+console.log('\nsourcing: bid packages — two compliant quotes is the whole requirement');
+{
+  const pk = bidPackages([
+    { element: 'Wall', minR: nc.wallR, basis: 'NCECC 2018 Table R402.1.2, zone 4' },
+    { element: 'Ceiling', minR: nc.ceilingR, basis: 'NCECC 2018 Table R402.1.2, zone 4' },
+  ]);
+  const wall = pk.find((p) => p.element === 'Wall');
+  const ceil = pk.find((p) => p.element === 'Ceiling');
+
+  // The requirement is two COMPLIANT bids, not a thin one. Overbuild is
+  // expected and must never read as a fault.
+  check('both cores can bid the wall', wall.everyCoreCanBid, wall.lines.map((l) => l.core).join());
+  check('both cores can bid the ceiling', ceil.everyCoreCanBid, ceil.lines.map((l) => l.core).join());
+  check('each line is genuinely compliant, never under target',
+    pk.every((p) => p.lines.every((l) => l.publishedR >= p.minR)));
+  check('overbuild is reported per core, not minimised away',
+    ceil.lines.find((l) => l.core === 'eps').overbuildR === 6.4
+    && ceil.lines.find((l) => l.core === 'polyurethane').overbuildR === 2);
+
+  // The zero-margin wall is the one thing here worth surfacing: it complies at
+  // exactly R-15.0 and has nothing left if anything moves.
+  check('the zero-margin EPS wall is flagged, not buried',
+    /EXACTLY/.test(wall.note) && /no margin/.test(wall.note));
+  check('and the ceiling note just says compare on price',
+    /compare on price/.test(ceil.note));
+
+  // A target no core can meet is the only real blocker, and must be named.
+  const impossible = bidPackages([{ element: 'Wall', minR: 300, basis: 'test' }])[0];
+  check('an unmeetable target reports everyCoreCanBid false', impossible.everyCoreCanBid === false);
+  check('and says nobody can bid it', /cannot bid this element/.test(impossible.note));
 }
 
 console.log('\nsourcing: supplier data is honest about what was verified');

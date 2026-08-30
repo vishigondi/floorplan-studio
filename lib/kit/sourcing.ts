@@ -349,3 +349,85 @@ export function compareBids(bids: BidInput[]): BidComparison[] {
     })
     .sort((a, b) => a.totalDelivered - b.totalDelivered);
 }
+
+
+// ---------------------------------------------------------------------------
+// BID PACKAGES — the actual deliverable.
+//
+// The goal is two compliant bids to compare on price. Not the thinnest possible
+// panel, not dimensional interchangeability: both bidders quote whatever they
+// make that MEETS the target, overbuild is expected and fine, and the prices
+// decide it.
+//
+// That makes most of the optimisation above informational rather than
+// governing. It is kept because knowing WHY a bid is thick is useful when the
+// quotes come back — an EPS ceiling at 12.25 in is 6.4 R over target because
+// that is their first compliant step, not because anyone gold-plated it — but
+// nothing here should be read as a reason to reject a compliant bid.
+//
+// The one thing that must be right is the target itself. Everything downstream
+// tolerates overbuild; nothing tolerates a wrong R.
+
+export interface ElementTarget {
+  /** 'Wall', 'Ceiling', etc. */
+  element: string;
+  minR: number;
+  /** Which code provision this target comes from. Travels with the bid. */
+  basis: string;
+}
+
+export interface BidLine {
+  core: string;
+  /** Thinnest thickness this core is MADE in that meets the target. */
+  thicknessIn: number;
+  publishedR: number;
+  /** How far over target. Expected, not a fault. */
+  overbuildR: number;
+}
+
+export interface ElementBidPackage {
+  element: string;
+  minR: number;
+  basis: string;
+  lines: BidLine[];
+  /** False when some core has no compliant product — the only real blocker. */
+  everyCoreCanBid: boolean;
+  note: string;
+}
+
+/**
+ * For each element, what each core would quote.
+ *
+ * Two or more lines means two or more comparable, compliant bids — which is the
+ * whole requirement. A core with no compliant product is the only outcome that
+ * needs action, and it is named rather than silently dropped.
+ */
+export function bidPackages(targets: ElementTarget[]): ElementBidPackage[] {
+  return targets.map(({ element, minR, basis }) => {
+    const lines: BidLine[] = [];
+    for (const core of Object.keys(CORE_R_BY_THICKNESS)) {
+      const fit = (CORE_THICKNESS_LADDER[core] ?? []).find((t) => (publishedR(core, t) ?? -1) >= minR);
+      if (fit === undefined) continue;
+      const r = publishedR(core, fit)!;
+      lines.push({
+        core,
+        thicknessIn: fit,
+        publishedR: r,
+        overbuildR: Math.round((r - minR) * 10) / 10,
+      });
+    }
+    const everyCoreCanBid = lines.length === Object.keys(CORE_R_BY_THICKNESS).length;
+    const tight = lines.filter((l) => l.overbuildR === 0);
+    const note = !everyCoreCanBid
+      ? `Only ${lines.map((l) => l.core).join(' and ')} has a compliant product at R-${minR}; `
+        + 'the others cannot bid this element at all.'
+      : tight.length
+        ? `All cores can bid. ${tight.map((l) => l.core).join(' and ')} meets R-${minR} EXACTLY at `
+          + `${tight.map((l) => l.thicknessIn).join('/')} in with no margin — compliant, but any `
+          + 'rounding, derating or code revision puts it under. Worth knowing before it is the '
+          + 'cheapest quote.'
+        : `All cores can bid, with ${lines.map((l) => `${l.core} +${l.overbuildR}`).join(', ')} over target. `
+          + 'Overbuild differs by core because their product ladders differ; compare on price.';
+    return { element, minR, basis, lines, everyCoreCanBid, note };
+  });
+}
