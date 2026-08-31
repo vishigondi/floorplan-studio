@@ -262,7 +262,31 @@ export interface BidComparison {
  * paper and loses on site. All three terms come from the user; this only decides
  * what gets added together and in what order the answers land.
  */
+/**
+ * Rank bids by total delivered cost.
+ *
+ * REFUSES to rank across currencies, and that refusal is the point. The
+ * expected two-bidder case for this kit is a US maker against a Canadian one —
+ * Insulspan/Plasti-Fab is Canadian — so mixed-currency bids are the normal
+ * case, not an edge case. Summing and sorting them as bare numbers silently
+ * names the wrong winner: 27,200 CAD sorts below 27,700 USD while actually
+ * being some 8,000 USD cheaper, and with other numbers the ranking inverts.
+ *
+ * The fix is not a built-in exchange rate. A rate is an unsourced number that
+ * moves daily, and burying one here would make a wrong winner look authoritative
+ * rather than obviously unanswerable. The caller converts with a rate they own
+ * and can defend, then ranks. Use compareBidsByCurrency to see each currency's
+ * ranking without converting anything.
+ */
 export function compareBids(bids: BidInput[]): BidComparison[] {
+  const currencies = [...new Set(bids.map((b) => b.currency ?? 'USD'))];
+  if (currencies.length > 1) {
+    throw new Error(
+      `Cannot rank bids across ${currencies.length} currencies (${currencies.join(', ')}): `
+      + 'the totals are not comparable numbers. Convert to one currency with a rate you '
+      + 'own, then rank — or use compareBidsByCurrency to rank within each.',
+    );
+  }
   return bids
     .map((bid) => {
       const installCost = Math.round(bid.installHours * bid.hourlyRate * 100) / 100;
@@ -276,6 +300,21 @@ export function compareBids(bids: BidInput[]): BidComparison[] {
       };
     })
     .sort((a, b) => a.totalDelivered - b.totalDelivered);
+}
+
+/**
+ * Each currency's own ranking, when converting is not wanted. Never claims a
+ * winner ACROSS the groups, because there isn't one without a rate.
+ */
+export function compareBidsByCurrency(bids: BidInput[]): Array<{ currency: string; bids: BidComparison[] }> {
+  const groups = new Map<string, BidInput[]>();
+  for (const bid of bids) {
+    const key = bid.currency ?? 'USD';
+    groups.set(key, [...(groups.get(key) ?? []), bid]);
+  }
+  return [...groups.entries()]
+    .map(([currency, group]) => ({ currency, bids: compareBids(group) }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 // ---------------------------------------------------------------------------

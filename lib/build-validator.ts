@@ -59,6 +59,15 @@ function wallLengthFt(wall: SourceWallSegment): number {
 }
 
 /**
+ * How much of the perpendicular dimension an interior wall line must cover
+ * before it counts as carrying the floor. Exported because the foundation
+ * take-off places piles on exactly these lines — if the two disagreed, the
+ * piles would sit under walls the joist calculation does not think are
+ * bearing, or miss ones it does.
+ */
+export const BEARING_COVERAGE_RATIO = 0.7;
+
+/**
  * The real floor-joist span: the largest gap between bearing lines, minimized
  * over the two joist orientations. Bearing lines are the exterior walls plus any
  * interior wall line that spans most of the perpendicular dimension (a full-width
@@ -72,7 +81,7 @@ function joistSpanFt(home: DenHome): number {
   const D = home.footprint.depth;
   const walls = home.sourceWalls ?? [];
   const TOL = 0.1;
-  const COVER = 0.7;
+  const COVER = BEARING_COVERAGE_RATIO;
   const maxGap = (constAxis: 'x' | 'z'): number => {
     const ext = constAxis === 'z' ? D : W; // span direction these lines bear
     const perp = constAxis === 'z' ? W : D; // dimension a bearing line must cover

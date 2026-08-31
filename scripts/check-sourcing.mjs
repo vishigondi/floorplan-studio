@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { thicknessOptions, recommendThickness, assessCompetition, compareBids,
+const { thicknessOptions, recommendThickness, assessCompetition, compareBids, compareBidsByCurrency,
   REGIONAL_SUPPLIERS, CORE_R_PER_INCH, CORE_THICKNESS_LADDER,
   CORE_R_BY_THICKNESS, publishedR, bidPackages, CORE_MAX_PANEL_FT } =
   await import(join(root, 'lib/kit/sourcing.ts'));
@@ -211,6 +211,35 @@ console.log('\nsourcing: supplier data is honest about what was verified');
 }
 
 console.log('');
+console.log('bids in different currencies are not comparable numbers');
+// The expected two-bidder case here is a US maker against a Canadian one, so
+// this is the normal case, not an edge case. Ranking them as bare numbers names
+// the wrong winner: 27,200 CAD sorts below 27,700 USD while being thousands
+// cheaper, and with other numbers the ranking inverts outright.
+const usd = { supplier: 'US maker', panelCost: 20000, freightCost: 2500, installHours: 80, hourlyRate: 65, currency: 'USD' };
+const cad = { supplier: 'CA maker', panelCost: 19000, freightCost: 3000, installHours: 80, hourlyRate: 65, currency: 'CAD' };
+let threw = null;
+try { compareBids([usd, cad]); } catch (err) { threw = err; }
+check('ranking across currencies is refused, not guessed', threw !== null,
+  threw ? '' : 'it returned a ranking');
+check('and the refusal names both currencies',
+  Boolean(threw && /USD/.test(threw.message) && /CAD/.test(threw.message)), threw?.message ?? '');
+check('and does not offer a built-in exchange rate',
+  Boolean(threw && /rate you\s+own/.test(threw.message)), threw?.message ?? '');
+// A single currency must still rank normally, or the guard has broken the tool.
+const same = compareBids([usd, { ...cad, currency: 'USD' }]);
+check('one currency still ranks, cheapest first', same.length === 2
+  && same[0].totalDelivered <= same[1].totalDelivered);
+const grouped = compareBidsByCurrency([usd, cad]);
+check('grouping gives each currency its own ranking', grouped.length === 2
+  && grouped.every((g) => g.bids.length === 1));
+check('and never claims a winner across the groups',
+  grouped.every((g) => g.bids.every((b) => b.currency === g.currency)));
+// A missing currency must default consistently, or two undefined bids would be
+// treated as two different currencies and refuse to rank at all.
+check('an unstated currency defaults to USD rather than becoming its own group',
+  compareBidsByCurrency([{ ...usd, currency: undefined }, { ...usd, supplier: 'B' }]).length === 1);
+
 if (failures) {
   console.error(`${failures} sourcing check(s) failed`);
   process.exit(1);

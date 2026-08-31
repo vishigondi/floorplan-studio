@@ -32,6 +32,14 @@ const BRIEFS = [
 ];
 const { JURISDICTION_PACKS } = await import(join(root, 'lib/standards/code-advisory.ts'));
 
+// Every profile assertion below is an .every() over a FILTERED set, and
+// .every() on an empty array is TRUE. Measured across these briefs, the slope
+// assertion had nothing to test on three of four — it printed ok while checking
+// nothing. That is survivable only while some brief still exercises it, and
+// nothing was watching whether one did. This tally turns coverage loss into a
+// failure instead of a silent downgrade.
+const profilesSeen = new Map();
+
 let failures = 0;
 function check(label, ok, detail = '') {
   if (ok) { console.log(`  ok   ${label}`); return; }
@@ -131,6 +139,7 @@ for (const brief of BRIEFS) {
   const ridge = a.roof.ridgeHeightFt;
   // Plate walls stop at the plate; gable ends report their apex, because that
   // is the height that actually contains their openings.
+  for (const r of extRuns) profilesSeen.set(r.profile, (profilesSeen.get(r.profile) ?? 0) + 1);
   check(`${brief}: plate walls are quoted to the ${eave} ft plate`,
     extRuns.filter((r) => r.profile === 'plate').every((r) => Math.abs(r.heightFt - eave) < 0.01),
     extRuns.filter((r) => r.profile === 'plate').map((r) => r.heightFt).join(','));
@@ -254,6 +263,13 @@ console.log('\nadapter: the spec it feeds is complete and provider-neutral');
 
 
 console.log('');
+console.log('the battery actually exercised every wall profile');
+for (const profile of ['plate', 'gable-end', 'slope']) {
+  check(`some brief produces a '${profile}' run (else its assertions are vacuous)`,
+    (profilesSeen.get(profile) ?? 0) > 0,
+    `seen ${profilesSeen.get(profile) ?? 0} times across the briefs`);
+}
+
 if (failures) {
   console.error(`${failures} panel-spec check(s) failed`);
   process.exit(1);
