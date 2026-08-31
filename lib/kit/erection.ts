@@ -72,7 +72,88 @@ export const LIFT_MACHINES: LiftMachine[] = [
 /** The rugged approach path the machine has to fit down. */
 export const SITE_ACCESS_WIDTH_FT = 8;
 
+/**
+ * Every capacity above is a badge number: measured at minimum reach, on level
+ * ground, in still air. Two site facts invalidate it, and mountain ground has
+ * both.
+ *
+ * A load chart is valid only within about 3 degrees of horizontal. Past roughly
+ * 5 degrees of side slope the centre of gravity shifts downhill and at least a
+ * 20% derate applies. Source: published telehandler load-chart guidance.
+ *
+ * The consequence is not the one you would expect. Our panels are so light
+ * relative to these machines that even a heavy derate leaves enormous margin —
+ * capacity still does not bind. What the slope actually dictates is that the
+ * ground the machine STANDS on has to be benched to within chart validity. That
+ * is a site-work line item that follows from the machine choice, and it is
+ * invisible if you only ever compare panel weight against a badge capacity.
+ */
+export const SLOPE_CHART_VALID_DEG = 3;
+export const SLOPE_DERATE_TRIGGER_DEG = 5;
+export const SLOPE_DERATE_MIN_PCT = 20;
+
+export const gradePctToDeg = (pct: number) => (Math.atan(pct / 100) * 180) / Math.PI;
+
+/** Badge capacity reduced for the ground it is actually standing on. */
+export function capacityOnGrade(ratedLb: number, gradePct?: number): number {
+  if (gradePct === undefined) return ratedLb;
+  if (gradePctToDeg(gradePct) <= SLOPE_DERATE_TRIGGER_DEG) return ratedLb;
+  return Math.round(ratedLb * (1 - SLOPE_DERATE_MIN_PCT / 100));
+}
+
+/**
+ * The height that goes on the FAA obstruction-evaluation form.
+ *
+ * The form asks for the maximum height INCLUDING CONSTRUCTION EQUIPMENT, which
+ * makes the machine choice a filing decision and not only a cost one. A
+ * telehandler that reaches 19 ft and a crane that reaches 100 ft produce two
+ * very different declarations from the same building, and on high ground the
+ * difference decides whether the declared object stays beneath an existing
+ * catalogued obstruction or rises above it.
+ *
+ * The number is the taller of the finished structure and the machine that sets
+ * it — not their sum, because the boom is above the roof while it is working
+ * and the roof is there afterwards.
+ */
+export interface DeclaredEnvelope {
+  structureFt: number;
+  machineFt: number;
+  /** The greater of the two: what a filing must declare, before margin. */
+  maxHeightFt: number;
+  /** Which one governs, because it is the one to argue about if it is too tall. */
+  governedBy: 'structure' | 'equipment';
+  /** Declared figure with margin, so one filing can cover a range of plans. */
+  declareFt: number;
+}
+
+/**
+ * A determination is valid 18 months and costs only time, so it is worth
+ * declaring a height you will not have to come back and revise. Filing at the
+ * exact computed figure means any later plan with a taller ridge reopens it.
+ */
+export const ENVELOPE_MARGIN_FT = 5;
+
+export function declaredEnvelope(
+  structureFt: number,
+  machine: LiftMachine,
+  marginFt = ENVELOPE_MARGIN_FT,
+): DeclaredEnvelope {
+  const machineFt = machine.maxLiftFt;
+  const maxHeightFt = Math.max(structureFt, machineFt);
+  return {
+    structureFt,
+    machineFt,
+    maxHeightFt,
+    governedBy: structureFt > machineFt ? 'structure' : 'equipment',
+    declareFt: Math.ceil(maxHeightFt + marginFt),
+  };
+}
+
 export interface ErectionRequirement {
+  /** Site grade the assessment was made against, if one was supplied. */
+  siteGradePct?: number;
+  /** What a Form 7460-1 would declare for this plan on the best machine. */
+  envelope?: DeclaredEnvelope;
   /** The height a panel has to be carried to: the ridge. */
   ridgeFt: number;
   /** Ridge plus the allowance to land it. */
@@ -89,11 +170,15 @@ export function assessErection(
   ridgeFt: number,
   heaviestPanelAreaSqFt: number,
   machines: LiftMachine[] = LIFT_MACHINES,
+  /** Average ground slope, percent. Omit only when the site is genuinely level. */
+  siteGradePct?: number,
 ): ErectionRequirement {
   const heaviestPanelLb = panelWeightLb(heaviestPanelAreaSqFt);
   const requiredLiftFt = Math.round((ridgeFt + LANDING_CLEARANCE_FT) * 100) / 100;
   const fits = (m: LiftMachine) => m.widthFt <= SITE_ACCESS_WIDTH_FT;
-  const carries = (m: LiftMachine) => m.ratedCapacityLb >= heaviestPanelLb;
+  // Compare against the DERATED capacity, never the badge, whenever a grade is
+  // known. Using the badge on sloping ground is the quiet version of this bug.
+  const carries = (m: LiftMachine) => capacityOnGrade(m.ratedCapacityLb, siteGradePct) >= heaviestPanelLb;
   const capable = machines.filter((m) => fits(m) && carries(m) && m.maxLiftFt >= requiredLiftFt);
   const marginal = machines.filter((m) => fits(m) && carries(m)
     && m.maxLiftFt >= ridgeFt && m.maxLiftFt < requiredLiftFt);
@@ -108,9 +193,24 @@ export function assessErection(
   // sizes panels around what a machine can carry.
   const lightest = machines.filter(carries).length;
   if (lightest === machines.length) {
+    const derated = machines.map((m) => capacityOnGrade(m.ratedCapacityLb, siteGradePct));
     notes.push(`Capacity is not the constraint: the heaviest panel is ~${heaviestPanelLb} lb `
-      + `against ratings of ${Math.min(...machines.map((m) => m.ratedCapacityLb))}-`
-      + `${Math.max(...machines.map((m) => m.ratedCapacityLb))} lb. Reach is the constraint.`);
+      + `against ${siteGradePct === undefined ? 'ratings' : 'grade-derated capacities'} of `
+      + `${Math.min(...derated)}-${Math.max(...derated)} lb. Reach is the constraint.`);
+  }
+  if (siteGradePct !== undefined) {
+    const deg = gradePctToDeg(siteGradePct);
+    if (deg > SLOPE_CHART_VALID_DEG) {
+      notes.push(`SITE GRADE ${siteGradePct}% is ${deg.toFixed(1)} deg, beyond the `
+        + `${SLOPE_CHART_VALID_DEG} deg within which a load chart is valid`
+        + (deg > SLOPE_DERATE_TRIGGER_DEG
+          ? ` and past the ${SLOPE_DERATE_TRIGGER_DEG} deg side-slope threshold, so at least `
+            + `${SLOPE_DERATE_MIN_PCT}% has been taken off every capacity above. `
+          : '. ')
+        + 'BENCH THE SETTING PADS to within chart validity. This is a site-work item that '
+        + 'follows from the machine choice, and it is invisible if panel weight is only ever '
+        + 'compared against a badge capacity.');
+    }
   }
   const short = machines.filter((m) => fits(m) && m.maxLiftFt < ridgeFt);
   if (short.length) {
@@ -125,5 +225,18 @@ export function assessErection(
     notes.push('NO machine in the set can erect this roof crane-free. Either lower the ridge, '
       + 'set the ridge panels from staging, or accept a crane and the cost that comes with it.');
   }
-  return { ridgeFt, requiredLiftFt, heaviestPanelLb, capable, marginal, notes };
+  // Declared against the machine that will actually do it. Reporting an
+  // envelope for a machine that cannot set the roof would understate the filing.
+  const chosen = capable[0] ?? marginal[0];
+  const envelope = chosen ? declaredEnvelope(ridgeFt, chosen) : undefined;
+  if (envelope) {
+    notes.push(`FAA DECLARATION: this plan's maximum height including construction equipment is `
+      + `${envelope.maxHeightFt} ft, governed by the ${envelope.governedBy}. File `
+      + `${envelope.declareFt} ft to leave margin — a determination is valid 18 months, and one `
+      + 'filed for a development envelope covers what follows, whereas one filed at the exact '
+      + 'computed height is reopened by the next plan with a taller ridge.');
+  }
+  return {
+    ridgeFt, requiredLiftFt, heaviestPanelLb, capable, marginal, notes, siteGradePct, envelope,
+  };
 }
