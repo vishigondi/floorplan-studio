@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildPanelSpec, coresMeeting, CORE_R_PER_INCH, adaptArtifactToPanelGeometry } =
+const { buildPanelSpec, coresMeeting, CORE_R_PER_INCH, adaptArtifactToPanelGeometry, roofHeightAtFt, roofProfileAreaSqFt } =
   await import(join(root, 'lib/kit/panel-spec.ts'));
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
@@ -193,6 +193,42 @@ for (const brief of BRIEFS) {
   if (eave < 4) {
     check(`${brief}: a ${eave} ft eave is called out as having no plate wall`,
       g.notes.some((n) => /no plate-height wall/i.test(n)));
+  }
+
+  // INTERIOR WALLS RISE TO THE ROOF, AT THEIR OWN POSITION. Quoting them at the
+  // eave is right only in a box; under a pitched SIP roof (a cathedral ceiling,
+  // no attic) each partition runs up to the plane above it. The previous
+  // adapter used the eave for all of them and put an a-frame's eleven
+  // partitions at 1 ft — 76 sq ft against 608 for the same walls under a gable
+  // — and nothing here looked at interior height or area at all.
+  {
+    const ridgeAlongZ = (a.roof.ridgeAxis ?? 'z') === 'z';
+    const span = ridgeAlongZ ? a.footprint.widthFt : a.footprint.depthFt;
+    const roof = { eaveFt: eave, ridgeFt: ridge };
+    const intRuns = g.wallRuns.filter((r) => r.kind === 'interior');
+    const byId = new Map((a.interiorWalls ?? []).map((w) => [w.id, w]));
+    const offenders = [];
+    for (const r of intRuns) {
+      const sp = byId.get(r.id)?.span;
+      if (!sp) { offenders.push(`${r.id}:no-span`); continue; }
+      const alongZ = Math.abs(sp.x1 - sp.x2) < 0.01;
+      if ((ridgeAlongZ === alongZ)) {
+        const at = ridgeAlongZ ? sp.x1 : sp.z1;
+        const h = roofHeightAtFt(roof, span, at - span / 2);
+        if (Math.abs(r.heightFt - h) > 0.02 || Math.abs(r.grossAreaSqFt - r.lengthFt * h) > 0.05) offenders.push(`${r.id}:${r.heightFt}vs${h.toFixed(2)}`);
+      } else {
+        const [p1, p2] = ridgeAlongZ ? [sp.x1, sp.x2] : [sp.z1, sp.z2];
+        const area = roofProfileAreaSqFt(roof, span, p1 - span / 2, p2 - span / 2);
+        if (Math.abs(r.grossAreaSqFt - area) > 0.05) offenders.push(`${r.id}:${r.grossAreaSqFt}vs${area.toFixed(2)}`);
+      }
+    }
+    check(`${brief}: every interior wall stands at the roof height for its position (${intRuns.length})`,
+      intRuns.length > 0 && offenders.length === 0, offenders.join(' '));
+    if (ridge > eave + 3) {
+      check(`${brief}: under a pitched roof no interior wall is quoted at the eave`,
+        intRuns.every((r) => r.heightFt > eave + 0.5),
+        intRuns.filter((r) => r.heightFt <= eave + 0.5).map((r) => r.id).join(','));
+    }
   }
 
   // Openings must all arrive, and land on a wall that exists.

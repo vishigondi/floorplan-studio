@@ -18,7 +18,7 @@ const {
   buildUnitPlan, sideZone, entryNotch, loftVerdict, isPanelised, WET_WALL_ID,
   APPENDIX_Q_MAX_SQFT, HEIGHT, MIN_AREA,
 } = await import(join(root, 'lib/kit/unit-plan.ts'));
-const { buildPanelSpec } = await import(join(root, 'lib/kit/panel-spec.ts'));
+const { buildPanelSpec, roofHeightAtFt, roofProfileAreaSqFt } = await import(join(root, 'lib/kit/panel-spec.ts'));
 const { buildPileSchedule, CHEROKEE_GROUND_SNOW, CHEROKEE_WIND } =
   await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -188,6 +188,43 @@ for (const [s, e, r] of ALL) {
   });
   check(`${s}: the panel spec consumes the unit unchanged`, spec.wallRuns.length === u.wallRuns.length);
 }
+
+console.log('every wall stands at the roof height for its position, never at the eave');
+// The first emitter used the eave for every wall. On the a-frame that quoted
+// the 7.17 ft side walls at 22 sq ft, made the lock-off divider 1 ft tall, and
+// took the inset gable ends as eave-to-ridge triangles (114) instead of the
+// core-line-to-ridge trapezoids they are (152). Every gate passed, because none
+// asked WHERE a wall stood.
+for (const [s, e, r] of ALL) {
+  const u = plan(s, e, r);
+  const roof = { eaveFt: e, ridgeFt: r };
+  const half = u.coreWidthFt / 2;
+  const w = (id) => u.wallRuns.find((x) => x.id === id);
+  const sideH = roofHeightAtFt(roof, W, half);
+  check(`${s}: side walls stand at the core line (${sideH.toFixed(2)} ft), area = depth x that`,
+    Math.abs(w('ext-w').heightFt - sideH) < 0.02 && Math.abs(w('ext-w').grossAreaSqFt - D * sideH) < 0.1
+      && Math.abs(w('ext-e').grossAreaSqFt - D * sideH) < 0.1,
+    `${w('ext-w').heightFt} / ${w('ext-w').grossAreaSqFt}`);
+  const across = roofProfileAreaSqFt(roof, W, -half, half);
+  for (const id of ['ext-n', 'ext-s', 'iw-lockoff']) {
+    check(`${s}: ${id} is the core's roof profile (${across.toFixed(1)} sq ft)`,
+      Math.abs(w(id).grossAreaSqFt - across) < 0.1, String(w(id).grossAreaSqFt));
+  }
+  check(`${s}: the wet wall rises to the ridge`, Math.abs(w(WET_WALL_ID).heightFt - r) < 0.02, String(w(WET_WALL_ID).heightFt));
+}
+// On a decked variant NOTHING sits at the eave, so length x eave is always wrong.
+for (const [s, e, r] of TALL) {
+  const u = plan(s, e, r);
+  check(`${s}: no wall is quoted at length x eave`,
+    u.wallRuns.every((x) => x.grossAreaSqFt > x.lengthFt * e + 0.5),
+    u.wallRuns.filter((x) => x.grossAreaSqFt <= x.lengthFt * e + 0.5).map((x) => x.id).join(','));
+}
+// The exact figures that were wrong, pinned.
+const af = plan(...TALL[0]);
+check('a-frame side wall is ~157.7 sq ft, not 22', Math.abs(af.wallRuns.find((x) => x.id === 'ext-w').grossAreaSqFt - 157.74) < 0.1);
+check('a-frame core gable end is the ~152 sq ft trapezoid, not the 114 sq ft eave triangle',
+  Math.abs(af.wallRuns.find((x) => x.id === 'ext-n').grossAreaSqFt - 152.41) < 0.1);
+check('lock-off divider is a real wall, not 1 ft tall', af.wallRuns.find((x) => x.id === 'iw-lockoff').heightFt > 10);
 
 console.log('the lock-off says what it is, and what it might trigger');
 const locked = plan('gable', 8, 14, true);

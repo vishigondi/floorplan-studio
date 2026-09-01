@@ -23,6 +23,7 @@
  */
 
 import { BEARING_COVERAGE_RATIO } from '../build-validator.ts';
+import { roofHeightAtFt, roofProfileAreaSqFt, round2 } from './panel-spec.ts';
 import type { WallRunSpec, RoofPlaneSpec } from './panel-spec.ts';
 
 /** IRC Appendix Q applies at or below this, lofts excluded from the count. */
@@ -113,14 +114,6 @@ export interface UnitPlan {
   /** Interior walls for the foundation's bearing-line rule. */
   interiorWalls: Array<{ id: string; span: { x1: number; z1: number; x2: number; z2: number } }>;
   notes: string[];
-}
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
-/** Height of the roof plane at distance u from the ridge. */
-function planeHeightAt(roof: RoofProfile, widthFt: number, uFromRidge: number): number {
-  const slope = (roof.ridgeFt - roof.eaveFt) / (widthFt / 2);
-  return roof.ridgeFt - slope * uFromRidge;
 }
 
 /** Distance from the ridge at which the plane still clears `need`. */
@@ -282,17 +275,31 @@ export function buildUnitPlan(config: UnitConfig): UnitPlan {
   const wallRuns: WallRunSpec[] = [];
   const eaveFt = roof.eaveFt;
   const gable = roof.ridgeFt > eaveFt + 0.01;
-  const push = (id: string, lengthFt: number, profile: WallRunSpec['profile'], heightFt: number,
+  const coreHalf = coreWidthFt / 2;
+  // Every wall's area comes from WHERE IT STANDS under the roof, through the one
+  // shared function — never from the eave. The first version of this helper
+  // used the eave for every wall: the a-frame's 7.17 ft side walls quoted at
+  // 22 sq ft (22 x 1), the lock-off divider came out 1 ft tall, and its inset
+  // gable ends were 114 sq ft where the trapezoid is 152. Every gate passed.
+  const openingArea = (openings: WallRunSpec['openings']) =>
+    round2(openings.reduce((t, o) => t + o.widthFt * Math.max(0, o.headFt - o.sillFt), 0));
+  /** A wall parallel to the ridge, standing at offset u: a rectangle at that height. */
+  const pushParallel = (id: string, kind: WallRunSpec['kind'], lengthFt: number, uFromRidge: number,
     openings: WallRunSpec['openings'] = []) => {
-    const rect = lengthFt * eaveFt;
-    const gross = profile === 'slope' ? 0
-      : profile === 'gable-end' ? round2(rect + (lengthFt * Math.max(0, roof.ridgeFt - eaveFt)) / 2)
-        : round2(rect);
+    const h = roofHeightAtFt(roof, widthFt, uFromRidge);
     wallRuns.push({
-      id, kind: 'exterior', profile, lengthFt: round2(lengthFt), heightFt,
-      grossAreaSqFt: gross,
-      openingAreaSqFt: round2(openings.reduce((t, o) => t + o.widthFt * Math.max(0, o.headFt - o.sillFt), 0)),
-      openings,
+      id, kind, profile: 'plate', lengthFt: round2(lengthFt), heightFt: round2(h),
+      grossAreaSqFt: round2(lengthFt * h), openingAreaSqFt: openingArea(openings), openings,
+    });
+  };
+  /** A wall ACROSS the ridge between two offsets: the roof's own profile. */
+  const pushAcross = (id: string, kind: WallRunSpec['kind'], uStart: number, uEnd: number) => {
+    wallRuns.push({
+      id, kind, profile: gable ? 'gable-end' : 'plate',
+      lengthFt: round2(Math.abs(uEnd - uStart)),
+      heightFt: round2(roofHeightAtFt(roof, widthFt, uStart * uEnd < 0 ? 0 : Math.min(Math.abs(uStart), Math.abs(uEnd)))),
+      grossAreaSqFt: round2(roofProfileAreaSqFt(roof, widthFt, uStart, uEnd)),
+      openingAreaSqFt: 0, openings: [],
     });
   };
 
@@ -302,21 +309,20 @@ export function buildUnitPlan(config: UnitConfig): UnitPlan {
     sillFt: 0, headFt: 6 + 8 / 12,
   }]);
 
-  push('ext-n', coreWidthFt, gable ? 'gable-end' : 'plate', gable ? roof.ridgeFt : eaveFt);
-  push('ext-s', coreWidthFt, gable ? 'gable-end' : 'plate', gable ? roof.ridgeFt : eaveFt);
-  // The side walls carry the doors. On a tall-ridge roof they stand at the notch
-  // line, which is why they are a real wall here and not a slope facade.
-  const sideWallHeight = side.use === 'deck' ? HEIGHT.doorFaceFt : eaveFt;
-  push('ext-w', depthFt, 'plate', sideWallHeight, doorAt('door-w', depthFt / 2 - notch.widthFt / 2));
-  push('ext-e', depthFt, 'plate', sideWallHeight, doorAt('door-e', depthFt / 2 - notch.widthFt / 2));
+  // Gable ends span the CORE, which on a decked variant is narrower than the
+  // roof — so they are trapezoids from the core line to the ridge, not
+  // triangles from the eave.
+  pushAcross('ext-n', 'exterior', -coreHalf, coreHalf);
+  pushAcross('ext-s', 'exterior', -coreHalf, coreHalf);
+  // The side walls stand at the core line and carry the doors. On a decked
+  // variant that line is inboard, where the roof clears a door face; on a box
+  // it is the eave.
+  pushParallel('ext-w', 'exterior', depthFt, -coreHalf, doorAt('door-w', depthFt / 2 - notch.widthFt / 2));
+  pushParallel('ext-e', 'exterior', depthFt, coreHalf, doorAt('door-e', depthFt / 2 - notch.widthFt / 2));
 
-  // The wet wall, down the ridge, full length. Also a bearing line.
-  const wetHeight = Math.min(loftFloorFt + HEIGHT.habitableFt, roof.ridgeFt);
-  wallRuns.push({
-    id: WET_WALL_ID, kind: 'interior', profile: 'plate',
-    lengthFt: round2(depthFt), heightFt: round2(wetHeight),
-    grossAreaSqFt: round2(depthFt * wetHeight), openingAreaSqFt: 0, openings: [],
-  });
+  // The wet wall, down the ridge, full length and full height — it carries the
+  // stack up through the loft to the half bath. Also a bearing line.
+  pushParallel(WET_WALL_ID, 'interior', depthFt, 0);
 
   // The lock-off divider, across the middle, so each end is a suite.
   // COORDINATES ARE FULL-WIDTH, MEASURED FROM THE ROOF EDGE — not from the core.
@@ -328,12 +334,9 @@ export function buildUnitPlan(config: UnitConfig): UnitPlan {
     { id: WET_WALL_ID, span: { x1: round2(widthFt / 2), z1: 0, x2: round2(widthFt / 2), z2: depthFt } },
   ];
   if (config.lockOff) {
-    wallRuns.push({
-      id: 'iw-lockoff', kind: 'interior', profile: 'plate',
-      lengthFt: round2(coreWidthFt), heightFt: round2(Math.min(eaveFt || wetHeight, wetHeight)),
-      grossAreaSqFt: round2(coreWidthFt * Math.min(eaveFt || wetHeight, wetHeight)),
-      openingAreaSqFt: 0, openings: [],
-    });
+    // A cross wall through the core: it rises to the roof, so under a pitched
+    // roof it is the same trapezoid as the gable ends.
+    pushAcross('iw-lockoff', 'interior', -coreHalf, coreHalf);
     interiorWalls.push({
       id: 'iw-lockoff',
       span: { x1: round2(deckDepth), z1: depthFt / 2, x2: round2(widthFt - deckDepth), z2: depthFt / 2 },

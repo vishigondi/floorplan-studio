@@ -69,6 +69,43 @@ export interface RoofPlaneSpec {
   pitchDeg: number;
 }
 
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Height of the roof line at horizontal offset u from the ridge, for a
+ * symmetric pitched roof over spanWidthFt. A flat roof is the eave everywhere.
+ */
+export function roofHeightAtFt(
+  roof: { eaveFt: number; ridgeFt: number }, spanWidthFt: number, uFromRidge: number,
+): number {
+  const half = spanWidthFt / 2;
+  if (half <= 0 || roof.ridgeFt <= roof.eaveFt) return roof.eaveFt;
+  const slope = (roof.ridgeFt - roof.eaveFt) / half;
+  return Math.max(roof.eaveFt, roof.ridgeFt - slope * Math.abs(uFromRidge));
+}
+
+/**
+ * Face area of a wall standing between two offsets from the ridge and rising
+ * to the roof: the integral of the roof line over its footprint.
+ *
+ * ONE formula for every wall under a pitched roof. A full-width gable end comes
+ * out as rectangle-plus-triangle; an INSET gable end (a heated core narrower
+ * than the roof) comes out as the trapezoid it actually is; a cross partition
+ * gets whatever the roof gives it. The rectangle-plus-triangle this replaces
+ * lived in two modules and was correct only for the first case — it quoted an
+ * a-frame core's gable end at 114 sq ft where the wall is 152.
+ */
+export function roofProfileAreaSqFt(
+  roof: { eaveFt: number; ridgeFt: number }, spanWidthFt: number, uStart: number, uEnd: number,
+): number {
+  const a = Math.min(uStart, uEnd), b = Math.max(uStart, uEnd);
+  const half = spanWidthFt / 2;
+  if (half <= 0 || roof.ridgeFt <= roof.eaveFt) return roof.eaveFt * (b - a);
+  const slope = (roof.ridgeFt - roof.eaveFt) / half;
+  const F = (u: number) => (u * Math.abs(u)) / 2; // antiderivative of |u|
+  return roof.ridgeFt * (b - a) - slope * (F(b) - F(a));
+}
+
 export interface PanelSpec {
   planId: string;
   footprint: { widthFt: number; depthFt: number };
@@ -279,14 +316,14 @@ export function adaptArtifactToPanelGeometry(artifact: ArtifactLike): AdaptedGeo
     return ridgeAlongZ ? constantZ : !constantZ;
   };
 
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  // A gable end is a rectangle to the plate plus a triangle to the ridge.
-  // 1/2 x base x height holds whether the apex is centred (gable) or at one end
-  // (shed), so this does not need to know which roof it is under.
+  // An exterior gable end spans the full facade, so the integral over its own
+  // length IS rectangle-plus-triangle; routing it through the shared function
+  // keeps one formula in the module instead of two that can drift.
+  const roof = { eaveFt, ridgeFt };
   const grossArea = (profile: WallRunSpec['profile'], lengthFt: number) => {
     if (profile === 'slope') return 0;
-    const rect = lengthFt * eaveFt;
-    return round2(profile === 'gable-end' ? rect + (lengthFt * Math.max(0, ridgeFt - eaveFt)) / 2 : rect);
+    if (profile === 'gable-end') return round2(roofProfileAreaSqFt(roof, lengthFt, -lengthFt / 2, lengthFt / 2));
+    return round2(lengthFt * eaveFt);
   };
   const openingArea = (openings: WallRunSpec['openings']) =>
     round2(openings.reduce((a, o) => a + o.widthFt * Math.max(0, o.headFt - o.sillFt), 0));
@@ -318,13 +355,44 @@ export function adaptArtifactToPanelGeometry(artifact: ArtifactLike): AdaptedGeo
       openings: openingsByWall.get(wall.id) ?? [],
     });
   }
+  // An interior wall rises to the ROOF, not to the eave. That is the same
+  // thing only in a box. Under a pitched roof its height depends on where it
+  // stands: parallel to the ridge it is a rectangle at the roof height for its
+  // offset; across the ridge it is a trapezoid. Quoting every partition at the
+  // eave put an a-frame's eleven partitions at 1 ft — 76 sq ft, against 608 for
+  // the identical walls under a gable — and no gate was looking at either.
+  const pitched = ridgeFt > eaveFt + 0.01;
   for (const wall of artifact.interiorWalls ?? []) {
-    const lengthFt = Math.round(lengthOf(wall.span) * 100) / 100;
+    const s = wall.span;
+    if (!s) continue;
+    const lengthFt = round2(lengthOf(s));
     if (lengthFt <= 0) continue;
-    wallRuns.push({
-      id: wall.id, kind: 'interior', profile: 'plate', lengthFt, heightFt: eaveFt,
-      grossAreaSqFt: grossArea('plate', lengthFt), openingAreaSqFt: 0, openings: [],
-    });
+    const alongZ = Math.abs(s.x1 - s.x2) < 0.01;
+    const parallel = ridgeAlongZ === alongZ;
+    const span = ridgeAlongZ ? widthFt : depthFt;
+    const ridgeAt = span / 2;
+    let heightFt: number;
+    let grossAreaSqFt: number;
+    let profile: WallRunSpec['profile'];
+    if (parallel) {
+      const at = ridgeAlongZ ? s.x1 : s.z1;
+      // Round ONCE, at the end. Rounding the height and then multiplying
+      // compounds the error into the area.
+      const h = roofHeightAtFt(roof, span, at - ridgeAt);
+      heightFt = round2(h);
+      grossAreaSqFt = round2(lengthFt * h);
+      profile = 'plate';
+    } else {
+      const [p1, p2] = ridgeAlongZ ? [s.x1, s.x2] : [s.z1, s.z2];
+      const u1 = p1 - ridgeAt, u2 = p2 - ridgeAt;
+      grossAreaSqFt = round2(roofProfileAreaSqFt(roof, span, u1, u2));
+      // Reported height is the tallest point it reaches: the ridge if it
+      // straddles it, else the end nearest the ridge.
+      const nearest = u1 * u2 < 0 ? 0 : Math.min(Math.abs(u1), Math.abs(u2));
+      heightFt = round2(roofHeightAtFt(roof, span, nearest));
+      profile = pitched ? 'gable-end' : 'plate';
+    }
+    wallRuns.push({ id: wall.id, kind: 'interior', profile, lengthFt, heightFt, grossAreaSqFt, openingAreaSqFt: 0, openings: [] });
   }
 
   const roofPlanes: RoofPlaneSpec[] = (artifact.roof.planes ?? [])
