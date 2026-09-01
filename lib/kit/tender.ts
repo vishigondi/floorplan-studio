@@ -19,6 +19,7 @@
 
 import type { PanelSpec } from './panel-spec.ts';
 import type { PileSchedule } from './foundation.ts';
+import { isPanelised, WET_WALL_ID } from './unit-plan.ts';
 
 /** What a bidder has to fill in for two quotes to be comparable. */
 function bidForm(lines: string[]): string {
@@ -75,7 +76,12 @@ export function renderPanelTender(
   notes: string[] = [],
 ): string {
   const ext = spec.wallRuns.filter((r) => r.kind === 'exterior');
-  const interior = spec.wallRuns.filter((r) => r.kind === 'interior');
+  // The wet wall is NOT in the panel package. A SIP has no cavity and is not cut
+  // for a stack, so the one wall carrying the kitchen and the bath is
+  // conventionally framed. Quoting it here would have a manufacturer price a
+  // wall nobody can plumb, and the error surfaces on site with the plumber.
+  const interior = spec.wallRuns.filter((r) => r.kind === 'interior' && isPanelised(r.id));
+  const excluded = spec.wallRuns.filter((r) => r.kind === 'interior' && !isPanelised(r.id));
   const quotable = ext.filter((r) => r.profile !== 'slope');
   const wallArea = quotable.reduce((t, r) => t + r.grossAreaSqFt, 0);
   const openingArea = quotable.reduce((t, r) => t + r.openingAreaSqFt, 0);
@@ -163,6 +169,22 @@ export function renderPanelTender(
     out.push('|---|---|---|');
     for (const p of spec.roofPlanes) out.push(`| ${p.id} | ${p.areaSqFt} | ${p.pitchDeg} |`);
     out.push(`| **Total** | **${Math.round(roofArea * 100) / 100}** |  |`);
+  }
+
+  if (excluded.length) {
+    out.push('');
+    out.push('## Excluded from this package — do not quote');
+    out.push('');
+    out.push('| Run | Length ft | Height ft | Why |');
+    out.push('|---|---|---|---|');
+    for (const r of excluded) {
+      out.push(`| ${r.id} | ${r.lengthFt} | ${r.heightFt} | Wet wall — carries the plumbing stack. `
+        + 'Conventionally framed by others; a panel has no cavity for it |');
+    }
+    out.push('');
+    out.push('**This is a scope boundary, not an omission.** It is stated so your quote and the');
+    out.push('framer\'s do not overlap, and so nobody discovers on site that the only wall carrying');
+    out.push('pipe was supplied as a solid panel.');
   }
 
   out.push(...warningsBlock('Read these before quoting', notes));

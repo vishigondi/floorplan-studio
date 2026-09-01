@@ -21,6 +21,7 @@ const { adaptArtifactToPanelGeometry, buildPanelSpec } = await import(join(root,
 const { buildPileSchedule, CHEROKEE_GROUND_SNOW, CHEROKEE_WIND, GROUND_SNOW_UNCONFIRMED } =
   await import(join(root, 'lib/kit/foundation.ts'));
 const { renderPanelTender, renderFoundationTender } = await import(join(root, 'lib/kit/tender.ts'));
+const { buildUnitPlan, WET_WALL_ID } = await import(join(root, 'lib/kit/unit-plan.ts'));
 const { JURISDICTION_PACKS } = await import(join(root, 'lib/standards/code-advisory.ts'));
 const { parseBrief } = await import(join(root, 'lib/brief.ts'));
 const { mockIntentFromBrief, compileIntent } = await import(join(root, 'lib/generate/compile-plan.ts'));
@@ -153,6 +154,41 @@ console.log('an unconfirmed input is visible on the page, not just in the object
 check('the UNCONFIRMED snow warning is printed', /UNCONFIRMED/.test(renderFoundationTender(unconf)));
 check('and a schedule with no wind basis says so',
   /No wind basis was supplied/.test(renderFoundationTender(unconf)));
+
+console.log('the wet wall is scoped OUT of the panel package, and said so');
+// A SIP has no cavity and is not cut for a stack. If the wet wall is quoted as a
+// panel, a manufacturer prices a wall nobody can plumb — and it surfaces on site.
+const unit = buildUnitPlan({
+  planId: 'wet', widthFt: 20, depthFt: 22,
+  roof: { style: 'gable', eaveFt: 8, ridgeFt: 14 }, lockOff: true,
+});
+const wetSpec = buildPanelSpec({
+  planId: 'wet', footprint: { widthFt: unit.coreWidthFt, depthFt: 22 },
+  wallRuns: unit.wallRuns, roofPlanes: unit.roofPlanes, thermalEnvelope, nominalThicknessIn: 4.5,
+});
+const wetDoc = renderPanelTender(wetSpec, {}, unit.notes);
+const partitionTable = wetDoc.split('### Interior partitions')[1]?.split('##')[0] ?? '';
+check('the wet wall is NOT in the interior partition schedule',
+  !partitionTable.includes(WET_WALL_ID), 'it was quoted as a panel');
+check('the lock-off divider IS still quoted', partitionTable.includes('iw-lockoff'));
+check('the wet wall appears under an explicit exclusion heading',
+  /## Excluded from this package — do not quote/.test(wetDoc) && wetDoc.includes(WET_WALL_ID));
+// Scoped to the exclusion ROW, not the whole document. "no cavity" also appears
+// in the unit-plan notes further down, so a document-wide regex passed even when
+// the row's reason had been replaced with a bare "Not included" — asserting on
+// the page instead of on the element it was meant to check.
+const excludedSection = wetDoc.split('## Excluded from this package')[1]?.split('\n##')[0] ?? '';
+check('the exclusion ROW itself says why a panel cannot carry it',
+  /no cavity/.test(excludedSection), excludedSection.slice(0, 120));
+check('and names who does supply it, so the scope has an owner',
+  /framed by others/i.test(excludedSection));
+check('and frames it as a scope boundary so the two trades do not overlap',
+  /scope boundary, not an omission/.test(wetDoc));
+// An exclusion nobody can see is the same as no exclusion.
+const wetIdx = wetDoc.indexOf(WET_WALL_ID);
+check('the exclusion is in the document body, not buried in a note',
+  wetIdx > 0 && wetIdx < wetDoc.indexOf('## Your quote'),
+  'it appears only after the bid form');
 
 if (failures) {
   console.error(`${failures} tender check(s) failed`);
