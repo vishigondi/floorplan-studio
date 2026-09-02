@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -126,6 +126,47 @@ check('the note derives the joist direction from the board direction',
   plan.notes.find((n) => /DECKING RUNS/.test(n))?.slice(0, 100));
 const lowNoGuard = buildDeckPlan({ ...base, unit: { ...ZOOK_A_FRAME_CLASSIC, floorAboveGradeIn: 24 } });
 check('below 30 in no guard is demanded', lowNoGuard.guard.requiredNow === false);
+
+console.log('a cantilever is decided by statics, not by taste');
+// Wood cannot do the photographed look: IRC R507 allows a quarter of the
+// backspan. And a long cantilever LIFTS ITS BACK LINE — which reverses the
+// "gravity-only decks need no piles" finding for this case, in a different
+// place (the inner girder, not the pergola).
+const small = checkCantilever(1.5, 6), big = checkCantilever(5, 6);
+check('a quarter of the backspan is wood', small.woodOk && small.material === 'wood, App M tables');
+// A case BETWEEN the quarter rule and a half, so the threshold itself is tested
+// rather than two points either side of a much wider gap. Loosening the rule to
+// 0.5 survived until this existed.
+const justPast = checkCantilever(2, 6); // 33% — steel under R507, wood under a 0.5 rule
+check('a third of the backspan is already past the joist rule',
+  justPast.woodOk === false && /PE stamp/.test(justPast.material), `${Math.round(justPast.fraction * 100)}%`);
+const atRule = checkCantilever(1.5, 6); // exactly 25%
+check('exactly a quarter is still wood', atRule.woodOk === true);
+check('a hair over a quarter is not', checkCantilever(1.55, 6).woodOk === false);
+check('past a quarter it is engineered steel with a PE stamp',
+  big.woodOk === false && /PE stamp/.test(big.material));
+check('the wood case does not lift the back line', small.liftsBackLine === false && small.backReactionPlf > 0);
+check('the long case does', big.liftsBackLine === true && big.backReactionPlf < 0);
+check('the uplift threshold is sqrt(dead/(dead+live)) of the backspan',
+  Math.abs(CANTILEVER.upliftFractionOfBackspan - Math.sqrt(10 / 50)) < 1e-9);
+// The threshold has to bite in both directions on the same backspan.
+const L = 12, justUnder = checkCantilever(L * 0.44, L), justOver = checkCantilever(L * 0.46, L);
+check('just under the threshold still bears', justUnder.liftsBackLine === false, `${justUnder.backReactionPlf}`);
+check('just over it lifts', justOver.liftsBackLine === true, `${justOver.backReactionPlf}`);
+// And it has to change the FOUNDATION, not just a note.
+const cantWood = buildDeckPlan({ ...base, cantileverFt: { farSide: 1.5 } });
+const cantSteel = buildDeckPlan({ ...base, cantileverFt: { farSide: 5 } });
+check('a lifting cantilever adds piles on its back line',
+  cantSteel.foundation.pileCount > cantWood.foundation.pileCount,
+  `${cantSteel.foundation.pileCount} vs ${cantWood.foundation.pileCount}`);
+check('a wood-rule cantilever adds none', cantWood.foundation.pileCount === plan.foundation.pileCount);
+check('the note names the tie-down and the reason',
+  cantSteel.notes.some((n) => /LIFTS ITS BACK LINE/.test(n) && /TIE-DOWN/.test(n) && /different reason/.test(n)));
+check('the cantilever adds deck area',
+  cantSteel.sides.find((x) => x.id === 'farSide').areaSqFt
+    > plan.sides.find((x) => x.id === 'farSide').areaSqFt);
+check('the prefab argument is stated where the cantilever appears',
+  cantSteel.notes.some((n) => /BEST PREFAB CANDIDATE HERE/.test(n) && /ONE moment connection/.test(n)));
 
 console.log('the deck is designed to the ENVELOPE, not to one manufacturer');
 // Building around one unit locks the site plan to that unit's maker — the same

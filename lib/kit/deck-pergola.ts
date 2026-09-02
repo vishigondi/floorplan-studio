@@ -69,6 +69,41 @@ export const OPEN_DECK = {
 };
 
 /**
+ * THE CANTILEVER, AND WHY IT IS THE BEST PREFAB CANDIDATE ON THIS PROJECT.
+ *
+ * A post-and-beam ring is many small connections made in the field on a 12.8%
+ * slope. A cantilevered bay is ONE moment connection to a backspan, made in a
+ * shop. Prefabrication pays where connections repeat and tolerances are tight,
+ * and a cantilever concentrates the whole structure into a single line — so it
+ * is more suited to shop fabrication than the ring, not less.
+ *
+ * Two things follow that the photographs do not show:
+ *
+ * 1. WOOD CANNOT DO THE LOOK. IRC R507 / App M allow a joist to cantilever a
+ *    QUARTER of its backspan — 3.5 ft off a 14 ft span. That is a bay window.
+ *    The 8-12 ft overhangs in the reference images are STEEL, which is exactly
+ *    what those projects say they are ("supported entirely on steel").
+ *
+ * 2. A LONG CANTILEVER LIFTS ITS BACK SUPPORT. Load out on the tip levers the
+ *    far line upward. It reverses on itself: the earlier finding here was that
+ *    a gravity-only deck needs no pile, and that stands for a post ring — but a
+ *    cantilever past about 0.45 of its backspan puts the BACK LINE into uplift,
+ *    and that line must be tied down. The piles come back, for a different
+ *    reason and in a different place.
+ */
+export const CANTILEVER = {
+  /** IRC R507 / App M: joist cantilever as a fraction of backspan. Wood only. */
+  woodMaxFractionOfBackspan: 0.25,
+  /** Below this fraction the back line still bears; above it, uplift. */
+  upliftFractionOfBackspan: Math.sqrt(10 / 50),
+  /** Past the wood rule it is an engineered steel frame with a PE stamp. */
+  steelRequiredAboveFtPerBackspan: 0.25,
+  /** Cantilever tip deflection limit, IRC Table R301.7 for a cantilever. */
+  tipDeflectionLimit: 'L/180 at the tip (2c/180), stiffer than the L/360 backspan',
+  source: 'IRC R507 cantilever rule; statics for the back reaction; reference projects state steel',
+};
+
+/**
  * Prefabricated deck panels, built in a shop and set on site.
  *
  * This is the labour answer: field work becomes setting panels on a levelled
@@ -259,6 +294,11 @@ export interface DeckConfig {
   unit: ParkModel;
   /** Deck depth on each side of the unit, ft. 0 = no deck on that side. */
   depthFt: { doorSide: number; farSide: number; endA: number; endB: number };
+  /**
+   * Cantilever beyond the outer girder, ft, per side. The deck depth is the
+   * BACKSPAN; this is what reaches past it into the view.
+   */
+  cantileverFt?: Partial<Record<'doorSide' | 'farSide' | 'endA' | 'endB', number>>;
   /** Clear gap between deck edge and unit — no contact, no fastener. */
   airGapIn: number;
   /** Clear height under the pergola beam, above the deck. */
@@ -279,6 +319,20 @@ export interface DeckConfig {
 // ---------------------------------------------------------------------------
 // Outputs.
 
+export interface CantileverCheck {
+  cantileverFt: number;
+  backspanFt: number;
+  fraction: number;
+  /** Within the IRC/App M quarter rule, so ordinary wood joists carry it. */
+  woodOk: boolean;
+  /** Past the point where the BACK line goes into uplift. */
+  liftsBackLine: boolean;
+  /** Net reaction at the back line, plf. Negative is uplift. */
+  backReactionPlf: number;
+  material: 'wood, App M tables' | 'engineered steel, PE stamp';
+  reason: string;
+}
+
 export interface DeckSide {
   id: 'doorSide' | 'farSide' | 'endA' | 'endB';
   /** Length of this side's outer edge, ft. */
@@ -298,6 +352,8 @@ export interface DeckSide {
   bayWidthFt: number;
   screened: boolean;
   screenPanelOk: boolean;
+  /** Present only when this side reaches past its outer girder. */
+  cantilever?: CantileverCheck;
 }
 
 export type SupportType = 'footing' | 'pile';
@@ -372,6 +428,33 @@ export function girderSpanFt(girder: string, joistSpanFt: number): number {
   return row[key];
 }
 
+/**
+ * What a cantilever costs, decided by statics rather than by taste.
+ *
+ * Backspan is the deck depth — the joist runs from the inner girder to the
+ * outer one and then keeps going. Uplift at the BACK line is checked with full
+ * load out on the tip, which is the case that lifts it.
+ */
+export function checkCantilever(cantileverFt: number, backspanFt: number): CantileverCheck {
+  const wd = APPENDIX_M.deckDeadPsf, wl = APPENDIX_M.deckLivePsf;
+  const L = backspanFt, c = cantileverFt;
+  // R_back = wd*L/2 - (wd+wl)*c^2/(2L): dead holds it down, tip load levers it up.
+  const backReactionPlf = round2(L > 0 ? (wd * L) / 2 - ((wd + wl) * c * c) / (2 * L) : 0);
+  const fraction = L > 0 ? round2(c / L) : Infinity;
+  const woodOk = fraction <= CANTILEVER.woodMaxFractionOfBackspan + 1e-9;
+  const liftsBackLine = backReactionPlf < 0;
+  return {
+    cantileverFt: round2(c), backspanFt: round2(L), fraction, woodOk, liftsBackLine, backReactionPlf,
+    material: woodOk ? 'wood, App M tables' : 'engineered steel, PE stamp',
+    reason: woodOk
+      ? `${round2(c)} ft is ${Math.round(fraction * 100)}% of the ${round2(L)} ft backspan, inside the `
+        + `${CANTILEVER.woodMaxFractionOfBackspan * 100}% joist rule (IRC R507), so ordinary joists carry it.`
+      : `${round2(c)} ft is ${Math.round(fraction * 100)}% of the ${round2(L)} ft backspan, past the `
+        + `${CANTILEVER.woodMaxFractionOfBackspan * 100}% joist rule — this is an ENGINEERED STEEL frame with a PE `
+        + 'stamp, which is what the reference projects are ("supported entirely on steel").',
+  };
+}
+
 export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   const u = cfg.unit;
   const gap = cfg.airGapIn / 12;
@@ -421,8 +504,11 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
     for (const line of ['outer', 'inner'] as const) {
       for (const a of positions) { const xy = lineAt(a, line); postsXY.push(xy); addPost(...xy); }
     }
+    const cant = cfg.cantileverFt?.[id];
+    const cantilever = cant && cant > 0 ? checkCantilever(cant, depthFt) : undefined;
     sides.push({
-      id, runFt: round2(runFt), depthFt, areaSqFt: round2(runFt * depthFt),
+      id, runFt: round2(runFt), depthFt, areaSqFt: round2(runFt * (depthFt + (cant ?? 0))),
+      cantilever,
       joist: { spanFt: depthFt, size: joistSize },
       post: { spacingFt: bayWidthFt, perLine: positions.length, lines: 2, girder, size: postSize },
       postsXY, bays, bayWidthFt, screened,
@@ -477,6 +563,20 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   const inZone = (x: number, z: number): boolean =>
     pergolaPosts.some(([px, pz]) => Math.abs(px - x) < 0.05 && Math.abs(pz - z) < 0.05);
 
+  // A cantilever that lifts its back line makes THAT line a tie-down. The inner
+  // girder of a cantilevered side therefore needs piles, for a different reason
+  // than the pergola and in a different place.
+  const liftedLines = sides.filter((x) => x.cantilever?.liftsBackLine);
+  const onLiftedBackLine = (x: number, z: number): boolean => liftedLines.some((sd) => {
+    // the inner line is the one nearer the unit
+    const pts = sd.postsXY;
+    const key = sd.id.startsWith('end') ? 1 : 0;
+    const vals = [...new Set(pts.map((q) => q[key]))].sort((a, b) => a - b);
+    const inner = sd.id === 'doorSide' || sd.id === 'endA' ? vals[vals.length - 1] : vals[0];
+    return Math.abs((key ? z : x) - inner) < 0.05
+      && pts.some(([px, pz]) => Math.abs(px - x) < 0.05 && Math.abs(pz - z) < 0.05);
+  });
+
   // Roof: does the pergola span the unit, or only the deck? That is decided by
   // whether the unit fits UNDER the pergola beam. An A-frame park model's ridge
   // (~13.5 ft) is above a 9.5 ft-clear beam (12.5 ft), and its roof slopes down
@@ -501,7 +601,7 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   const deckLoadLb = deckAreaSqFt * (APPENDIX_M.deckLivePsf + APPENDIX_M.deckDeadPsf);
   const roofLoadLb = roofAreaSqFt * (roofDesignPsf + 8); // 8 psf aluminum roof + frame
   const posts: DeckPost[] = allPosts.map(([x, z]) => ({
-    xFt: x, zFt: z, support: inZone(x, z) ? 'pile' : 'footing', serviceLoadLb: 0,
+    xFt: x, zFt: z, support: (inZone(x, z) || onLiftedBackLine(x, z)) ? 'pile' : 'footing', serviceLoadLb: 0,
   }));
   const pileCount = posts.filter((q) => q.support === 'pile').length;
   const footingCount = posts.length - pileCount;
@@ -573,6 +673,22 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
     + `${cfg.groundSnow.psf} -> ${roofSnowPsf.toFixed(1)} psf on the roof; roof live ${cfg.roofLivePsf}). `
     + `Specify >= ${Math.ceil(roofDesignPsf)} psf and >= ${cfg.wind.ultimateMph} mph with an ICC-ES report or a `
     + 'NC PE stamp; three surveyed makers clear both, so this line is competitive.');
+  for (const sd of sides) {
+    const cc = sd.cantilever;
+    if (!cc) continue;
+    notes.push(`${sd.id.toUpperCase()} CANTILEVERS ${cc.cantileverFt} FT past its outer girder. ${cc.reason}`
+      + (cc.liftsBackLine
+        ? ` ⚠️ AND IT LIFTS ITS BACK LINE: full load on the tip gives ${cc.backReactionPlf} plf there, so the inner `
+          + 'girder line is a TIE-DOWN, not a bearing. Those posts are piles quoted for tension — a different reason '
+          + 'and a different place from the pergola.'
+        : ` The back line still bears (${cc.backReactionPlf} plf), so no tie-down is needed for it.`)
+      + ` Deflection governs the feel: ${CANTILEVER.tipDeflectionLimit}.`);
+    notes.push(`AND THE CANTILEVER IS THE BEST PREFAB CANDIDATE HERE. A post ring is many small field `
+      + 'connections on a 12.8% slope; a cantilevered bay is ONE moment connection to a backspan, made in a shop '
+      + 'with camber built in. Fabricate the bay complete, set it on the two girder lines, bolt it down. That is '
+      + 'fewer site operations than the ring it replaces, not more.');
+  }
+
   const fit = fitsEnvelope(u);
   notes.push(fit.fits
     ? `DESIGNED TO THE ENVELOPE, NOT TO THIS UNIT. Any park model ${PARK_MODEL_ENVELOPE.widthFt[0]}-${PARK_MODEL_ENVELOPE.widthFt[1]} ft `
