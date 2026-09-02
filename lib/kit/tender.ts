@@ -22,7 +22,7 @@ import type { PileSchedule } from './foundation.ts';
 import { isPanelised, WET_WALL_ID } from './unit-plan.ts';
 
 /** What a bidder has to fill in for two quotes to be comparable. */
-function bidForm(lines: string[]): string {
+export function bidForm(lines: string[]): string {
   return [
     '',
     '## Your quote',

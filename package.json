@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "prepare": "git config core.hooksPath .githooks || true",
     "verify": "node scripts/final-interactive-sweep.mjs",
-    "gates": "npm run lint && npm run check:fidelity && npm run check:licensing && npm run paired:smoke && npm run paired:geometry && npm run check:clip && npm run check:elevations && npm run check:code && npm run check:brief && npm run check:generation && npm run check:buildable && npm run check:kit && npm run check:panel-spec && npm run check:erection && npm run check:foundation && npm run check:tender && npm run check:unit-plan && npm run check:sourcing && npm run check:ifc && npm run check:drift && npm run check:standards && npm run check:drawing && npm run check:lookrender && npm run build",
+    "gates": "npm run lint && npm run check:fidelity && npm run check:licensing && npm run paired:smoke && npm run paired:geometry && npm run check:clip && npm run check:elevations && npm run check:code && npm run check:brief && npm run check:generation && npm run check:buildable && npm run check:kit && npm run check:panel-spec && npm run check:erection && npm run check:foundation && npm run check:tender && npm run check:unit-plan && npm run check:deck-pergola && npm run check:sourcing && npm run check:ifc && npm run check:drift && npm run check:standards && npm run check:drawing && npm run check:lookrender && npm run build",
     "gates:live": "node scripts/run-live-gates.mjs",
     "gates:all": "npm run gates && npm run gates:live",
     "check:brief": "node scripts/check-brief.mjs",
@@ -56,7 +56,8 @@
     "check:erection": "node scripts/check-erection.mjs",
     "check:foundation": "node scripts/check-foundation.mjs",
     "check:tender": "node scripts/check-tender.mjs",
-    "check:unit-plan": "node scripts/check-unit-plan.mjs"
+    "check:unit-plan": "node scripts/check-unit-plan.mjs",
+    "check:deck-pergola": "node scripts/check-deck-pergola.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
