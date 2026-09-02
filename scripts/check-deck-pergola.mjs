@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -30,7 +30,8 @@ const base = {
   depthFt: { doorSide: 8, farSide: 6, endA: 6, endB: 6 },
   airGapIn: 6, pergolaClearFt: 9.5,
   wind: CHEROKEE_WIND, groundSnow: CHEROKEE_GROUND_SNOW, roofLivePsf: 20,
-  screened: { doorSide: true, farSide: true, endA: true, endB: true },
+  screened: { doorSide: true, farSide: false, endA: false, endB: false },
+  pergolaZone: { side: 'doorSide', startFt: 11, lengthFt: 20 },
 };
 const plan = buildDeckPlan(base);
 const u = plan.unit, gap = plan.airGapIn / 12;
@@ -49,34 +50,77 @@ check('the plan says free-standing, no fastener into the vehicle',
   plan.notes.some((n) => /FREE-STANDING/.test(n) && /no fastener/i.test(n)));
 check('and that screens are not walls', plan.notes.some((n) => /SCREENS ARE NOT WALLS/.test(n)));
 
-console.log('the roof cannot pass through the unit — the bug the drawing found');
-// An A-frame ridge at 13.5 ft is above a 12.5 ft beam. The first version put
-// one roof over the whole ring anyway; the section showed the apex poking
-// through it. Coverage is now DERIVED from the unit's height against the beam.
-check('the Zook A-frame is taller than the pergola beam',
-  plan.unit.transportHeightFt > plan.pergola.beamAboveGradeFt, `${plan.unit.transportHeightFt} vs ${plan.pergola.beamAboveGradeFt}`);
-check('so the pergola covers the DECK only, not the unit', plan.pergola.coversUnit === false);
-check('and the roof area equals the deck area, not the ring', Math.abs(plan.pergola.roofAreaSqFt - plan.deckAreaSqFt) < 0.01,
-  `${plan.pergola.roofAreaSqFt} vs ${plan.deckAreaSqFt}`);
-check('the note says it abuts the unit roof and is never fastened', plan.notes.some((n) => /COVERS THE DECK ONLY/.test(n) && /never fastened/.test(n)));
-const lowBox = buildDeckPlan({ ...base, unit: { ...ZOOK_A_FRAME_CLASSIC, transportHeightFt: 11 } });
-check('a low unit under the beam DOES get one roof over everything', lowBox.pergola.coversUnit === true
-  && lowBox.pergola.roofAreaSqFt > lowBox.deckAreaSqFt);
-// The drawing also showed the strips-only roof leaves the deck edge under the
-// unit's runoff — an A-frame's eave is at deck level. The plan must SAY so and
-// price the fix, not leave it for the first storm.
-check('strips-only carries a runoff warning', plan.notes.some((n) => /RUNOFF WARNING/.test(n)));
-check('and derives the clear height that would span the unit', plan.pergola.clearToSpanUnitFt > plan.pergola.clearFt
-  && Math.abs(plan.pergola.clearToSpanUnitFt - (plan.unit.transportHeightFt + 1 - plan.floorAboveGradeIn / 12)) < 0.01,
-  String(plan.pergola.clearToSpanUnitFt));
-const spanning = buildDeckPlan({ ...base, pergolaClearFt: plan.pergola.clearToSpanUnitFt });
-check('at that clear height one roof covers everything', spanning.pergola.coversUnit === true
-  && spanning.pergola.roofAreaSqFt > spanning.deckAreaSqFt);
-check('and the runoff warning goes away', !spanning.notes.some((n) => /RUNOFF WARNING/.test(n)));
-check('but it now adds to the Part 77 declaration, and says so',
-  spanning.pergola.topAboveGradeFt > spanning.unit.transportHeightFt && spanning.notes.some((n) => /declare the pergola, not the unit/.test(n)));
-check('screens still fit the module at the taller clear height', spanning.pergola.clearFt <= ZIPPER_SCREEN.maxPanelHeightFt);
-check('posts still within the 6x6 table at the taller height', spanning.postHeightFt <= APPENDIX_M.postMaxHeightFt['6x6']);
+console.log('the deck stays OPEN — a tax rule, not a preference');
+// The deal position is "three park models linked by open decks, no Whiteco
+// argument"; the deck pods are §1245, 5-year lane. Roofing the whole deck is
+// what a Whiteco inherently-permanent argument feeds on.
+check('the pergola covers a zone, not the ring',
+  plan.pergola.roofAreaSqFt < plan.deckAreaSqFt * OPEN_DECK.maxCoveredFraction,
+  `${plan.pergola.roofAreaSqFt} of ${plan.deckAreaSqFt}`);
+check(`covered fraction within the ${Math.round(OPEN_DECK.maxCoveredFraction * 100)}% working cap`,
+  plan.openness.withinOpenDeckRule === true, `${Math.round(plan.openness.coveredFraction * 100)}%`);
+check('the plan cites the tax rule and defers to the tax workstream',
+  plan.notes.some((n) => /THE DECK STAYS OPEN, AND THAT IS A TAX RULE/.test(n) && /Whiteco/.test(n)
+    && /tax workstream, not with me/.test(n)));
+check('the roof never crosses the unit', plan.pergola.coversUnit === false
+  && plan.notes.some((n) => /never crosses the unit and never links two units/.test(n)));
+const huge = buildDeckPlan({ ...base, pergolaZone: { side: 'doorSide', startFt: 0, lengthFt: 42 } });
+check('an over-large zone is flagged, not silently accepted',
+  huge.openness.withinOpenDeckRule === false && huge.notes.some((n) => /OVER IT/.test(n)),
+  `${Math.round(huge.openness.coveredFraction * 100)}%`);
+let threw = null;
+try { buildDeckPlan({ ...base, depthFt: { ...base.depthFt, endA: 0 }, pergolaZone: { side: 'endA', startFt: 0, lengthFt: 8 } }); }
+catch (e) { threw = e; }
+check('a zone on a side with no deck is refused', threw !== null);
+
+console.log('the pergola carries its OWN posts');
+const piles = plan.posts.filter((q) => q.support === 'pile');
+check('the zone adds posts beyond the deck grid', plan.posts.length > 28, `${plan.posts.length}`);
+check('at least four piles — a roof needs corners', piles.length >= 4, `${piles.length}`);
+const zoneZs = piles.map((q) => q.zFt).sort((x, y) => x - y);
+check('piles reach both ends of the zone',
+  Math.abs(zoneZs[0] - 11) < 0.05 && Math.abs(zoneZs[zoneZs.length - 1] - 31) < 0.05, zoneZs.join(','));
+check('piles sit on two girder lines',
+  new Set(piles.map((q) => q.xFt)).size === 2, [...new Set(piles.map((q) => q.xFt))].join(','));
+check('no pile spacing exceeds the screen module',
+  Math.max(...zoneZs.slice(1).map((z, i) => z - zoneZs[i])) <= ZIPPER_SCREEN.maxPanelWidthFt);
+
+console.log('the foundation is split by what actually loads it');
+check('only pergola posts are piles', plan.foundation.pileCount === piles.length
+  && plan.foundation.footingCount === plan.posts.length - piles.length);
+check('gravity-only posts get a footing, not a pile', plan.foundation.footingCount === 28, `${plan.foundation.footingCount}`);
+check('piles carry more than footings — they take the roof',
+  plan.foundation.perPileServiceLb > plan.foundation.perFootingServiceLb);
+check('tension is required only because a pergola exists', plan.foundation.tensionRequired === true);
+const openOnly = buildDeckPlan({ ...base, pergolaZone: undefined });
+check('an open deck needs NO piles at all', openOnly.foundation.pileCount === 0
+  && openOnly.foundation.tensionRequired === false && openOnly.pergola.roofAreaSqFt === 0);
+check('and says so', openOnly.notes.some((n) => /NO UPLIFT ANYWHERE, so no piles/.test(n)));
+check('the note names the expensive default it avoids',
+  plan.notes.some((n) => /Piling all/.test(n) && /is the expensive default/.test(n)));
+check('footings cite the 12 in App M depth', plan.foundation.footingMinDepthIn === APPENDIX_M.footingMinDepthIn);
+
+console.log('site labour is minimised by prefabrication');
+// NOT just "> 0". A count unrelated to the area passes that, and did: replacing
+// the take-off with sides.length survived. The count has to be consistent with
+// the deck it is panelising.
+const maxPanelSqFt = PREFAB_PANEL.maxWidthFt * PREFAB_PANEL.maxLengthFt;
+check('the panel count could actually cover the deck',
+  plan.prefab.panelCount >= Math.ceil(plan.deckAreaSqFt / maxPanelSqFt),
+  `${plan.prefab.panelCount} panels for ${plan.deckAreaSqFt} sq ft (max ${maxPanelSqFt} each)`);
+check('and is not absurdly more than the bays it lands on',
+  plan.prefab.panelCount <= plan.sides.reduce((t, x) => t + x.bays, 0) * 4);
+check('a bigger deck needs more panels',
+  buildDeckPlan({ ...base, depthFt: { doorSide: 8, farSide: 8, endA: 8, endB: 8 } }).prefab.panelCount > plan.prefab.panelCount);
+check('no panel exceeds what stacks on a truck',
+  plan.prefab.maxPanelFt[0] === PREFAB_PANEL.maxWidthFt && plan.prefab.maxPanelFt[1] === PREFAB_PANEL.maxLengthFt);
+check('every deck side fits the panel module',
+  plan.sides.every((x) => x.depthFt <= PREFAB_PANEL.maxWidthFt && x.bayWidthFt <= PREFAB_PANEL.maxLengthFt),
+  plan.sides.filter((x) => x.depthFt > PREFAB_PANEL.maxWidthFt || x.bayWidthFt > PREFAB_PANEL.maxLengthFt).map((x) => x.id).join(','));
+check('the note frames field work as setting, not framing',
+  plan.notes.some((n) => /SITE LABOUR/.test(n) && /SETTING panels/.test(n)));
+
+console.log('post clearance to the vehicle');
 check('a post face never comes within 2 in of the vehicle', plan.postFaceClearanceIn >= 2, `${plan.postFaceClearanceIn} in`);
 const tight = buildDeckPlan({ ...base, airGapIn: 2 });
 check('a 2 in gap is reported as negative clearance for a 6x6, not hidden', tight.postFaceClearanceIn < 0, `${tight.postFaceClearanceIn} in`);
@@ -94,11 +138,11 @@ for (const s of plan.sides) {
   check(`${s.id}: the two lines are ${s.depthFt} ft apart`,
     (s.id.startsWith('end') ? zs.size : xs.size) === 2);
 }
-check('unique posts equal the pile count', plan.postsXY.length === plan.piles.count);
+check('unique posts equal the post record count', plan.postsXY.length === plan.posts.length);
 check('no two posts share a position',
   new Set(plan.postsXY.map((p) => p.join(','))).size === plan.postsXY.length);
-check('the Zook default config yields 28 posts, not the 12 the outer-line-only model gave',
-  plan.piles.count === 28, String(plan.piles.count));
+check('the deck grid alone is 28 posts, not the 12 the outer-line-only model gave',
+  plan.foundation.footingCount === 28, String(plan.foundation.footingCount));
 
 console.log('the floor height drags the code with it — derived, not chosen');
 check('at 36 in the guards are required', plan.guardsRequired && plan.guardMinIn === APPENDIX_M.guardMinIn);
@@ -126,8 +170,7 @@ check('the note says the frame, not the mesh, takes the wind', plan.notes.some((
 check('roof governed by roof live at the site snow', plan.spec.roof.governedBy === 'roof live');
 const snowy = buildDeckPlan({ ...base, groundSnow: { psf: 60, sourced: true, citation: 'test' } });
 check('and snow takes over when it should', snowy.spec.roof.governedBy === 'snow');
-check('piles are quoted for tension — a roof at 115 mph pulls up', plan.piles.tensionRequired === true
-  && plan.notes.some((n) => /UPLIFT/.test(n)));
+check('piles are quoted for tension — a roof at 115 mph pulls up', plan.foundation.tensionRequired === true);
 check('the pergola adds nothing to the Part 77 declaration',
   plan.pergola.topAboveGradeFt <= plan.unit.transportHeightFt + 0.01,
   `${plan.pergola.topAboveGradeFt} vs ${plan.unit.transportHeightFt}`);
@@ -137,7 +180,12 @@ check('frost depth is marked UNCONFIRMED, not assumed', plan.notes.some((n) => /
 console.log('the tender is faithful and names no product');
 const doc = renderDeckTender(plan, { deliverTo: 'Andrews, NC' });
 for (const s of plan.sides) check(`tender carries ${s.id}`, doc.includes(`| ${s.id} |`));
-check('tender carries the pile count and tension', doc.includes(`${plan.piles.count} helical piles`) && /tension capacity to be quoted/.test(doc));
+check('tender splits footings from piles', doc.includes(`**${plan.foundation.footingCount}** footings`)
+  && doc.includes(`**${plan.foundation.pileCount}** piles`) && /tension capacity to be quoted/.test(doc));
+check('tender says piling every post is not required', /is not required/.test(doc));
+check('tender prices prefab panels and setting separately',
+  /## Prefabrication/.test(doc) && /Shop-built deck panels, delivered/.test(doc) && /Setting panels on site/.test(doc));
+check('tender states the deck stays open', /the deck stays OPEN/.test(doc));
 check('tender requires the wind sensor', /Wind sensor \| \*\*required\*\*/.test(doc));
 check('tender has a bid form with a currency column', /## Your quote/.test(doc) && /\| Currency \|/.test(doc));
 for (const brand of ['zook', 'phantom', 'mirage', 'progressive', 'struxure', 'azenco', 'renson', 'magnatrack']) {

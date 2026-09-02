@@ -46,6 +46,44 @@ export const APPENDIX_M = {
   coveredDeckGirdersUseR602: true,
 };
 
+/**
+ * THE DECK MUST STAY OPEN, and that is a tax rule, not a design preference.
+ *
+ * The deal workstream's position is "three park models linked by open decks,
+ * ~$168K year-one, bulletproof, no Whiteco argument" — the deck stays OPEN
+ * under the one-building rule, and the deck pods are §1245 property in the
+ * 5-year lane. A roof and screens over the WHOLE deck is exactly what a
+ * Whiteco inherently-permanent-structure argument feeds on, and a continuous
+ * roof linking units is what the one-building rule is about.
+ *
+ * So coverage is capped. A pergola over a fraction of the deck is an amenity on
+ * an open deck; a pergola over all of it is a building with a deck in it.
+ */
+export const OPEN_DECK = {
+  /** Covered fraction above which the "open deck" position gets harder. */
+  maxCoveredFraction: 0.35,
+  /** A roof must never bridge between two units — that is the one-building rule. */
+  neverLinkUnits: true,
+  source: 'deal-params: "three park models linked by open decks ... no Whiteco argument"; '
+    + '"the deck stays OPEN (the one-building rule)"; "§1245 deck pods — already the design"',
+};
+
+/**
+ * Prefabricated deck panels, built in a shop and set on site.
+ *
+ * This is the labour answer: field work becomes setting panels on a levelled
+ * post grid instead of cutting and fastening every joist on a 12.8% slope, 50
+ * times over. Panels stack for transport — about 8 x 20 ft is what fits a truck
+ * bed alongside others.
+ */
+export const PREFAB_PANEL = {
+  maxWidthFt: 8,
+  maxLengthFt: 20,
+  /** Panels land on the girder lines, so a panel edge must fall on a post line. */
+  mustLandOnGirders: true,
+  source: 'Prefabricated modular deck systems — panels ~8 x 20 ft stack for delivery and remove per-panel field framing',
+};
+
 /** Published limits for track-retained ("zipper") retractable screens. */
 export const ZIPPER_SCREEN = {
   /** Largest single panel any of the surveyed makers builds. */
@@ -112,6 +150,11 @@ export interface DeckConfig {
   airGapIn: number;
   /** Clear height under the pergola beam, above the deck. */
   pergolaClearFt: number;
+  /**
+   * Where the pergola goes. Omit for an open deck with no roof at all.
+   * A zone covers part of ONE side — the outdoor room — not the whole ring.
+   */
+  pergolaZone?: { side: 'doorSide' | 'farSide' | 'endA' | 'endB'; startFt: number; lengthFt: number };
   /** Site basis. */
   wind: WindBasis;
   groundSnow: LoadInput;
@@ -144,6 +187,17 @@ export interface DeckSide {
   screenPanelOk: boolean;
 }
 
+export type SupportType = 'footing' | 'pile';
+
+export interface DeckPost {
+  xFt: number;
+  zFt: number;
+  /** 'pile' only where uplift can occur — under the pergola. Everything else is
+   *  a gravity-only post and App M asks for a footing 12 in below grade. */
+  support: SupportType;
+  serviceLoadLb: number;
+}
+
 export interface DeckPlan {
   unit: ParkModel;
   /** Overall outside dimensions of the deck ring, ft. */
@@ -170,10 +224,21 @@ export interface DeckPlan {
     screens: { maxPanelFt: [number, number]; deployMaxMph: number; structuralMinMph: number; windSensor: boolean };
     frame: { windMph: number; note: string };
   };
-  /** Every unique post position in the ring frame — one helical pile each. */
+  /** Every unique post position in the ring frame. */
   postsXY: Array<[number, number]>;
-  /** Foundation: one helical pile per post. */
-  piles: { count: number; perPostServiceLb: number; tensionRequired: boolean; footingMinDepthIn: number };
+  posts: DeckPost[];
+  /** Foundation split by what actually loads each post. */
+  foundation: {
+    footingCount: number; pileCount: number;
+    footingMinDepthIn: number;
+    perFootingServiceLb: number; perPileServiceLb: number;
+    tensionRequired: boolean;
+    note: string;
+  };
+  /** Prefab take-off: the deck as shop-built panels. */
+  prefab: { panelCount: number; maxPanelFt: [number, number]; note: string };
+  /** Covered fraction and whether it keeps the open-deck position. */
+  openness: { coveredSqFt: number; deckSqFt: number; coveredFraction: number; withinOpenDeckRule: boolean };
   notes: string[];
 }
 
@@ -255,13 +320,43 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   mk('endB', endRun, dB, cfg.screened.endB, (a, l) => [dDoor + a, l === 'outer' ? outerLengthFt : outerLengthFt - dB]);
 
   const deckAreaSqFt = round2(sides.reduce((t, s) => t + s.areaSqFt, 0));
-  // Unique post positions across all beam lines — shared corners count once.
-  const postCount = allPosts.length;
   // The inner girder line sits on the air-gap edge, so a post there has its face
   // (half its width) inside the gap. What is left is the real clearance to the
   // vehicle, and it has to be positive with room to level and skirt the unit.
   const postWidthIn = postSize === '6x6' ? 5.5 : 3.5;
   const postFaceClearanceIn = round2(cfg.airGapIn - postWidthIn / 2);
+
+  // WHICH POSTS NEED A PILE. Only the ones under the pergola: they are the only
+  // ones a 115 mph roof can lift. Everything else is gravity-only, and App M
+  // asks for a footing 12 in below grade — a precast pier or a poured pad.
+  // Piling all 28 because six of them need it is the expensive default.
+  // A zoned pergola sits over ONE side's deck strip. It never crosses the unit,
+  // so the ridge-clearance question does not arise and the beam can stay low.
+  const zone = cfg.pergolaZone;
+  const zoneSide = zone ? sides.find((x) => x.id === zone.side) : undefined;
+  if (zone && !zoneSide) throw new Error(`pergolaZone names side "${zone.side}", which has no deck`);
+  // THE PERGOLA CARRIES ITS OWN POSTS. It cannot adopt whichever deck posts
+  // happen to fall inside it — a 20 ft roof landing on two mid-span posts and
+  // nothing at its corners is not a structure. So the zone places posts at its
+  // own corners and splits its span to the screen module, then those positions
+  // join the deck grid (deduped, so a coincident deck post is reused).
+  const pergolaPosts: Array<[number, number]> = [];
+  if (zone && zoneSide) {
+    const a0 = zone.startFt, a1 = Math.min(zone.startFt + zone.lengthFt, zoneSide.runFt);
+    const alongs = pilePositions(a1 - a0, Math.min(ZIPPER_SCREEN.maxPanelWidthFt, girderSpanFt(girder, zoneSide.depthFt)))
+      .map((d) => round2(a0 + d));
+    const acrossLines = zoneSide.id.startsWith('end')
+      ? [zoneSide.postsXY[0][1], zoneSide.postsXY[zoneSide.postsXY.length - 1][1]]
+      : [zoneSide.postsXY[0][0], zoneSide.postsXY[zoneSide.postsXY.length - 1][0]];
+    for (const across of acrossLines) {
+      for (const along of alongs) {
+        const xy: [number, number] = zoneSide.id.startsWith('end') ? [along, across] : [across, along];
+        pergolaPosts.push(xy); addPost(...xy);
+      }
+    }
+  }
+  const inZone = (x: number, z: number): boolean =>
+    pergolaPosts.some(([px, pz]) => Math.abs(px - x) < 0.05 && Math.abs(pz - z) < 0.05);
 
   // Roof: does the pergola span the unit, or only the deck? That is decided by
   // whether the unit fits UNDER the pergola beam. An A-frame park model's ridge
@@ -270,43 +365,58 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   // The first version assumed the full ring and was wrong for exactly the unit
   // this was designed around; the drawing showed the ridge poking through.
   const beamAboveGradeFt = round2(floorIn / 12 + cfg.pergolaClearFt);
-  const roofCoversUnit = u.transportHeightFt <= beamAboveGradeFt;
+  const roofCoversUnit = false;
   // The clear height that WOULD put one roof over everything: beam a foot above
   // the unit's highest point. Derived so the alternative is always priced, not
   // guessed — and because the drawing showed why it is usually the better one.
   const RIDGE_MARGIN_FT = 1;
   const clearToSpanUnitFt = round2(Math.max(cfg.pergolaClearFt, u.transportHeightFt + RIDGE_MARGIN_FT - floorIn / 12));
-  const roofAreaSqFt = roofCoversUnit
-    ? round2(outerWidthFt * outerLengthFt)
-    : round2(sides.reduce((t, s) => t + s.areaSqFt, 0));
+  const roofAreaSqFt = zoneSide ? round2(Math.min(zone!.lengthFt, zoneSide.runFt) * zoneSide.depthFt) : 0;
   const roofSnowPsf = 0.7 * cfg.groundSnow.psf;
   const roofGovernedBy = roofSnowPsf > cfg.roofLivePsf ? 'snow' as const : 'roof live' as const;
   const roofDesignPsf = Math.max(roofSnowPsf, cfg.roofLivePsf);
   const topAboveGradeFt = round2(floorIn / 12 + cfg.pergolaClearFt + 1);
 
-  // Piles: one per post. Service load = tributary deck (live+dead) + roof share
-  // + a modest frame allowance. Roughly even, so the max is close to the mean.
+  // Counted AFTER the pergola has placed its own posts.
+  const postCount = allPosts.length;
   const deckLoadLb = deckAreaSqFt * (APPENDIX_M.deckLivePsf + APPENDIX_M.deckDeadPsf);
   const roofLoadLb = roofAreaSqFt * (roofDesignPsf + 8); // 8 psf aluminum roof + frame
-  const perPostServiceLb = Math.round((deckLoadLb + roofLoadLb) / postCount * 1.15);
+  const posts: DeckPost[] = allPosts.map(([x, z]) => ({
+    xFt: x, zFt: z, support: inZone(x, z) ? 'pile' : 'footing', serviceLoadLb: 0,
+  }));
+  const pileCount = posts.filter((q) => q.support === 'pile').length;
+  const footingCount = posts.length - pileCount;
+  const perFootingServiceLb = Math.round(deckLoadLb / postCount * 1.15);
+  const perPileServiceLb = pileCount
+    ? Math.round((deckLoadLb / postCount + roofLoadLb / pileCount) * 1.15)
+    : 0;
+  for (const q of posts) q.serviceLoadLb = q.support === 'pile' ? perPileServiceLb : perFootingServiceLb;
 
-  notes.push(roofCoversUnit
-    ? `THE PERGOLA SPANS THE UNIT: the unit tops out at ${u.transportHeightFt} ft, under the ${beamAboveGradeFt} ft beam, `
-      + `so one roof covers deck and unit together (${roofAreaSqFt} sq ft).`
-    : `THE PERGOLA COVERS THE DECK ONLY (${roofAreaSqFt} sq ft), NOT THE UNIT. The unit's ridge (~${u.transportHeightFt} ft) `
-      + `is above the ${beamAboveGradeFt} ft beam and its roof slopes to deck level, so a roof across it would `
-      + 'intersect it. The pergola runs as strips along each deck side and ABUTS the unit\'s roof plane with a '
-      + 'removable flashing or gap — never fastened to it.');
-  if (!roofCoversUnit) {
-    notes.push(`RUNOFF WARNING: an A-frame's eave is AT DECK LEVEL, so the unit's whole roof (~${round2(u.widthFt * u.lengthFt)} `
-      + `sq ft) sheds into the ${cfg.airGapIn} in gap, inches from the covered deck. The inner edge of a strips-only `
-      + `pergola gets every drop. RECOMMENDED: lift the beam to ${clearToSpanUnitFt} ft clear (${RIDGE_MARGIN_FT} ft over the `
-      + 'ridge) and put ONE roof over deck and unit — the unit stays dry, nothing sheds onto the deck, and it is one '
-      + `roof to build instead of four strips. Cost: posts to ${round2(clearToSpanUnitFt + floorIn / 12 + 1)} ft above grade `
-      + `and about ${round2(clearToSpanUnitFt + floorIn / 12 + 1 - u.transportHeightFt)} ft on the Part 77 declaration.`);
+  // Prefab: the deck as shop-built panels landing on the girder lines.
+  const panelCount = sides.reduce((t, x) => {
+    const perBay = Math.ceil(x.bayWidthFt / PREFAB_PANEL.maxLengthFt);
+    const across = Math.ceil(x.depthFt / PREFAB_PANEL.maxWidthFt);
+    return t + x.bays * perBay * across;
+  }, 0);
+
+  const coveredFraction = deckAreaSqFt ? round2(roofAreaSqFt / deckAreaSqFt) : 0;
+  const withinOpenDeckRule = coveredFraction <= OPEN_DECK.maxCoveredFraction;
+
+  if (!zone) {
+    notes.push('OPEN DECK, NO ROOF. Nothing here can be lifted by wind, so every post is a '
+      + 'gravity-only footing and the deck is unambiguously open for the one-building rule.');
+  } else {
+    notes.push(`THE PERGOLA COVERS ONE ZONE (${roofAreaSqFt} sq ft of ${deckAreaSqFt} sq ft, `
+      + `${Math.round(coveredFraction * 100)}%) on the ${zone.side} — the outdoor room, not the whole ring. `
+      + 'It never crosses the unit and never links two units.');
+    notes.push('THE DECK STAYS OPEN, AND THAT IS A TAX RULE. The deal position is "three park models '
+      + 'linked by open decks, no Whiteco argument" — the deck pods are §1245, 5-year lane. A roof over '
+      + 'the whole deck is what a Whiteco inherently-permanent argument feeds on, and a roof bridging two '
+      + `units is the one-building rule itself. This design stays at ${Math.round(coveredFraction * 100)}% `
+      + `covered against the ${Math.round(OPEN_DECK.maxCoveredFraction * 100)}% working cap`
+      + `${withinOpenDeckRule ? '' : ' — OVER IT, and the tax workstream should price that before it is built'}. `
+      + 'Confirm the covered fraction with the tax workstream, not with me.');
   }
-  notes.push(`POST FACE TO VEHICLE: ${postFaceClearanceIn} in. The inner girder line sits on the air-gap edge, so a `
-    + `${postSize} (${postWidthIn} in) takes ${postWidthIn / 2} in of the ${cfg.airGapIn} in gap. Leave room to re-level and skirt.`);
   notes.push(`FREE-STANDING. ${cfg.airGapIn} in clear air gap to the unit on every side; no ledger, no `
     + 'fastener, no bearing on the vehicle. A weather strip may bridge the gap if it is removable. '
     + 'This is what keeps the park model a park model.');
@@ -330,8 +440,19 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
     + `${cfg.groundSnow.psf} -> ${roofSnowPsf.toFixed(1)} psf on the roof; roof live ${cfg.roofLivePsf}). `
     + `Specify >= ${Math.ceil(roofDesignPsf)} psf and >= ${cfg.wind.ultimateMph} mph with an ICC-ES report or a `
     + 'NC PE stamp; three surveyed makers clear both, so this line is competitive.');
-  notes.push('UPLIFT: a roof at 115 mph pulls UP. Every pile is quoted for tension as well as compression; '
-    + 'the demand is the PE\'s to compute, the requirement is not.');
+  notes.push(pileCount
+    ? `FOUNDATION SPLIT BY WHAT LOADS IT. ${pileCount} posts sit under the pergola and are the only ones a `
+      + `${cfg.wind.ultimateMph} mph roof can lift, so those get piles quoted for TENSION as well as `
+      + `compression. The other ${footingCount} carry gravity only, and App M AM102.1 asks for a footing `
+      + `${APPENDIX_M.footingMinDepthIn} in below grade — a precast pier or a poured pad. Piling all `
+      + `${posts.length} because ${pileCount} need it is the expensive default, and it is not required.`
+    : `NO UPLIFT ANYWHERE, so no piles: all ${footingCount} posts are gravity-only footings at `
+      + `${APPENDIX_M.footingMinDepthIn} in below grade.`);
+  notes.push(`SITE LABOUR. ${panelCount} shop-built deck panels (max ${PREFAB_PANEL.maxWidthFt} x `
+    + `${PREFAB_PANEL.maxLengthFt} ft, stacked for delivery) landing on the girder lines, so field work is `
+    + 'SETTING panels on a levelled post grid rather than cutting and fastening joists on a 12.8% slope, '
+    + 'fifty times over. Screw piles and precast piers both avoid concrete cure entirely — no truck, no '
+    + 'wait, load the same day. Across 50 lots the repeated field operation is what costs, not the parts.');
   notes.push('SEQUENCE: deliver and level the unit FIRST, deck after. The manufacturer restricts delivery '
     + 'onto elevated platforms, and the deck floor is set to the unit\'s as-levelled height.');
   notes.push(topAboveGradeFt <= u.transportHeightFt + 0.01
@@ -348,7 +469,17 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   return {
     unit: u, outerWidthFt, outerLengthFt, floorAboveGradeIn: floorIn, airGapIn: cfg.airGapIn,
     sides, deckAreaSqFt, guardsRequired, guardMinIn: APPENDIX_M.guardMinIn, lateralBracingRequired,
-    postSize, postHeightFt, postsXY: allPosts, postFaceClearanceIn,
+    postSize, postHeightFt, postsXY: allPosts, posts, postFaceClearanceIn,
+    foundation: {
+      footingCount, pileCount, footingMinDepthIn: APPENDIX_M.footingMinDepthIn,
+      perFootingServiceLb, perPileServiceLb, tensionRequired: pileCount > 0,
+      note: pileCount
+        ? `${pileCount} piles under the pergola (uplift), ${footingCount} footings elsewhere (gravity only).`
+        : 'No pergola, so no uplift anywhere: every post is a gravity-only footing.',
+    },
+    prefab: { panelCount, maxPanelFt: [PREFAB_PANEL.maxWidthFt, PREFAB_PANEL.maxLengthFt],
+      note: 'Panels are shop-built and land on the girder lines; field work is setting, not framing.' },
+    openness: { coveredSqFt: roofAreaSqFt, deckSqFt: deckAreaSqFt, coveredFraction, withinOpenDeckRule },
     pergola: { clearFt: cfg.pergolaClearFt, beamAboveGradeFt, topAboveGradeFt, roofAreaSqFt,
       bays: sides.reduce((t, s) => t + s.bays, 0), coversUnit: roofCoversUnit, clearToSpanUnitFt },
     spec: {
@@ -360,7 +491,6 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
         windSensor: ZIPPER_SCREEN.windSensorRequired },
       frame: { windMph: cfg.wind.ultimateMph, note: 'designed bare — screens retracted' },
     },
-    piles: { count: postCount, perPostServiceLb, tensionRequired: true, footingMinDepthIn: APPENDIX_M.footingMinDepthIn },
     notes,
   };
 }
@@ -371,7 +501,8 @@ export function renderDeckTender(plan: DeckPlan, meta: { deliverTo?: string } = 
   out.push('# Covered screened deck around a park model — request for quotation');
   out.push('');
   out.push(`Unit: **${plan.unit.name}**, ${round2(plan.unit.widthFt)} x ${round2(plan.unit.lengthFt)} ft, floor **${plan.floorAboveGradeIn} in** above grade  `);
-  out.push(`Deck ring outside: **${plan.outerWidthFt} x ${plan.outerLengthFt} ft** · deck area **${plan.deckAreaSqFt} sq ft** · roof **${plan.pergola.roofAreaSqFt} sq ft**`);
+  out.push(`Deck ring outside: **${plan.outerWidthFt} x ${plan.outerLengthFt} ft** · deck **${plan.deckAreaSqFt} sq ft** · `
+    + `pergola **${plan.pergola.roofAreaSqFt} sq ft** (${Math.round(plan.openness.coveredFraction * 100)}% covered — the deck stays OPEN)`);
   if (meta.deliverTo) out.push(`Site: **${meta.deliverTo}**`);
   out.push('');
   out.push('**Performance and geometry only.** No pergola brand, screen brand, pile brand or lumber');
@@ -406,8 +537,19 @@ export function renderDeckTender(plan: DeckPlan, meta: { deliverTo?: string } = 
   out.push('');
   out.push('## Foundation');
   out.push('');
-  out.push(`**${plan.piles.count} helical piles**, one per post, **${plan.piles.perPostServiceLb} lb** service compression each, `
-    + `**tension capacity to be quoted**, footing depth >= ${plan.piles.footingMinDepthIn} in. No depth specified — drive to torque.`);
+  const f = plan.foundation;
+  out.push(`| Gravity-only posts | **${f.footingCount}** footings, **${f.perFootingServiceLb} lb** each, >= ${f.footingMinDepthIn} in below grade (AM102.1) — precast pier or poured pad |`);
+  out.push('|---|---|');
+  if (f.pileCount) {
+    out.push(`| Under the pergola | **${f.pileCount}** piles, **${f.perPileServiceLb} lb** compression each, **tension capacity to be quoted** — no depth specified, drive to torque |`);
+  }
+  out.push('');
+  out.push(`Only the pergola posts can be lifted by wind. Quoting piles under all ${plan.posts.length} posts is not required.`);
+  out.push('');
+  out.push('## Prefabrication');
+  out.push('');
+  out.push(`**${plan.prefab.panelCount} shop-built deck panels**, none over ${plan.prefab.maxPanelFt[0]} x ${plan.prefab.maxPanelFt[1]} ft, landing on the girder lines. `
+    + 'Price the panels and the setting separately from any field framing — across 50 lots the repeated field operation is the cost.');
   out.push('');
   out.push('## Read these before quoting');
   out.push('');
@@ -417,7 +559,10 @@ export function renderDeckTender(plan: DeckPlan, meta: { deliverTo?: string } = 
     'Guards and stairs',
     'Pergola, supplied and installed (state the ICC-ES report or PE stamp)',
     'Screens, per bay, with motor and wind sensor',
-    'Helical piles, supplied and driven (compression AND tension capacity)',
+    'Footings for the gravity-only posts (precast pier or poured pad)',
+    'Piles under the pergola only (compression AND tension capacity)',
+    'Shop-built deck panels, delivered',
+    'Setting panels on site',
     'Freight / mobilisation',
   ]));
   return out.join('\n');
