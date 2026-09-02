@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -99,6 +99,47 @@ check('and says so', openOnly.notes.some((n) => /NO UPLIFT ANYWHERE, so no piles
 check('the note names the expensive default it avoids',
   plan.notes.some((n) => /Piling all/.test(n) && /is the expensive default/.test(n)));
 check('footings cite the 12 in App M depth', plan.foundation.footingMinDepthIn === APPENDIX_M.footingMinDepthIn);
+
+console.log('the guard is the view — a height alone does not specify it');
+// R312 gives a height and a sphere and says nothing about infill, so "36 in
+// guard" invites solid balusters: code-compliant, and they wall off the forest
+// the unit is sold on. The observed comparable uses horizontal cable.
+check('the guard carries an infill requirement, not just a height',
+  plan.guard.viewPreserving === true && plan.guard.minHeightIn === GUARD.minHeightIn);
+check('and the 4 in sphere that governs cable spacing', plan.guard.maxOpeningIn === 4);
+check('and a durability finish for an exposed mountain site', /corrosion-resistant/.test(plan.guard.finish));
+check('the note says solid balusters defeat the purpose',
+  plan.notes.some((n) => /THE GUARD IS THE VIEW/.test(n) && /solid balusters/.test(n)));
+// NOT `plan.boardDirection === DECK_BOARD_DIRECTION` — that is tautological, and
+// emptying the constant passed it. Pin the CONTENT: it has to name a direction
+// relative to the unit, and reach the tender.
+check('board direction names a real direction, not an empty string',
+  /perpendicular|parallel/.test(plan.boardDirection) && /unit/.test(plan.boardDirection),
+  JSON.stringify(plan.boardDirection));
+// The framing consequence must FOLLOW the direction, not be hardcoded: boards
+// always run across their joists, so flipping one flips the other. Hardcoding
+// it left the note stating the opposite of the truth when the direction changed.
+const boardsPerp = /perpendicular/.test(plan.boardDirection);
+check('the note derives the joist direction from the board direction',
+  plan.notes.some((n) => /DECKING RUNS/.test(n)
+    && (boardsPerp ? /joists run PARALLEL to the wall/.test(n) : /joists run ACROSS the deck depth/.test(n))),
+  plan.notes.find((n) => /DECKING RUNS/.test(n))?.slice(0, 100));
+const lowNoGuard = buildDeckPlan({ ...base, unit: { ...ZOOK_A_FRAME_CLASSIC, floorAboveGradeIn: 24 } });
+check('below 30 in no guard is demanded', lowNoGuard.guard.requiredNow === false);
+
+console.log('the observed comparable is recorded as observation, not as approval');
+// Photographs of the nearest working resort show posts on precast/poured pier
+// blocks at grade — no piles. That supports splitting the foundation by load.
+// It does NOT show what is under the blocks, and a photo cannot approve a
+// footing detail, so the unresolved part has to travel with the finding.
+check('the observed deck foundation is recorded', /pier blocks at grade/.test(OBSERVED_COMPARABLE.deckFoundation));
+check('and reaches the plan notes', plan.notes.some((n) => /THE OPERATING COMPARABLE USES/.test(n)));
+check('the note carries what a photograph cannot settle',
+  plan.notes.some((n) => /THE OPERATING COMPARABLE USES/.test(n) && /12 in\s*\n?\s*below finished grade|12 in below finished grade/.test(n)
+    && /Ask the operator and the inspector, not the photo/.test(n)));
+check('it does not silently become permission to skip the footing depth',
+  plan.foundation.footingMinDepthIn === APPENDIX_M.footingMinDepthIn);
+check('the comparable notes they built no pergola', /none/.test(OBSERVED_COMPARABLE.pergola));
 
 console.log('site labour is minimised by prefabrication');
 // NOT just "> 0". A count unrelated to the area passes that, and did: replacing
@@ -186,6 +227,9 @@ check('tender says piling every post is not required', /is not required/.test(do
 check('tender prices prefab panels and setting separately',
   /## Prefabrication/.test(doc) && /Shop-built deck panels, delivered/.test(doc) && /Setting panels on site/.test(doc));
 check('tender states the deck stays open', /the deck stays OPEN/.test(doc));
+check('tender specifies view-preserving guard infill and forbids solid balusters',
+  /VIEW-PRESERVING infill/.test(doc) && /do not quote them/.test(doc));
+check('tender states the board direction', doc.includes(plan.boardDirection));
 check('tender requires the wind sensor', /Wind sensor \| \*\*required\*\*/.test(doc));
 check('tender has a bid form with a currency column', /## Your quote/.test(doc) && /\| Currency \|/.test(doc));
 for (const brand of ['zook', 'phantom', 'mirage', 'progressive', 'struxure', 'azenco', 'renson', 'magnatrack']) {

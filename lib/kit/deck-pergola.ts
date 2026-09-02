@@ -84,6 +84,60 @@ export const PREFAB_PANEL = {
   source: 'Prefabricated modular deck systems — panels ~8 x 20 ft stack for delivery and remove per-panel field framing',
 };
 
+/**
+ * WHAT THE OPERATING COMPARABLE ACTUALLY BUILT — observed, not inferred.
+ *
+ * Photographs of the mirror-cabin decks at the nearest working resort settle a
+ * question the deal archive had open (0E.11): their decks stand on POSTS BEARING
+ * ON PRECAST/POURED PIER BLOCKS AT GRADE. No helical piles, no deep foundation,
+ * no visible excavation — the same detail carries the cabins themselves.
+ *
+ * That is direct support for splitting the foundation by load: a gravity-only
+ * deck does not need a pile, and the operator with nine units in the same
+ * climate did not buy one. It is NOT support for skipping frost protection —
+ * see the caveat below, which is the part a photograph cannot settle.
+ */
+export const OBSERVED_COMPARABLE = {
+  deckFoundation: 'posts on precast/poured pier blocks at grade',
+  guardSystem: 'horizontal cable on dark metal posts, including the stair',
+  decking: 'composite boards, and pressure-treated on other units',
+  approach: 'poured concrete walkway to the deck',
+  pergola: 'none — decks are open to the sky',
+  /** What the photographs cannot show, and why it matters. */
+  unresolved: 'Whether anything sits BELOW those blocks. App M AM102.1 wants a footing 12 in '
+    + 'below finished grade; a block resting on grade does not obviously meet it, and Transylvania '
+    + 'County practice need not match Cherokee County. Ask the operator and the inspector, not the photo.',
+  source: 'Owner-supplied photographs of the mirror-cabin decks, Sep 2026',
+};
+
+/**
+ * The guard is the view, and a height alone does not specify it.
+ *
+ * R312 asks for 36 in and says nothing about infill, so "36 in guard" invites a
+ * quote for solid balusters — which walls off the forest the unit is sold on.
+ * The observed comparable uses horizontal cable on black metal posts: code
+ * height, near-zero visual obstruction. Specified as PERFORMANCE (opening size,
+ * obstruction, finish) so any cable, rod or mesh system can bid it.
+ */
+export const GUARD = {
+  minHeightIn: 36,
+  /** R312.1.3 — a 4 in sphere must not pass through. Governs cable spacing and tension. */
+  maxOpeningIn: 4,
+  /** The point of the thing: infill must not read as a wall from a seated eye. */
+  viewPreserving: true,
+  /** Exterior, wooded, mountain — the finish is a durability spec, not a colour. */
+  finish: 'corrosion-resistant, dark, factory-finished',
+  source: 'R312 height and the 4 in sphere; view-preserving infill observed on the operating comparable (horizontal cable on dark metal posts)',
+};
+
+/**
+ * Decking runs PERPENDICULAR to the unit — boards leading away from the
+ * building, as observed. That puts joists parallel to the wall, which is the
+ * opposite of the shortest span, so it is a finish decision with a framing
+ * consequence and belongs in the specification rather than in a builder's head.
+ */
+export const DECK_BOARD_DIRECTION = 'perpendicular to the unit wall';
+
 /** Published limits for track-retained ("zipper") retractable screens. */
 export const ZIPPER_SCREEN = {
   /** Largest single panel any of the surveyed makers builds. */
@@ -237,6 +291,10 @@ export interface DeckPlan {
   };
   /** Prefab take-off: the deck as shop-built panels. */
   prefab: { panelCount: number; maxPanelFt: [number, number]; note: string };
+  /** Guard requirement, as performance rather than a height alone. */
+  guard: { requiredNow: boolean; minHeightIn: number; maxOpeningIn: number; viewPreserving: boolean; finish: string };
+  /** Board direction, a finish decision with a framing consequence. */
+  boardDirection: string;
   /** Covered fraction and whether it keeps the open-deck position. */
   openness: { coveredSqFt: number; deckSqFt: number; coveredFraction: number; withinOpenDeckRule: boolean };
   notes: string[];
@@ -424,10 +482,24 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
     + 'park-model practice and Appendix M both permit; a wall panel, glazing or a door in that '
     + 'opening makes it an enclosed room. Do not add one.');
   if (guardsRequired) {
-    notes.push(`GUARDS REQUIRED, ${APPENDIX_M.guardMinIn} in minimum (R312): the deck floor is `
+    notes.push(`GUARDS REQUIRED, ${GUARD.minHeightIn} in minimum (R312): the deck floor is `
       + `${floorIn} in above grade, over the ${APPENDIX_M.guardThresholdIn} in threshold. This follows `
       + 'from meeting the unit\'s floor, not from a choice.');
+    notes.push(`THE GUARD IS THE VIEW. ${GUARD.minHeightIn} in and a ${GUARD.maxOpeningIn} in sphere are the code; `
+      + 'the requirement here is that the infill be VIEW-PRESERVING — horizontal cable, rod or fine mesh on slim '
+      + `posts, ${GUARD.finish}. A height alone invites solid balusters, which meet R312 and wall off the forest `
+      + 'the unit is sold on. Specified as performance so any system can bid it.');
   }
+  // The framing consequence FOLLOWS the board direction — boards always run
+  // across their joists, so naming one names the other. Hardcoding it meant
+  // flipping the direction left the note saying the opposite of the truth.
+  const boardsPerp = /perpendicular/.test(DECK_BOARD_DIRECTION);
+  notes.push(`DECKING RUNS ${DECK_BOARD_DIRECTION.toUpperCase()}, so joists run `
+    + `${boardsPerp ? 'PARALLEL to the wall' : 'ACROSS the deck depth'} — boards always run across their joists. `
+    + `${boardsPerp
+      ? 'That is not the shortest span, so it is a finish decision with a framing consequence.'
+      : 'That is the shortest span, so it is also the cheapest framing.'} `
+    + 'State it, and let the panel shop lay boards to match before delivery.');
   if (lateralBracingRequired) {
     notes.push(`LATERAL BRACING REQUIRED (AM109.1.1): a free-standing deck above ${APPENDIX_M.bracingThresholdIn} in `
       + 'needs knee braces, cross-bracing or embedded posts. Same cause as the guards.');
@@ -440,6 +512,9 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
     + `${cfg.groundSnow.psf} -> ${roofSnowPsf.toFixed(1)} psf on the roof; roof live ${cfg.roofLivePsf}). `
     + `Specify >= ${Math.ceil(roofDesignPsf)} psf and >= ${cfg.wind.ultimateMph} mph with an ICC-ES report or a `
     + 'NC PE stamp; three surveyed makers clear both, so this line is competitive.');
+  notes.push(`THE OPERATING COMPARABLE USES ${OBSERVED_COMPARABLE.deckFoundation.toUpperCase()} — observed, `
+    + 'not inferred, on the nearest working resort in the same climate, and the same detail carries their '
+    + `cabins. ⚠️ ${OBSERVED_COMPARABLE.unresolved}`);
   notes.push(pileCount
     ? `FOUNDATION SPLIT BY WHAT LOADS IT. ${pileCount} posts sit under the pergola and are the only ones a `
       + `${cfg.wind.ultimateMph} mph roof can lift, so those get piles quoted for TENSION as well as `
@@ -477,6 +552,9 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
         ? `${pileCount} piles under the pergola (uplift), ${footingCount} footings elsewhere (gravity only).`
         : 'No pergola, so no uplift anywhere: every post is a gravity-only footing.',
     },
+    guard: { requiredNow: guardsRequired, minHeightIn: GUARD.minHeightIn, maxOpeningIn: GUARD.maxOpeningIn,
+      viewPreserving: GUARD.viewPreserving, finish: GUARD.finish },
+    boardDirection: DECK_BOARD_DIRECTION,
     prefab: { panelCount, maxPanelFt: [PREFAB_PANEL.maxWidthFt, PREFAB_PANEL.maxLengthFt],
       note: 'Panels are shop-built and land on the girder lines; field work is setting, not framing.' },
     openness: { coveredSqFt: roofAreaSqFt, deckSqFt: deckAreaSqFt, coveredFraction, withinOpenDeckRule },
@@ -514,6 +592,14 @@ export function renderDeckTender(plan: DeckPlan, meta: { deliverTo?: string } = 
   out.push('|---|---|---|---|---|---|---|---|---|');
   for (const s of plan.sides) {
     out.push(`| ${s.id} | ${s.runFt} | ${s.depthFt} | ${s.areaSqFt} | ${s.joist.size} @16 | ${s.post.perLine} x 2 lines | ${s.bayWidthFt} | ${s.post.girder} | ${s.screened ? 'yes' : 'no'} |`);
+  }
+  out.push('');
+  if (plan.guard.requiredNow) {
+    out.push('');
+    out.push(`**Guard: ${plan.guard.minHeightIn} in min, ${plan.guard.maxOpeningIn} in sphere (R312), and VIEW-PRESERVING infill** — `
+      + `horizontal cable, rod or fine mesh on slim posts, ${plan.guard.finish}. Solid balusters meet the code and `
+      + 'defeat the purpose; do not quote them.');
+    out.push(`**Decking runs ${plan.boardDirection}.**`);
   }
   out.push('');
   out.push(`Posts **${plan.postSize}**, ${plan.postHeightFt} ft footing-to-pergola-beam. Guards **${plan.guardsRequired ? `required, ${plan.guardMinIn} in min` : 'not required'}**. `
