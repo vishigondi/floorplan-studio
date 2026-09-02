@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -126,6 +126,38 @@ check('the note derives the joist direction from the board direction',
   plan.notes.find((n) => /DECKING RUNS/.test(n))?.slice(0, 100));
 const lowNoGuard = buildDeckPlan({ ...base, unit: { ...ZOOK_A_FRAME_CLASSIC, floorAboveGradeIn: 24 } });
 check('below 30 in no guard is demanded', lowNoGuard.guard.requiredNow === false);
+
+console.log('the deck is designed to the ENVELOPE, not to one manufacturer');
+// Building around one unit locks the site plan to that unit's maker — the same
+// lock-in the panel spec exists to avoid, arriving through the back door.
+check('the reference unit sits inside the envelope', plan.envelope.fits, plan.envelope.failures.join('; '));
+check('the plan says it is designed to the envelope',
+  plan.notes.some((n) => /DESIGNED TO THE ENVELOPE, NOT TO THIS UNIT/.test(n)));
+// A119.5's 400 sq ft is LIVING AREA IN SETUP MODE, lofts excluded — not the
+// exterior box. This module briefly enforced it against width x length and so
+// rejected the Factory Expo Mexia (15 x 34 ft box, 510 sq ft, a real and legal
+// park model). The exterior bounds and the ANSI rule are different measures.
+check('a real 15 x 34 ft park model is accepted, not refused on box area',
+  fitsEnvelope({ ...ZOOK_A_FRAME_CLASSIC, widthFt: 15, lengthFt: 34 }).fits === true,
+  fitsEnvelope({ ...ZOOK_A_FRAME_CLASSIC, widthFt: 15, lengthFt: 34 }).failures.join(';'));
+check('the ANSI cap is carried as context, not enforced against the box',
+  PARK_MODEL_ENVELOPE.ansiLivingAreaCapSqFt === 400
+  && !('maxLengthAtWidthFt' in PARK_MODEL_ENVELOPE));
+check('and the distinction is stated where a reader will hit it',
+  plan.notes.some((n) => /living area in setup mode/.test(n)));
+check('a unit taller than the road limit is refused',
+  fitsEnvelope({ ...ZOOK_A_FRAME_CLASSIC, transportHeightFt: 15 }).fits === false);
+check('an out-of-envelope unit is flagged as a one-off, not silently built',
+  buildDeckPlan({ ...base, unit: { ...ZOOK_A_FRAME_CLASSIC, widthFt: 20 } })
+    .notes.some((n) => /OUTSIDE THE ENVELOPE/.test(n) && /one-off for one model/.test(n)));
+// One design across the legal set: more of the same parts, never different ones.
+for (const [W, L] of [[12, 29], [12, 33], [13.83, 29.17], [15, 34]]) {
+  const p2 = buildDeckPlan({ ...base, unit: { ...ZOOK_A_FRAME_CLASSIC, widthFt: W, lengthFt: L } });
+  check(`${W} x ${L}: same details, only the count changes`,
+    p2.envelope.fits && p2.postSize === plan.postSize && p2.foundation.pileCount === plan.foundation.pileCount
+      && p2.sides.every((x) => x.joist.size === '2x10' && x.bayWidthFt <= 25),
+    p2.envelope.failures.join(';'));
+}
 
 console.log('the observed comparable is recorded as observation, not as approval');
 // Photographs of the nearest working resort show posts on precast/poured pier

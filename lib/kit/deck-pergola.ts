@@ -183,6 +183,65 @@ export interface ParkModel {
   source: string;
 }
 
+/**
+ * DESIGN TO THE ENVELOPE, NOT TO A MODEL.
+ *
+ * A park model is bought, not designed, and the catalogue turns over. Building
+ * the deck around one unit locks the site plan to that unit's manufacturer —
+ * the same lock-in the panel specification was built to avoid, arriving through
+ * the back door.
+ *
+ * The published range is narrow enough to design to. Across Zook's sixteen
+ * models and the Factory Expo plans, width runs 12-15 ft and length 29-35 ft.
+ *
+ * ⚠️ THE 400 SQ FT CAP IS NOT THE EXTERIOR FOOTPRINT, and conflating the two is
+ * an easy mistake — this module made it. ANSI A119.5 measures GROSS FLOOR AREA
+ * IN SETUP MODE, excluding lofts, and manufacturers publish exterior box
+ * dimensions separately: the Factory Expo Mexia is 15 x 34 ft (510 sq ft of
+ * box) and is a legal park model. So the exterior ranges below are INDEPENDENT
+ * bounds on the box the deck has to wrap, and the 400 sq ft rule is a different
+ * measure that this module cannot compute from width and length. It is recorded
+ * for context and deliberately NOT enforced here.
+ *
+ * The deck absorbs the swing by ordering MORE OF THE SAME PARTS — 28 to 32
+ * footings, 12 to 14 panels, always 6 piles — while the post spacing, spans,
+ * panel module and every detail stay put.
+ *
+ * So the deck is specified once, to the envelope, and any unit inside it can be
+ * bought — including next year's.
+ */
+export const PARK_MODEL_ENVELOPE = {
+  widthFt: [12, 15] as const,
+  lengthFt: [29, 35] as const,
+  /**
+   * ANSI A119.5's cap on GROSS FLOOR AREA IN SETUP MODE, lofts excluded.
+   * Context only — it is NOT the exterior box, and nothing here enforces it
+   * against width x length. The Mexia's 15 x 34 ft box is 510 sq ft and legal.
+   */
+  ansiLivingAreaCapSqFt: 400,
+  /** Deck-over chassis above ~11 ft 8 in body width; deck-between below it. */
+  floorAboveGradeIn: [24, 40] as const,
+  maxTransportHeightFt: 13.5,
+  source: 'Zook park models (16 plans, 204-400 sq ft); Factory Expo Cavalry 12x35 and Mexia 15x34; '
+    + 'ANSI A119.5 400 sq ft cap; 13 ft 6 in legal road height',
+};
+
+export interface EnvelopeFit {
+  fits: boolean;
+  failures: string[];
+}
+
+/** Does a unit sit inside the envelope the deck is designed to? */
+export function fitsEnvelope(u: ParkModel): EnvelopeFit {
+  const E = PARK_MODEL_ENVELOPE;
+  const failures: string[] = [];
+  if (u.widthFt < E.widthFt[0] || u.widthFt > E.widthFt[1]) failures.push(`width ${round2(u.widthFt)} ft outside ${E.widthFt[0]}-${E.widthFt[1]}`);
+  if (u.lengthFt < E.lengthFt[0] || u.lengthFt > E.lengthFt[1]) failures.push(`length ${round2(u.lengthFt)} ft outside ${E.lengthFt[0]}-${E.lengthFt[1]}`);
+  if (u.floorAboveGradeIn < E.floorAboveGradeIn[0] || u.floorAboveGradeIn > E.floorAboveGradeIn[1]) failures.push(`floor ${u.floorAboveGradeIn} in outside ${E.floorAboveGradeIn[0]}-${E.floorAboveGradeIn[1]}`);
+  if (u.transportHeightFt > E.maxTransportHeightFt) failures.push(`${u.transportHeightFt} ft over the ${E.maxTransportHeightFt} ft road height`);
+  return { fits: failures.length === 0, failures };
+}
+
 /** Zook A-Frame Classic, from the product page and park-model chassis practice. */
 export const ZOOK_A_FRAME_CLASSIC: ParkModel = {
   name: 'A-Frame Classic (park model)',
@@ -253,6 +312,8 @@ export interface DeckPost {
 }
 
 export interface DeckPlan {
+  /** Whether the unit sits inside the envelope this deck is designed to. */
+  envelope: EnvelopeFit;
   unit: ParkModel;
   /** Overall outside dimensions of the deck ring, ft. */
   outerWidthFt: number;
@@ -512,6 +573,16 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
     + `${cfg.groundSnow.psf} -> ${roofSnowPsf.toFixed(1)} psf on the roof; roof live ${cfg.roofLivePsf}). `
     + `Specify >= ${Math.ceil(roofDesignPsf)} psf and >= ${cfg.wind.ultimateMph} mph with an ICC-ES report or a `
     + 'NC PE stamp; three surveyed makers clear both, so this line is competitive.');
+  const fit = fitsEnvelope(u);
+  notes.push(fit.fits
+    ? `DESIGNED TO THE ENVELOPE, NOT TO THIS UNIT. Any park model ${PARK_MODEL_ENVELOPE.widthFt[0]}-${PARK_MODEL_ENVELOPE.widthFt[1]} ft `
+      + `wide by ${PARK_MODEL_ENVELOPE.lengthFt[0]}-${PARK_MODEL_ENVELOPE.lengthFt[1]} ft long fits this deck `
+      + `(exterior box — A119.5's ${PARK_MODEL_ENVELOPE.ansiLivingAreaCapSqFt} sq ft is living area in setup mode, `
+      + 'a different measure): the ring dimension '
+      + 'changes, the post grid, spans, panel sizes and details do not. Buy on price and lead time, not on which '
+      + 'manufacturer the deck was drawn around — including next year\'s catalogue.'
+    : `⚠️ THIS UNIT IS OUTSIDE THE ENVELOPE (${fit.failures.join('; ')}). The deck still computes, but it is now `
+      + 'a one-off for one model rather than a design any park model can sit on.');
   notes.push(`THE OPERATING COMPARABLE USES ${OBSERVED_COMPARABLE.deckFoundation.toUpperCase()} — observed, `
     + 'not inferred, on the nearest working resort in the same climate, and the same detail carries their '
     + `cabins. ⚠️ ${OBSERVED_COMPARABLE.unresolved}`);
@@ -542,7 +613,7 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
   }
 
   return {
-    unit: u, outerWidthFt, outerLengthFt, floorAboveGradeIn: floorIn, airGapIn: cfg.airGapIn,
+    unit: u, envelope: fitsEnvelope(u), outerWidthFt, outerLengthFt, floorAboveGradeIn: floorIn, airGapIn: cfg.airGapIn,
     sides, deckAreaSqFt, guardsRequired, guardMinIn: APPENDIX_M.guardMinIn, lateralBracingRequired,
     postSize, postHeightFt, postsXY: allPosts, posts, postFaceClearanceIn,
     foundation: {
