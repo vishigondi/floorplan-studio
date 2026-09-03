@@ -227,6 +227,90 @@ export const PREFAB_PANEL = {
  *
  * This module therefore does NOT skirt to grade, and says so.
  */
+/**
+ * LINKING TWO UNITS — the configuration the owner keeps returning to, and the
+ * one place where a design decision silently becomes a tax decision.
+ *
+ * THE TEST IS NOT WHAT CARRIES THE ROOF. It is whether a person can walk from
+ * one unit to the other WITHOUT GOING OUTSIDE. That is what a continuous
+ * thermal envelope means, it is what an assessor and an inspector both see, and
+ * it does not care whether the link is self-supporting.
+ *
+ *   open-deck     step outside, cross a deck, step in    two vehicles
+ *   covered-open  the same, under a roof, still outside  boundary — see below
+ *   enclosed      never outside                          ONE BUILDING
+ *
+ * deal-params:631 — "by COMPOSITION, never by attachment. Physically bolting a
+ * modular addition onto a park model destroys the RV identity." An enclosed
+ * sunroom between two units is the clearest case of attachment there is: it
+ * makes the pair one dwelling, and both chassis stop meaning anything.
+ *
+ * The covered-open case is the honest boundary. A roof spanning between two
+ * units, carried on its own posts and abutting each with a removable flashing,
+ * keeps the envelope discontinuous — but whether the ASSEMBLY reads as one
+ * building is a judgement about presentation, not a structural fact, and this
+ * module will not make it. It states the mechanism and hands it over.
+ */
+export type LinkKind = 'open-deck' | 'covered-open' | 'enclosed' | 'detached-pavilion';
+
+export interface LinkAssessment {
+  kind: LinkKind;
+  /** Can you pass unit-to-unit without going outside? The governing question. */
+  continuousEnvelope: boolean;
+  /** Keeps two separately titled vehicles, on the mechanism below. */
+  preservesSeparateUnits: boolean;
+  mechanism: string;
+  /** True when the answer is a judgement rather than a fact this module holds. */
+  needsTaxWorkstream: boolean;
+  /**
+   * When this kind costs something, the configuration that buys the same
+   * EXPERIENCE without the cost. Null when nothing is given up. Held as a field
+   * rather than as prose so the gate can check the way out actually works —
+   * every alternative named here must itself preserve two separate units.
+   */
+  alternative: LinkKind | null;
+}
+
+export function assessLink(kind: LinkKind): LinkAssessment {
+  switch (kind) {
+    case 'open-deck':
+      return {
+        kind, continuousEnvelope: false, preservesSeparateUnits: true, needsTaxWorkstream: false, alternative: null,
+        mechanism: 'You step outside to cross. The envelope is broken, each unit keeps its chassis and '
+          + 'title, and this is the "three park models linked by open decks" case the deal workstream '
+          + 'already prices at ~$168K year-one with no Whiteco argument needed.',
+      };
+    case 'covered-open':
+      return {
+        kind, continuousEnvelope: false, preservesSeparateUnits: true, needsTaxWorkstream: true, alternative: 'open-deck',
+        mechanism: 'A roof spans the gap but the sides stay open, so you are still outside when you '
+          + 'cross. Buildable only if the roof carries itself: own posts, own footings, abutting each '
+          + 'unit with a REMOVABLE flashing and no ledger, no fastener, no bearing. ⚠️ Even then, '
+          + 'whether the assembly READS as one building is a presentation judgement — put it to the '
+          + 'tax workstream before building, not after.',
+      };
+    case 'enclosed':
+      return {
+        kind, continuousEnvelope: true, preservesSeparateUnits: false, needsTaxWorkstream: true, alternative: 'detached-pavilion',
+        mechanism: '🔴 An enclosed sunroom or breezeway means you never go outside, so the pair is ONE '
+          + 'DWELLING. deal-params:631: attachment "destroys the RV identity". Both units leave the '
+          + '5-year §1245 lane for 39-year real property, both chassis stop meaning anything, and the '
+          + 'Whiteco argument the deal position avoids comes back. See the alternative field.',
+      };
+    case 'detached-pavilion':
+      return {
+        kind, continuousEnvelope: false, preservesSeparateUnits: true, needsTaxWorkstream: false, alternative: null,
+        mechanism: '✅ The glazed room, kept, without the cost. It is its OWN BUILDING between the two '
+          + 'units: own footings, own walls, own roof, doors to the outside. You leave unit A, take a '
+          + 'few steps under a covered but open threshold, and enter it. Same room, same light, same '
+          + 'view — but the envelope is broken twice, so both units keep their chassis and their '
+          + '5-year lane. The pavilion is itself a 39-year improvement and is depreciated on its own; '
+          + 'that is a much smaller number than reclassifying both units, and it is the only piece '
+          + 'that carries the risk.',
+      };
+  }
+}
+
 export const COMPOSED_PAIR = {
   arrangement: 'two units, visible gap between them, one open deck across both',
   coveredZone: 'slatted canopy over the dining end only; the rest open to the sky',

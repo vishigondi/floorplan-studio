@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS, COMPOSED_PAIR } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS, COMPOSED_PAIR, assessLink } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -299,6 +299,52 @@ for (const [W, L] of [[12, 29], [12, 33], [13.83, 29.17], [15, 34]]) {
       && p2.sides.every((x) => x.joist.size === '2x10' && x.bayWidthFt <= 25),
     p2.envelope.failures.join(';'));
 }
+
+console.log('linking two units — the envelope test, not the structure test');
+// The governing question is whether you can walk unit-to-unit WITHOUT GOING
+// OUTSIDE. It does not care what carries the roof, which is the intuition most
+// likely to mislead someone designing a "self-supporting" enclosed link.
+const ALL_LINKS = ['open-deck', 'covered-open', 'enclosed', 'detached-pavilion'];
+const openDeck = assessLink('open-deck'), coveredOpen = assessLink('covered-open'), enclosed = assessLink('enclosed');
+check('an open deck link breaks the envelope and keeps two units',
+  openDeck.continuousEnvelope === false && openDeck.preservesSeparateUnits === true);
+check('and needs no tax judgement — it is the case already priced',
+  openDeck.needsTaxWorkstream === false && /\$168K/.test(openDeck.mechanism));
+check('a covered-open link also breaks the envelope',
+  coveredOpen.continuousEnvelope === false && coveredOpen.preservesSeparateUnits === true);
+check('but demands a self-carrying roof and a removable flashing',
+  /own posts/.test(coveredOpen.mechanism) && /REMOVABLE flashing/.test(coveredOpen.mechanism)
+  && /no ledger, no fastener/.test(coveredOpen.mechanism));
+check('and is handed to the tax workstream, not decided here',
+  coveredOpen.needsTaxWorkstream === true && /presentation judgement/.test(coveredOpen.mechanism));
+check('an ENCLOSED link makes one dwelling and loses both units',
+  enclosed.continuousEnvelope === true && enclosed.preservesSeparateUnits === false);
+check('and the mechanism names what it costs',
+  /destroys the RV identity/.test(enclosed.mechanism) && /39-year/.test(enclosed.mechanism)
+  && /Whiteco/.test(enclosed.mechanism));
+const pavilion = assessLink('detached-pavilion');
+check('the detached pavilion keeps the glazed room AND both units',
+  pavilion.continuousEnvelope === false && pavilion.preservesSeparateUnits === true
+  && pavilion.needsTaxWorkstream === false);
+check('and is honest that the pavilion itself is a 39-year improvement',
+  /39-year improvement/.test(pavilion.mechanism) && /own footings/.test(pavilion.mechanism));
+// The way out is a FIELD, not a sentence — so it can be checked rather than
+// merely keyword-matched. A previous prose-only version survived a mutation
+// that inverted the claim while leaving the words in place.
+check('the enclosed case names a way out',
+  enclosed.alternative === 'detached-pavilion');
+check('and EVERY alternative offered actually preserves two units',
+  ALL_LINKS.map((k) => assessLink(k)).filter((a) => a.alternative !== null)
+    .every((a) => assessLink(a.alternative).preservesSeparateUnits === true));
+check('a kind that costs nothing offers no alternative',
+  openDeck.alternative === null && pavilion.alternative === null);
+check('and no alternative points back at a kind that loses the units',
+  ALL_LINKS.every((k) => assessLink(k).alternative !== 'enclosed'));
+// The distinction must be the ENVELOPE, not the structure — the whole point.
+check('only the enclosed case has a continuous envelope',
+  ALL_LINKS.filter((k) => assessLink(k).continuousEnvelope).length === 1 && enclosed.continuousEnvelope);
+check('and separate units survive exactly where the envelope is broken',
+  ALL_LINKS.map((k) => assessLink(k)).every((a) => a.preservesSeparateUnits === !a.continuousEnvelope));
 
 console.log('the observed comparable is recorded as observation, not as approval');
 // Photographs of the nearest working resort show posts on precast/poured pier
