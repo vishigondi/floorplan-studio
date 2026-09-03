@@ -114,39 +114,62 @@ export const OPEN_DECK = {
  * lifts its back line and brings the piles back.
  */
 export const BALANCED_CANTILEVER = {
-  /** Backspan as a fraction of total deck depth, at the quarter rule. */
-  backspanFractionOfDepth: 2 / 3,
-  /** Each cantilever as a fraction of total deck depth. */
-  cantileverFractionOfDepth: 1 / 6,
-  /** Share of the deck standing on nothing. */
-  freeAreaFraction: 1 / 3,
-  source: 'IRC R507 quarter rule applied both ways; statics for the balanced case',
+  /**
+   * THE SWEET SPOT IS WHERE THE TWO LIMITS MEET: backspan = 4 x the joist's
+   * overhang cap. There the quarter rule and the table give the same number and
+   * a third of the deck is free. PAST it the cap binds, the cantilever stops
+   * growing, and the free share DEGRADES — 33% at a 12 ft deck on 2x10, 22% at
+   * 18 ft. An earlier version of this claimed a flat one third at every depth,
+   * which is true only at the sweet spot.
+   */
+  freeAreaFractionAtSweetSpot: 1 / 3,
+  source: 'IRC R507 quarter rule and the Table 3 overhang cap, whichever is less; statics for the balanced case',
 };
+
+/** The balanced arrangement for a joist size, at its sweet spot. */
+export function sweetSpotFor(joistSize: string): { backspanFt: number; cantileverFt: number; deckDepthFt: number; freeFraction: number } {
+  const cap = CANTILEVER.maxOverhangFt[joistSize];
+  const L = round2(4 * cap), c = round2(cap), D = round2(L + 2 * c);
+  return { backspanFt: L, cantileverFt: c, deckDepthFt: D, freeFraction: round2((2 * c) / D) };
+}
 
 /**
  * For a target deck depth, the balanced arrangement and what it saves.
  * Returns the backspan a single-span deck would need versus the balanced one,
  * so the joist size can be read off the same App M table for both.
  */
-export function balancedSpanFor(depthFt: number): {
+export function balancedSpanFor(depthFt: number, joistSize = '2x10'): {
   singleSpanFt: number; backspanFt: number; cantileverFt: number;
-  freeAreaFraction: number; liftsSupports: boolean; backReactionPlf: number;
+  freeAreaFraction: number; liftsSupports: boolean; backReactionPlf: number; capGoverns: boolean;
 } {
-  const L = round2(depthFt * BALANCED_CANTILEVER.backspanFractionOfDepth);
-  const c = round2(depthFt * BALANCED_CANTILEVER.cantileverFractionOfDepth);
+  // Solve D = L + 2c with c = min(L/4, cap). Below the sweet spot the quarter
+  // rule binds and L = 2D/3; above it the cap binds and L = D - 2*cap.
+  const cap = CANTILEVER.maxOverhangFt[joistSize] ?? Infinity;
+  const quarterCase = round2((depthFt * 2) / 3);
+  const capGoverns = quarterCase / 4 > cap;
+  const L = capGoverns ? round2(depthFt - 2 * cap) : quarterCase;
+  const c = round2(Math.min(L / 4, cap));
   const wd = APPENDIX_M.deckDeadPsf, wl = APPENDIX_M.deckLivePsf;
   // Worst uplift at the far line: live on the near cantilever only, dead everywhere.
   const backReactionPlf = round2((wd * (2 * c + L)) / 2 - (wl * c * c) / (2 * L));
   return {
     singleSpanFt: round2(depthFt), backspanFt: L, cantileverFt: c,
-    freeAreaFraction: BALANCED_CANTILEVER.freeAreaFraction,
-    liftsSupports: backReactionPlf < 0, backReactionPlf,
+    freeAreaFraction: round2((2 * c) / (L + 2 * c)),
+    liftsSupports: backReactionPlf < 0, backReactionPlf, capGoverns,
   };
 }
 
 export const CANTILEVER = {
   /** IRC R507 / App M: joist cantilever as a fraction of backspan. Wood only. */
   woodMaxFractionOfBackspan: 0.25,
+  /**
+   * ABSOLUTE overhang cap by joist size — and this is the one that usually
+   * governs. The quarter rule alone permitted 3.5 ft off a 14 ft 2x10 backspan;
+   * the cap allows 2 ft. Anything past a 4x-cap backspan is limited by the
+   * TABLE, not the fraction, and an earlier version of this module got that
+   * wrong in exactly the arrangement it was recommending.
+   */
+  maxOverhangFt: { '2x6': 1.0, '2x8': 1 + 4 / 12, '2x10': 2.0 } as Record<string, number>,
   /** Below this fraction the back line still bears; above it, uplift. */
   upliftFractionOfBackspan: Math.sqrt(10 / 50),
   /** Past the wood rule it is an engineered steel frame with a PE stamp. */
@@ -488,23 +511,34 @@ export function girderSpanFt(girder: string, joistSpanFt: number): number {
  * outer one and then keeps going. Uplift at the BACK line is checked with full
  * load out on the tip, which is the case that lifts it.
  */
-export function checkCantilever(cantileverFt: number, backspanFt: number): CantileverCheck {
+/** The governing wood overhang: the LESSER of the quarter rule and the cap. */
+export function maxWoodOverhangFt(joistSize: string, backspanFt: number): number {
+  const cap = CANTILEVER.maxOverhangFt[joistSize];
+  const quarter = backspanFt * CANTILEVER.woodMaxFractionOfBackspan;
+  return round2(cap === undefined ? quarter : Math.min(quarter, cap));
+}
+
+export function checkCantilever(cantileverFt: number, backspanFt: number, joistSize = '2x10'): CantileverCheck {
   const wd = APPENDIX_M.deckDeadPsf, wl = APPENDIX_M.deckLivePsf;
   const L = backspanFt, c = cantileverFt;
+  const allowed = maxWoodOverhangFt(joistSize, L);
+  const capGoverns = (CANTILEVER.maxOverhangFt[joistSize] ?? Infinity) < L * CANTILEVER.woodMaxFractionOfBackspan;
   // R_back = wd*L/2 - (wd+wl)*c^2/(2L): dead holds it down, tip load levers it up.
   const backReactionPlf = round2(L > 0 ? (wd * L) / 2 - ((wd + wl) * c * c) / (2 * L) : 0);
   const fraction = L > 0 ? round2(c / L) : Infinity;
-  const woodOk = fraction <= CANTILEVER.woodMaxFractionOfBackspan + 1e-9;
+  const woodOk = c <= allowed + 1e-9;
   const liftsBackLine = backReactionPlf < 0;
   return {
     cantileverFt: round2(c), backspanFt: round2(L), fraction, woodOk, liftsBackLine, backReactionPlf,
     material: woodOk ? 'wood, App M tables' : 'engineered steel, PE stamp',
     reason: woodOk
-      ? `${round2(c)} ft is ${Math.round(fraction * 100)}% of the ${round2(L)} ft backspan, inside the `
-        + `${CANTILEVER.woodMaxFractionOfBackspan * 100}% joist rule (IRC R507), so ordinary joists carry it.`
-      : `${round2(c)} ft is ${Math.round(fraction * 100)}% of the ${round2(L)} ft backspan, past the `
-        + `${CANTILEVER.woodMaxFractionOfBackspan * 100}% joist rule — this is an ENGINEERED STEEL frame with a PE `
-        + 'stamp, which is what the reference projects are ("supported entirely on steel").',
+      ? `${round2(c)} ft is within the ${allowed} ft a ${joistSize} may overhang here — the lesser of the `
+        + `${CANTILEVER.woodMaxFractionOfBackspan * 100}% joist rule (${round2(L / 4)} ft) and the `
+        + `${CANTILEVER.maxOverhangFt[joistSize]} ft table cap${capGoverns ? ', which is what governs' : ''}.`
+      : `${round2(c)} ft exceeds the ${allowed} ft a ${joistSize} may overhang here — the lesser of the `
+        + `${CANTILEVER.woodMaxFractionOfBackspan * 100}% joist rule (${round2(L / 4)} ft) and the `
+        + `${CANTILEVER.maxOverhangFt[joistSize]} ft table cap${capGoverns ? ', and the CAP is what governs' : ''}. `
+        + 'Past it this is an ENGINEERED STEEL frame with a PE stamp, which is what the reference projects are.',
   };
 }
 

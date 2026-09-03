@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -168,19 +168,55 @@ check('the cantilever adds deck area',
 check('the prefab argument is stated where the cantilever appears',
   cantSteel.notes.some((n) => /BEST PREFAB CANDIDATE HERE/.test(n) && /ONE moment connection/.test(n)));
 
+console.log('the overhang CAP governs, not the quarter rule alone');
+// An earlier version applied only "a quarter of the backspan" and so permitted
+// 3.5 ft off a 14 ft 2x10 — the table caps it at 2 ft. The cap binds on every
+// backspan past 4x the cap, which is exactly the range this module was
+// recommending. The governing limit is the LESSER of the two.
+check('a 2x10 on a 14 ft backspan may overhang 2 ft, not 3.5',
+  maxWoodOverhangFt('2x10', 14) === 2, `${maxWoodOverhangFt('2x10', 14)}`);
+check('a 2x6 is capped at 1 ft however long the backspan',
+  maxWoodOverhangFt('2x6', 20) === 1 && maxWoodOverhangFt('2x6', 40) === 1);
+check('below the sweet spot the quarter rule still binds',
+  maxWoodOverhangFt('2x10', 4) === 1, `${maxWoodOverhangFt('2x10', 4)}`);
+check('a 3 ft overhang on a 14 ft 2x10 backspan now reads as steel',
+  checkCantilever(3, 14, '2x10').woodOk === false);
+check('and 2 ft reads as wood', checkCantilever(2, 14, '2x10').woodOk === true);
+check('the reason names which limit governed',
+  /table cap, and the CAP is what governs/.test(checkCantilever(3, 14, '2x10').reason));
+
+console.log('the sweet spot is where the two limits meet');
+for (const sz of ['2x6', '2x8', '2x10']) {
+  const sp = sweetSpotFor(sz);
+  check(`${sz}: backspan is 4x its cap`, Math.abs(sp.backspanFt - 4 * sp.cantileverFt) < 0.02);
+  check(`${sz}: a third of the deck is free there`, Math.abs(sp.freeFraction - 1 / 3) < 0.02, `${sp.freeFraction}`);
+}
+// And the free share must DEGRADE past it — the flat one-third claim was wrong.
+const atSpot = balancedSpanFor(12), deeper = balancedSpanFor(18);
+check('past the sweet spot the cap binds', atSpot.capGoverns === false && deeper.capGoverns === true);
+check('and the free share degrades, it is not a flat third',
+  deeper.freeAreaFraction < atSpot.freeAreaFraction - 0.05,
+  `${deeper.freeAreaFraction} vs ${atSpot.freeAreaFraction}`);
+check('the constant is named for the sweet spot, not for every depth',
+  Math.abs(BALANCED_CANTILEVER.freeAreaFractionAtSweetSpot - 1 / 3) < 1e-9
+  && !('freeAreaFraction' in BALANCED_CANTILEVER));
+check('the balanced case still never lifts its supports, capped or not',
+  atSpot.liftsSupports === false && deeper.liftsSupports === false);
+
 console.log('scaling a cantilever DOWN saves; scaling it UP costs');
 // Moment ∝ c², deflection ∝ c⁴, so reach is the dearest dimension on the deck.
 // The saving is the opposite move: cantilever BOTH ways off the same two lines.
 for (const D of [6, 10, 12, 14, 18]) {
   const b = balancedSpanFor(D);
-  check(`${D} ft deck: balanced backspan is 2/3 of the depth`,
-    Math.abs(b.backspanFt - D * 2 / 3) < 0.02 && Math.abs(b.cantileverFt - D / 6) < 0.02);
+  check(`${D} ft deck: backspan + two cantilevers equals the depth`,
+    Math.abs(b.backspanFt + 2 * b.cantileverFt - D) < 0.03, `${b.backspanFt} + 2x${b.cantileverFt}`);
+  check(`${D} ft deck: the cantilever respects the governing limit`,
+    b.cantileverFt <= maxWoodOverhangFt('2x10', b.backspanFt) + 0.02);
   check(`${D} ft deck: the balanced case never lifts its supports`,
     b.liftsSupports === false && b.backReactionPlf > 0, `${b.backReactionPlf} plf`);
   check(`${D} ft deck: the backspan is shorter than the single span`, b.backspanFt < b.singleSpanFt);
 }
-check('a third of a balanced deck stands on nothing',
-  Math.abs(BALANCED_CANTILEVER.freeAreaFraction - 1 / 3) < 1e-9);
+
 // The contrast that matters: single long cantilever lifts, balanced does not.
 check('a single 5 ft cantilever off a 6 ft backspan LIFTS its back line',
   checkCantilever(5, 6).liftsBackLine === true);
@@ -188,7 +224,7 @@ check('the balanced equivalent does not', balancedSpanFor(11).liftsSupports === 
 // And the deeper the deck, the bigger the joist saving.
 check('a 12 ft deck drops from a 12 ft span to an 8 ft backspan',
   Math.abs(balancedSpanFor(12).backspanFt - 8) < 0.02);
-check('an 18 ft deck drops from beyond the 2x10 table to 12 ft, inside it',
+check('an 18 ft deck comes back inside the 2x10 table',
   balancedSpanFor(18).singleSpanFt > APPENDIX_M.joistSpanFt['2x10']
   && balancedSpanFor(18).backspanFt <= APPENDIX_M.joistSpanFt['2x10'],
   `${balancedSpanFor(18).backspanFt}`);
