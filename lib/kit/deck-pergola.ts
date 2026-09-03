@@ -280,6 +280,23 @@ export const PERGOLA_MARKET = {
 // ---------------------------------------------------------------------------
 // Inputs.
 
+/**
+ * SOME MANUFACTURERS SHIP THE DECK. Wheelhaus quotes the Wedge at "10.5 feet
+ * wide by 38 feet long. Cabins with decks are 47 feet long" and describes "a
+ * fully covered front deck". Where that is true this whole module is the wrong
+ * tool: you are not specifying a deck, you are choosing a unit that has one,
+ * and the covered part arrives already built and already titled with the
+ * vehicle — which is a different answer on the open-deck tax question too.
+ *
+ * Worth establishing per model BEFORE designing a deck around it.
+ */
+export const MANUFACTURER_SUPPLIED_DECKS = {
+  known: 'Wheelhaus Wedge — fully covered front deck, +9 ft of length',
+  consequence: 'a supplied deck is part of the titled vehicle, so it is neither built on site nor '
+    + 'separately assessed; the covered-fraction and Whiteco questions change shape',
+  action: 'ask each manufacturer whether a deck is offered, covered, and titled with the unit',
+};
+
 export interface ParkModel {
   name: string;
   widthFt: number;
@@ -322,8 +339,14 @@ export interface ParkModel {
  * bought — including next year's.
  */
 export const PARK_MODEL_ENVELOPE = {
-  widthFt: [12, 15] as const,
-  lengthFt: [29, 35] as const,
+  /**
+   * Corrected against ten published models. An earlier version read 12-15 by
+   * 29-35, taken from Zook and Factory Expo alone, and it was wrong at BOTH
+   * ends of BOTH dimensions: Movable Roots build 10 ft wide, and their Black
+   * Prong is 58 ft long. Two catalogues is not a market.
+   */
+  widthFt: [10, 15] as const,
+  lengthFt: [29, 58] as const,
   /**
    * ANSI A119.5's cap on GROSS FLOOR AREA IN SETUP MODE, lofts excluded.
    * Context only — it is NOT the exterior box, and nothing here enforces it
@@ -333,8 +356,19 @@ export const PARK_MODEL_ENVELOPE = {
   /** Deck-over chassis above ~11 ft 8 in body width; deck-between below it. */
   floorAboveGradeIn: [24, 40] as const,
   maxTransportHeightFt: 13.5,
-  source: 'Zook park models (16 plans, 204-400 sq ft); Factory Expo Cavalry 12x35 and Mexia 15x34; '
-    + 'ANSI A119.5 400 sq ft cap; 13 ft 6 in legal road height',
+  source: 'Eleven published models across five makers: Zook PA (16 plans, A-Frame Classic 13.83x29.17); '
+    + 'Factory Expo Cavalry 12x35, Mexia 15x34; Wheelhaus WY Wedge 10.5x38; Movable Roots FL Doodle 10x36, '
+    + 'Manwaring 10x40, Bozeman 11x36, Overlook 14x47.5, Black Prong 11.5x58; Great Lakes OH A-Frame Luxe 14x43. '
+    + 'Boxes run 360-667 sq ft against a 399-400 sq ft LIVING area — the exterior-vs-A119.5 distinction again. '
+    + '13 ft 6 in legal road height.',
+  /**
+   * PRICE IS THE LARGEST VARIABLE ON THE LOT, AND IT IS NOT OURS TO DESIGN.
+   * The same 400 sq ft class runs $61K (Great Lakes Pinnacle) to $245K (Movable
+   * Roots Black Prong) — a 4x spread, wider than any decision in this module.
+   * The deck is specified to the envelope precisely so that spread stays
+   * shoppable rather than being closed off by a drawing.
+   */
+  publishedUnitPriceRangeUsd: [61000, 245000] as const,
 };
 
 export interface EnvelopeFit {

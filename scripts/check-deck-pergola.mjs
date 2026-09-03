@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -243,6 +243,37 @@ console.log('the deck is designed to the ENVELOPE, not to one manufacturer');
 check('the reference unit sits inside the envelope', plan.envelope.fits, plan.envelope.failures.join('; '));
 check('the plan says it is designed to the envelope',
   plan.notes.some((n) => /DESIGNED TO THE ENVELOPE, NOT TO THIS UNIT/.test(n)));
+// The envelope was first written from two catalogues and was wrong at BOTH ends
+// of BOTH dimensions. Movable Roots build 10 ft wide and 58 ft long; Wheelhaus
+// 10.5 x 38. Ten published models now bound it, and the deck absorbs the whole
+// range by ordering more of the same parts.
+for (const [n, W, L] of [['Movable Roots Doodle', 10, 36], ['Wheelhaus Wedge', 10.5, 38],
+  ['Movable Roots Overlook', 14, 47.5], ['Black Prong', 11.5, 58]]) {
+  const u = { ...ZOOK_A_FRAME_CLASSIC, widthFt: W, lengthFt: L };
+  check(`${n} (${W} x ${L}) is inside the envelope`, fitsEnvelope(u).fits, fitsEnvelope(u).failures.join(';'));
+  const p3 = buildDeckPlan({ ...base, unit: u });
+  check(`${n}: same details, only the count changes`,
+    p3.postSize === plan.postSize && p3.foundation.pileCount === plan.foundation.pileCount
+      && p3.sides.every((x) => x.joist.size === '2x10' && x.bayWidthFt <= 25));
+}
+check('the envelope now spans 10-15 ft wide', PARK_MODEL_ENVELOPE.widthFt[0] === 10 && PARK_MODEL_ENVELOPE.widthFt[1] === 15);
+check('and 29-58 ft long — the Black Prong is 58', PARK_MODEL_ENVELOPE.lengthFt[1] === 58);
+check('the source names five makers, not two catalogues',
+  ['Zook', 'Factory Expo', 'Wheelhaus', 'Movable Roots', 'Great Lakes']
+    .every((m) => PARK_MODEL_ENVELOPE.source.includes(m)));
+check('Great Lakes A-Frame Luxe (14 x 43) is inside the envelope',
+  fitsEnvelope({ ...ZOOK_A_FRAME_CLASSIC, widthFt: 14, lengthFt: 43 }).fits);
+// The unit price spread is wider than anything this module decides — which is
+// the whole argument for specifying to the envelope rather than to a model.
+check('the 4x unit-price spread is recorded',
+  PARK_MODEL_ENVELOPE.publishedUnitPriceRangeUsd[0] === 61000
+  && PARK_MODEL_ENVELOPE.publishedUnitPriceRangeUsd[1] === 245000);
+check('and it is wider than a 2x spread, so shopping it matters',
+  PARK_MODEL_ENVELOPE.publishedUnitPriceRangeUsd[1] / PARK_MODEL_ENVELOPE.publishedUnitPriceRangeUsd[0] > 3);
+check('a manufacturer-supplied deck is flagged as making this module the wrong tool',
+  /Wheelhaus/.test(MANUFACTURER_SUPPLIED_DECKS.known)
+  && /titled vehicle/.test(MANUFACTURER_SUPPLIED_DECKS.consequence));
+
 // A119.5's 400 sq ft is LIVING AREA IN SETUP MODE, lofts excluded — not the
 // exterior box. This module briefly enforced it against width x length and so
 // rejected the Factory Expo Mexia (15 x 34 ft box, 510 sq ft, a real and legal
