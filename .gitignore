@@ -54,3 +54,4 @@ next-env.d.ts
 # Python bytecode from the measurement scripts
 __pycache__/
 *.pyc
+site-layouts.html
