@@ -44,8 +44,24 @@ export interface ObservedUnit {
   /** Verbatim-sourced notes. Kept because the entry pattern is not published in catalogues. */
   entryNote: string;
   factoryPorch: string | null;
+  /**
+   * Which wall carries the full-height glazing. Across every model surveyed the
+   * answer is the same — 'gable'. That is not a style preference: the long wall
+   * is the towing face and is width-limited, while the gable is where a tall
+   * window can go without touching the road envelope.
+   */
+  glassWall: 'gable' | 'side';
   /** True when the big glazing is NOT on the same wall as the door. */
   glassSplitFromDoor: boolean;
+  /**
+   * Where the door sits along the length, as a fraction from the glass end
+   * (0 = at the glass, 1 = at the hitch end). Zook's A-frames put it at the far
+   * end, beside the bathroom bump-out — so one deck cannot serve both without
+   * running the whole flank.
+   */
+  doorAtFractionFromGlass: number;
+  /** Reversed plans: what it takes to get one from this maker. */
+  mirroring: 'standard' | 'volume-only' | 'unknown';
   /** Tows inside the 8.5 ft limit with no permit, escort or route approval. */
   towsPermitFree: boolean;
   source: string;
@@ -57,33 +73,103 @@ export interface ObservedUnit {
  */
 export const OBSERVED_UNITS: readonly ObservedUnit[] = [
   {
-    maker: 'Zook', model: 'Denali', widthFt: 12, lengthFt: 42, interiorSqFt: 384,
-    entry: 'side',
-    entryNote: 'Full-lite side entry door on the long wall, plus a 72 in full-lite sliding patio door onto the deck.',
-    factoryPorch: '8 x 12 covered deck on a long side, aluminium rail on three sides',
-    glassSplitFromDoor: false,
-    towsPermitFree: false,
-    source: 'zookcabins.com/cabin/denali',
+    maker: 'Zook', model: 'A-Frame Studio', widthFt: 13.5, lengthFt: 32, interiorSqFt: 400,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.85,
+    entryNote: 'Full-lite entry door on the LONG SIDE at the hitch end, beside the bathroom bump-out; '
+      + 'custom full-glass A-frame window with black aluminium frame fills the front gable.',
+    factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    source: 'zookcabins.com/cabin/a-frame-studio',
+  },
+  {
+    maker: 'Zook', model: 'A-Frame Bunkhouse', widthFt: 13.67, lengthFt: 31, interiorSqFt: 400,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.8,
+    entryNote: 'Recessed entry niche with full-lite door on the LONG SIDE; custom tempered A-frame '
+      + 'window with black aluminium frame on the front gable.',
+    factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    source: 'zookcabins.com/cabin/a-frame-bunkhouse',
   },
   {
     maker: 'Zook', model: 'A-Frame Classic', widthFt: 13.83, lengthFt: 29.17, interiorSqFt: 400,
-    entry: 'side',
-    entryNote: 'Front door set along the SIDE with an inset for weather protection; the tempered-glass A-frame window spans the GABLE.',
-    factoryPorch: null,
-    glassSplitFromDoor: true,
-    towsPermitFree: false,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.75,
+    entryNote: 'Front door set along the SIDE with an inset for weather protection; custom tempered '
+      + 'glass with aluminium frame fills the living-room A-frame gable.',
+    factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
     source: 'zookcabins.com/cabin/a-frame-park-model-home',
   },
   {
-    maker: 'Zook', model: 'Nook Family', widthFt: 8.5, lengthFt: 30, interiorSqFt: 255,
-    entry: 'end',
-    entryNote: 'Entry door on the short END wall under a wood awning; floor plan is an end-porch configuration.',
-    factoryPorch: 'covered end porch',
-    glassSplitFromDoor: false,
-    towsPermitFree: true,
-    source: 'zookcabins.com/cabin/nook-family',
+    maker: 'Zook', model: 'Luna', widthFt: 11, lengthFt: 36, interiorSqFt: 400,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.75,
+    entryNote: 'Fiberglass full-lite entry door; dramatic window wall on the GABLE end, black stained '
+      + 'cedar surround with LED valance lighting. ⚠️ Door wall not published — confirm before siting.',
+    factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    source: 'zookcabins.com/cabin/luna',
+  },
+  {
+    maker: 'ÖÖD', model: 'Extended Park Model RV', widthFt: 11.16, lengthFt: 26.08, interiorSqFt: 291,
+    entry: 'side', glassWall: 'side', glassSplitFromDoor: false, doorAtFractionFromGlass: 0.5,
+    entryNote: 'THE EXCEPTION. A full mirror-glass facade on the LONG SIDE, extended by one panel over '
+      + 'the standard model — so glass and entry share a wall and one deck serves both. Steel frame. '
+      + '⚠️ Door position within the facade not published; confirm. ⚠️ Reflective glazing carries a real '
+      + 'bird-strike duty and will mirror whatever stands in front of it, including the next unit.',
+    factoryPorch: null, towsPermitFree: false, mirroring: 'unknown',
+    source: 'oodhouse.com/en-us/products/rvs/extended-park-model-rv',
+  },
+  {
+    maker: 'Elevation', model: '7-Series (7-105 shown)', widthFt: 12, lengthFt: 36, interiorSqFt: 400,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.75,
+    entryNote: 'FIVE front-end window designs are a buyer choice, so the gable glazing is specified '
+      + 'rather than inherited. Sixteen 7-Series plans run 11-12 ft by 36-39 ft. ⚠️ Door wall and '
+      + 'position not published — confirm before siting.',
+    factoryPorch: null, towsPermitFree: false, mirroring: 'standard',
+    source: 'elevationparkmodels.com/floor-plans/7-series-floor-plans',
   },
 ];
+
+/**
+ * ONLY UNITS WITH A FULL-HEIGHT GABLE GLASS WALL ARE USED. The glazing is the
+ * whole product — it is what a guest pays for and what the listing sells on —
+ * so a model without one is not a cheaper option, it is a different business.
+ * Every model above was checked individually; a catalogue index never says.
+ *
+ * THE CONSEQUENCE IS GEOMETRIC AND IT IS NOT SMALL. The glass is on the gable
+ * and the door is on the long wall near the OTHER end, so the deck has to reach
+ * both ends of the unit. One compact deck at the gable cannot do it — unless
+ * the door is specified near the glass end, which is exactly what a reversed or
+ * end-flipped plan buys.
+ */
+export function glassUnits(): ObservedUnit[] {
+  return [...OBSERVED_UNITS];
+}
+
+/**
+ * Units whose glass and door share a wall. One deck serves both, so the flank
+ * strip disappears entirely — the single biggest deck saving available, and the
+ * reason ÖÖD's side-glass geometry is worth more than its floor area suggests.
+ */
+export function oneDeckServesBoth(u: ObservedUnit): boolean {
+  return !u.glassSplitFromDoor;
+}
+
+/**
+ * Elevation publish this as a standard choice: plans can be "flipped end-to-end
+ * or rolled side-to-side". Rolled side-to-side is the reversed plan Zook gates
+ * behind a ten-unit order. It is the strongest procurement argument in this file.
+ */
+export const MIRRORING_BY_MAKER = {
+  Elevation: {
+    availability: 'standard' as const,
+    quote: 'customers can select to have the floorplan flipped end-to-end or rolled side-to-side',
+    note: 'Rolled side-to-side is a reversed plan. No minimum order is stated. ⚠️ Confirm whether '
+      + 'flipping end-to-end also moves the glass relative to the hitch — that decides tow direction.',
+    source: 'elevationparkmodels.com/floor-plans',
+  },
+  Zook: {
+    availability: 'volume-only' as const,
+    quote: 'not customizable when ordered as a single unit',
+    note: 'Custom plans only at ten or more units.',
+    source: 'zookcabins.com/planning/park-model/construction-details',
+  },
+} as const;
 
 /** The road limit. At or under this a unit moves with no permit, escort or route approval. */
 export const PERMIT_FREE_WIDTH_FT = 8.5;
@@ -223,6 +309,10 @@ export interface PlacedUnit {
   rotDeg: number;
   entry: EntryPattern;
   hitch: HitchEnd;
+  /** Fraction along the length from the glass gable to the hitch end. */
+  doorAtFractionFromGlass: number;
+  /** Which wall the glazing is in. Gable is the norm; ÖÖD puts it on the long side. */
+  glassWall: 'gable' | 'side';
   /**
    * A reversed (handed) plan. Mirroring flips LEFT/RIGHT only: the door moves
    * to the opposite long wall while the hitch stays at the same physical end.
@@ -277,11 +367,98 @@ export function doorFacing(u: PlacedUnit): Pt {
   return u.mirrored ? { x: -c, y: -s2 } : { x: c, y: s2 };
 }
 
-/** Mid-point of the door wall, on the face of the unit. */
+/**
+ * The door itself, on the face of the unit — NOT the middle of the wall. On
+ * every A-frame surveyed the door sits near the hitch end beside the bathroom
+ * bump-out, which is most of the way from the glass. Assuming it is centred
+ * would put a deck landing where there is no door.
+ */
 export function doorPoint(u: PlacedUnit): Pt {
   const f = doorFacing(u);
-  const reach = u.entry === 'end' ? u.lengthFt / 2 : u.widthFt / 2;
-  return { x: u.at.x + f.x * reach, y: u.at.y + f.y * reach };
+  if (u.entry === 'end') {
+    return { x: u.at.x + f.x * (u.lengthFt / 2), y: u.at.y + f.y * (u.lengthFt / 2) };
+  }
+  const a = lengthAxis(u);
+  const along = u.lengthFt * (u.doorAtFractionFromGlass - 0.5);
+  return {
+    x: u.at.x + f.x * (u.widthFt / 2) + a.x * along,
+    y: u.at.y + f.y * (u.widthFt / 2) + a.y * along,
+  };
+}
+
+/**
+ * The glass gable faces the way the length axis came FROM. The hitch is at the
+ * other end, which is the quiet gift in all of this: these units tow away from
+ * their own glass, so a deck at the view end can never block the exit.
+ */
+export function glassFacing(u: PlacedUnit): Pt {
+  if (u.glassWall === 'side') {
+    const c = Math.cos(rad(u.rotDeg)), s2 = Math.sin(rad(u.rotDeg));
+    return u.mirrored ? { x: -c, y: -s2 } : { x: c, y: s2 };
+  }
+  const a = lengthAxis(u);
+  return { x: -a.x, y: -a.y };
+}
+
+/** How far the glass wall stands from the unit's centre. */
+export function glassReachFt(u: PlacedUnit): number {
+  return u.glassWall === 'side' ? u.widthFt / 2 : u.lengthFt / 2;
+}
+
+/** How wide the glass wall is. A side wall is the LONG one — that is the point of ÖÖD. */
+export function glassWidthFt(u: PlacedUnit): number {
+  return u.glassWall === 'side' ? u.lengthFt : u.widthFt;
+}
+
+export function glassPoint(u: PlacedUnit): Pt {
+  const g = glassFacing(u);
+  const r = glassReachFt(u);
+  return { x: u.at.x + g.x * r, y: u.at.y + g.y * r };
+}
+
+export function glassOpensOntoDeck(u: PlacedUnit, layout: SiteLayout): boolean {
+  const g = glassFacing(u), q = glassPoint(u);
+  const probe = { x: q.x + g.x * DOOR_LANDING_FT, y: q.y + g.y * DOOR_LANDING_FT };
+  return layout.decks.some((deck) => pointInPolygon(probe, deck.outline));
+}
+
+/** Open ground a glass wall needs in front of it before it is just a window onto a wall. */
+export const VIEW_CLEAR_FT = 40;
+
+/** The corridor the view runs down, as wide as the unit. */
+export function viewCorridor(u: PlacedUnit): Pt[] {
+  const g = glassFacing(u);
+  const px = -g.y, py = g.x;
+  const hw = glassWidthFt(u) / 2;
+  const start = glassReachFt(u);
+  const end = start + VIEW_CLEAR_FT;
+  const at = (t: number, side: number): Pt => ({
+    x: u.at.x + g.x * t + px * hw * side,
+    y: u.at.y + g.y * t + py * hw * side,
+  });
+  return [at(start, -1), at(end, -1), at(end, 1), at(start, 1)];
+}
+
+/**
+ * The glass is the product. A glass wall pointed at another unit is not a view,
+ * it is a privacy problem sold at a premium — so this is a check, not a note.
+ */
+export function glassHasView(u: PlacedUnit, layout: SiteLayout): boolean {
+  const corridor = viewCorridor(u);
+  return !layout.units.some((o) => o.id !== u.id && polysOverlap(corridor, unitCorners(o)));
+}
+
+export function everyGlassWorks(layout: SiteLayout): boolean {
+  return layout.units.every((u) => glassOpensOntoDeck(u, layout) && glassHasView(u, layout));
+}
+
+/** Total open deck laid, in square feet. */
+export function deckAreaSqFt(layout: SiteLayout): number {
+  const area = (pts: Pt[]) => Math.abs(pts.reduce((acc, p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    return acc + (p.x * q.y - q.x * p.y);
+  }, 0) / 2);
+  return Math.round(layout.decks.reduce((sum, d) => sum + area(d.outline), 0));
 }
 
 export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
@@ -426,173 +603,139 @@ export function isOrthogonal(layout: SiteLayout): boolean {
 // The layouts
 // ---------------------------------------------------------------------------
 
-const nook = { widthFt: 8.5, lengthFt: 30, entry: 'end' as EntryPattern };
-const denali = { widthFt: 12, lengthFt: 42, entry: 'side' as EntryPattern };
-const aframe = { widthFt: 13.83, lengthFt: 29.17, entry: 'side' as EntryPattern };
+const studio = {
+  widthFt: 13.5, lengthFt: 32, entry: 'side' as EntryPattern,
+  doorAtFractionFromGlass: 0.85, glassWall: 'gable' as const,
+};
+/** ÖÖD: glass on the long wall, door in the same wall. No flank strip needed. */
+const ood = {
+  widthFt: 11.16, lengthFt: 26.08, entry: 'side' as EntryPattern,
+  doorAtFractionFromGlass: 0.5, glassWall: 'side' as const,
+};
+
+/**
+ * THE SHAPE OF EVERY LAYOUT BELOW IS SET BY ONE FACT: the glass is on the gable
+ * and the door is on the long wall near the OTHER end. So each unit needs deck
+ * in two places — a view deck off the glass, and a strip down the flank to reach
+ * the door. The strip is pure circulation. It buys no view and no sitting space.
+ *
+ * SPECIFYING THE DOOR NEAR THE GLASS END DELETES IT. That is the concrete thing
+ * a reversed or end-flipped plan is worth, and flankStripCostSqFt() prices it.
+ */
+export const FLANK_STRIP_WIDTH_FT = 8;
+
+/** Deck laid purely to reach a door that sits at the far end from the glass. */
+export function flankStripCostSqFt(u: { lengthFt: number }): number {
+  return Math.round(FLANK_STRIP_WIDTH_FT * u.lengthFt);
+}
 
 export const LAYOUTS: readonly SiteLayout[] = [
   {
-    id: 'single-l-wrap',
-    title: 'One unit — L-wrap from the door to the view',
+    id: 'glass-single',
+    title: 'One unit — view deck at the glass, strip to the door',
     unitCount: 1,
     requiresEntry: 'side',
-    units: [{ id: 'A', model: 'A-Frame Classic', ...aframe, at: { x: 0, y: 0 }, rotDeg: 0, hitch: 'far-end' }],
-    decks: [{
-      id: 'deck', cantileverFt: 2,
-      outline: [
-        { x: 6.915, y: -14.585 }, { x: 18.915, y: -14.585 }, { x: 18.915, y: 14.585 }, { x: 6.915, y: 14.585 },
-      ],
-    }, {
-      id: 'deck-gable', cantileverFt: 2,
-      outline: [
-        { x: -6.915, y: -28.585 }, { x: 18.915, y: -28.585 }, { x: 18.915, y: -14.585 }, { x: -6.915, y: -14.585 },
-      ],
-    }],
-    why:
-      'The door is on the long side and the glass is on the gable, so the deck has to be in two places. '
-      + 'An L solves it: a walking strip at the door, opening into the sitting area under the glass, with '
-      + 'the cantilever at the far gable corner where the ground falls away.',
-  },
-  {
-    id: 'single-end-deck',
-    title: 'One unit — compact end deck',
-    unitCount: 1,
-    requiresEntry: 'end',
-    units: [{ id: 'A', model: 'Nook Family', ...nook, at: { x: 0, y: 0 }, rotDeg: 0, hitch: 'far-end' }],
-    decks: [{
-      id: 'deck', cantileverFt: 2,
-      outline: [{ x: -9, y: -31 }, { x: 9, y: -31 }, { x: 9, y: -15 }, { x: -9, y: -15 }],
-    }],
-    why:
-      'Entry on the gable end, so everything happens at one end and the deck is small, square and cheap. '
-      + 'The unit tows straight out the back. This is the least deck per unit of anything here.',
-  },
-  {
-    id: 'l-pair',
-    title: 'Two units — right-angle L on a corner deck',
-    unitCount: 2,
-    requiresEntry: 'end',
-    units: [
-      { id: 'A', model: 'Nook Family', ...nook, at: { x: 0, y: 26 }, rotDeg: 0, hitch: 'far-end' },
-      { id: 'B', model: 'Nook Family', ...nook, at: { x: 26, y: 0 }, rotDeg: -90, hitch: 'far-end' },
+    units: [{ id: 'A', model: 'A-Frame Studio', ...studio, at: { x: 0, y: 0 }, rotDeg: 0, hitch: 'far-end' }],
+    decks: [
+      { id: 'view-deck', cantileverFt: 2, outline: [{ x: -12, y: -34 }, { x: 12, y: -34 }, { x: 12, y: -16 }, { x: -12, y: -16 }] },
+      { id: 'strip-A', cantileverFt: 0, outline: [{ x: 6.75, y: -16 }, { x: 14.75, y: -16 }, { x: 14.75, y: 16 }, { x: 6.75, y: 16 }] },
     ],
-    decks: [{
-      id: 'deck', cantileverFt: 2,
-      outline: [{ x: -10, y: -10 }, { x: 11, y: -10 }, { x: 11, y: 11 }, { x: -10, y: 11 }],
-    }],
     why:
-      'Two units set square to each other, both gable doors opening onto one deck in the crook of the L. '
-      + 'Neither looks into the other because they face ninety degrees apart, and the open corner points '
-      + 'downhill at the view, which is where the cantilever goes. Every cut on the deck is a square cut. '
-      + 'They tow in opposite directions, so neither waits on the other.',
+      'The whole plan in one unit. The view deck sits off the glass gable where the ground falls away, '
+      + 'and the cantilever runs along its outer edge. The strip down the flank exists only because the '
+      + 'door is at the far end — it is circulation, not living space. Note what the geometry gives you '
+      + 'for free: the hitch is at the door end, so the unit tows AWAY from its own view deck and that '
+      + 'deck can be as large as the site allows without ever blocking the exit.',
   },
   {
-    id: 'parallel-open',
-    title: 'Two units — parallel, deck in the gap',
+    id: 'glass-pair-corner',
+    title: 'Two units — right angle, both glass walls on one deck',
     unitCount: 2,
     requiresEntry: 'side',
     units: [
-      { id: 'A', model: 'Denali', ...denali, at: { x: -16, y: 0 }, rotDeg: 0, hitch: 'far-end' },
-      { id: 'B', model: 'Denali', ...denali, at: { x: 16, y: 0 }, rotDeg: 0, hitch: 'far-end', mirrored: true },
+      { id: 'A', model: 'A-Frame Studio', ...studio, at: { x: 0, y: 0 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'B', model: 'A-Frame Studio', ...studio, at: { x: 28, y: -30 }, rotDeg: -90, hitch: 'far-end', mirrored: true },
     ],
-    decks: [{
-      id: 'deck', cantileverFt: 2,
-      outline: [{ x: -10, y: -32 }, { x: 10, y: -32 }, { x: 10, y: 14 }, { x: -10, y: 14 }],
-    }],
+    decks: [
+      { id: 'view-deck', cantileverFt: 2, outline: [{ x: -12, y: -38 }, { x: 12, y: -38 }, { x: 12, y: -16 }, { x: -12, y: -16 }] },
+      { id: 'strip-A', cantileverFt: 0, outline: [{ x: 6.75, y: -16 }, { x: 14.75, y: -16 }, { x: 14.75, y: 16 }, { x: 6.75, y: 16 }] },
+      { id: 'strip-B', cantileverFt: 0, outline: [{ x: 14.75, y: -23.25 }, { x: 44, y: -23.25 }, { x: 44, y: -15.25 }, { x: 14.75, y: -15.25 }] },
+    ],
     why:
-      'Side doors face each other across one open deck, which runs past the downhill ends to make a view '
-      + 'terrace rather than a corridor between two walls. It is the most efficient shape per foot of deck '
-      + 'and the tow lanes run parallel and clear. It is also the shape that most tempts someone to roof '
-      + 'the gap — which is the one move that would make the pair a single dwelling.',
+      'Set square to each other at ninety degrees, both glass walls looking onto the same deck but down '
+      + 'different sightlines — so the deck is shared and the views are not. Neither unit appears in the '
+      + 'other\'s glass, which is the point of the right angle. B is a reversed plan so its door faces '
+      + 'back toward the shared surface instead of out into the trees. They tow in different directions.',
   },
   {
-    id: 'trident-three',
-    title: 'Three units — three doors onto one deck',
-    unitCount: 3,
-    requiresEntry: 'end',
-    units: [
-      { id: 'A', model: 'Nook Family', ...nook, at: { x: -26, y: 4 }, rotDeg: 90, hitch: 'far-end' },
-      { id: 'B', model: 'Nook Family', ...nook, at: { x: 0, y: 34 }, rotDeg: 0, hitch: 'far-end' },
-      { id: 'C', model: 'Nook Family', ...nook, at: { x: 26, y: 4 }, rotDeg: -90, hitch: 'far-end' },
-    ],
-    decks: [{
-      id: 'deck', cantileverFt: 2,
-      outline: [{ x: -11, y: -6 }, { x: 11, y: -6 }, { x: 11, y: 19 }, { x: -11, y: 19 }],
-    }],
-    why:
-      'End entry puts the door on the SHORT wall, so three of these cannot line the sides of a court — '
-      + 'they point into it like spokes, and that is the honest name for this shape. It works well: three '
-      + 'doors onto one deck, the fourth side open downhill for the view and the cantilever, and every '
-      + 'hitch pointing outward so each unit draws straight out without the others moving. The gaps '
-      + 'between the arms stay walkable, which is what keeps three vehicles reading as three.',
-  },
-  {
-    id: 'u-court',
-    title: 'Three units — true U, doors lining three sides',
+    id: 'glass-comb-three',
+    title: 'Three units — parallel, all glass onto one long deck',
     unitCount: 3,
     requiresEntry: 'side',
     units: [
-      { id: 'A', model: 'Denali', ...denali, at: { x: -30, y: 5 }, rotDeg: 0, hitch: 'far-end' },
-      { id: 'B', model: 'Denali', ...denali, at: { x: 0, y: 42 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
-      { id: 'C', model: 'Denali', ...denali, at: { x: 30, y: 5 }, rotDeg: 0, hitch: 'far-end', mirrored: true },
+      { id: 'A', model: 'A-Frame Studio', ...studio, at: { x: -26, y: 0 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'B', model: 'A-Frame Studio', ...studio, at: { x: 0, y: 0 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'C', model: 'A-Frame Studio', ...studio, at: { x: 26, y: 0 }, rotDeg: 0, hitch: 'far-end' },
     ],
     decks: [
-      { id: 'deck-court', cantileverFt: 2, outline: [{ x: -24, y: -16 }, { x: 24, y: -16 }, { x: 24, y: 25 }, { x: -24, y: 25 }] },
-      { id: 'deck-back', cantileverFt: 0, outline: [{ x: -21, y: 25 }, { x: 21, y: 25 }, { x: 21, y: 36 }, { x: -21, y: 36 }] },
+      { id: 'view-deck', cantileverFt: 2, outline: [{ x: -40, y: -34 }, { x: 40, y: -34 }, { x: 40, y: -16 }, { x: -40, y: -16 }] },
+      { id: 'strip-A', cantileverFt: 0, outline: [{ x: -19.25, y: -16 }, { x: -11.25, y: -16 }, { x: -11.25, y: 16 }, { x: -19.25, y: 16 }] },
+      { id: 'strip-B', cantileverFt: 0, outline: [{ x: 6.75, y: -16 }, { x: 14.75, y: -16 }, { x: 14.75, y: 16 }, { x: 6.75, y: 16 }] },
+      { id: 'strip-C', cantileverFt: 0, outline: [{ x: 32.75, y: -16 }, { x: 40.75, y: -16 }, { x: 40.75, y: 16 }, { x: 32.75, y: 16 }] },
     ],
     why:
-      'This is the U proper, and it needs SIDE entry to exist: the door on the long wall is what lets a '
-      + 'unit lie along an edge of the court and still open onto it. Two units down the sides, one across '
-      + 'the head, the fourth side left open downhill for the view and the cantilever. The deck is drawn '
-      + 'as two planes for a reason — the upper one narrows to stay out of the side units\' tow lanes, '
-      + 'which is what lets every unit leave from a shape that looks enclosed. '
-      + '⚠️ It is also the shape closest to the line: three units around a court can start reading as one '
-      + 'compound rather than three vehicles parked near each other. Keep the fourth side genuinely open, '
-      + 'never roof any part of it, and put the question to the tax workstream before building.',
+      'Three units square to the contour, every glass wall aimed the same way down the fall, sharing one '
+      + 'long deck with the fire at its centre. Nothing stands in front of anything. All three tow '
+      + 'straight back uphill on parallel lanes, so any one can leave without touching the others. It is '
+      + 'the most view per unit of anything here, and the most strip — three flanks of pure circulation, '
+      + 'which is the price of a door at the far end.',
   },
   {
-    id: 'contour-line-three',
-    title: 'Three units — staggered along the contour',
+    id: 'mirror-contour-three',
+    title: 'Three side-glass units — stepped down the contour',
     unitCount: 3,
     requiresEntry: 'side',
     units: [
-      { id: 'A', model: 'Denali', ...denali, at: { x: -50, y: -20 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
-      { id: 'B', model: 'Denali', ...denali, at: { x: 0, y: 0 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
-      { id: 'C', model: 'Denali', ...denali, at: { x: 50, y: 20 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
+      { id: 'A', model: 'ÖÖD Extended', ...ood, at: { x: -40, y: 30 }, rotDeg: -90, hitch: 'far-end' },
+      { id: 'B', model: 'ÖÖD Extended', ...ood, at: { x: 0, y: 10 }, rotDeg: -90, hitch: 'far-end' },
+      { id: 'C', model: 'ÖÖD Extended', ...ood, at: { x: 40, y: -10 }, rotDeg: -90, hitch: 'far-end' },
     ],
     decks: [
-      { id: 'deck-A', cantileverFt: 2, outline: [{ x: -65, y: -38 }, { x: -29, y: -38 }, { x: -29, y: -26 }, { x: -65, y: -26 }] },
-      { id: 'deck-B', cantileverFt: 2, outline: [{ x: -15, y: -18 }, { x: 21, y: -18 }, { x: 21, y: -6 }, { x: -15, y: -6 }] },
-      { id: 'deck-C', cantileverFt: 2, outline: [{ x: 35, y: 2 }, { x: 71, y: 2 }, { x: 71, y: 14 }, { x: 35, y: 14 }] },
+      { id: 'deck-A', cantileverFt: 2, outline: [{ x: -53.04, y: 16.42 }, { x: -26.96, y: 16.42 }, { x: -26.96, y: 24.42 }, { x: -53.04, y: 24.42 }] },
+      { id: 'deck-B', cantileverFt: 2, outline: [{ x: -13.04, y: -3.58 }, { x: 13.04, y: -3.58 }, { x: 13.04, y: 4.42 }, { x: -13.04, y: 4.42 }] },
+      { id: 'deck-C', cantileverFt: 2, outline: [{ x: 26.96, y: -23.58 }, { x: 53.04, y: -23.58 }, { x: 53.04, y: -15.58 }, { x: 26.96, y: -15.58 }] },
     ],
     why:
-      'Long units lying ALONG the contour, each with its own side deck at its own door and no shared '
-      + 'plane at all. Lying along the slope keeps every pad a shallow, even cut; turned the other way '
-      + 'each unit needs a deep cut at one end. The stagger is then structural rather than stylistic: '
-      + 'units in a straight row tow into one another, so each steps far enough uphill to pull out past '
-      + 'its neighbour. Every deck also stops short of the lane behind it.',
+      'The layout only a SIDE glass wall allows. Each unit lies along the contour with its long glazed '
+      + 'face aimed down the fall, so the pad is a shallow even cut and the whole 26 ft wall is view. '
+      + 'Because the glass and the door share that wall, ONE deck serves both — no flank strip anywhere, '
+      + 'which is why three units here need barely a third of the deck the A-frame comb does. They step '
+      + 'far enough apart that each tows out along the contour past its neighbour. '
+      + '⚠️ Mirror glazing reflects whatever stands in front of it and carries a real bird-strike duty; '
+      + 'both belong in the spec, not in the snagging list.',
   },
   {
-    id: 'trident-hitched-in',
-    title: 'Three units — the same trident, one hitch turned the wrong way',
-    unitCount: 3,
-    requiresEntry: 'end',
+    id: 'glass-pair-facing',
+    title: 'Two units — glass walls facing each other (do not build)',
+    unitCount: 2,
+    requiresEntry: 'side',
     units: [
-      { id: 'A', model: 'Nook Family', ...nook, at: { x: -26, y: 4 }, rotDeg: 90, hitch: 'far-end' },
-      { id: 'B', model: 'Nook Family', ...nook, at: { x: 0, y: 34 }, rotDeg: 0, hitch: 'entry-end' },
-      { id: 'C', model: 'Nook Family', ...nook, at: { x: 26, y: 4 }, rotDeg: -90, hitch: 'far-end' },
+      { id: 'A', model: 'A-Frame Studio', ...studio, at: { x: 0, y: 24 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'B', model: 'A-Frame Studio', ...studio, at: { x: 0, y: -24 }, rotDeg: 180, hitch: 'far-end' },
     ],
-    decks: [{
-      id: 'deck', cantileverFt: 2,
-      outline: [{ x: -11, y: -6 }, { x: 11, y: -6 }, { x: 11, y: 19 }, { x: -11, y: 19 }],
-    }],
+    decks: [
+      { id: 'court', cantileverFt: 0, outline: [{ x: -12, y: -8 }, { x: 12, y: -8 }, { x: 12, y: 8 }, { x: -12, y: 8 }] },
+      { id: 'strip-A', cantileverFt: 0, outline: [{ x: 6.75, y: 8 }, { x: 14.75, y: 8 }, { x: 14.75, y: 40 }, { x: 6.75, y: 40 }] },
+      { id: 'strip-B', cantileverFt: 0, outline: [{ x: -14.75, y: -40 }, { x: -6.75, y: -40 }, { x: -6.75, y: -8 }, { x: -14.75, y: -8 }] },
+    ],
     why:
-      'Exactly the trident above, to the inch, with one difference: the back unit was set down with its tongue '
-      + 'pointing into the court instead of uphill. Nothing about the drawing looks wrong. The unit is '
-      + 'now permanently parked, because the only way out is across its own deck. This is why hitch '
-      + 'orientation belongs on the delivery drawing and not in someone\'s head on the day.',
-    rejected: 'The back unit\'s tow lane runs across the shared deck. Same geometry as the working '
-      + 'trident — one placement decision, made once, at delivery.',
+      'A courtyard between two glass walls. It passes every structural test in this file — the gaps are '
+      + 'right, both units tow clear, every door and every glass wall lands on deck — and it is still the '
+      + 'worst plan here, because each unit\'s twelve-foot window looks straight into the other\'s '
+      + 'bedroom from sixteen feet away. The glazing is the product. Point it at a view or do not pay '
+      + 'for it.',
+    rejected: 'Both glass walls look into each other, not at the valley. Structurally fine, commercially '
+      + 'worthless — the one thing guests are paying for is cancelled.',
   },
 ];
 
