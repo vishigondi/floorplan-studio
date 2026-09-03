@@ -90,6 +90,16 @@ export interface ObservedUnit {
    * because it changes how the deck is used, not just how it looks.
    */
   foldingDoorToDeck?: boolean;
+  /**
+   * Window-schedule tags off the floor plan, decoded. Manufactured-housing
+   * notation: the first pair is width in feet and inches, the second is height,
+   * so 3090FX is a 3 ft wide by 9 ft TALL fixed light. This is the only hard
+   * evidence of glazing extent there is — marketing copy overstates and a plain
+   * plan view understates, which is how this record got both wrong in turn.
+   */
+  windowSchedule?: readonly string[];
+  /** Deck built INTO the unit at the factory, in feet of overall length. */
+  integratedPorchFt?: number;
   /** Tows inside the 8.5 ft limit with no permit, escort or route approval. */
   towsPermitFree: boolean;
   source: string;
@@ -163,11 +173,12 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     towsPermitFree: false, mirroring: 'unknown',
     evidenceStatus: 'owner-directed',
     foldingDoorToDeck: true,
-    glassEvidence: 'FAILS THE GLASS-WALL BAR ON ITS OWN FLOOR PLAN. What the drawing actually shows is '
-      + 'a window in the living gable plus an OPTIONAL folding door onto the covered deck — not a '
-      + 'full-height glass wall. Included on instruction, with that stated rather than smoothed over.',
+    glassEvidence: 'NOT DETERMINABLE FROM THE PUBLISHED PLAN. The marketing drawing carries no window '
+      + 'schedule, so it shows where openings are and not how big they are. It does show an OPTIONAL '
+      + 'folding door onto the covered deck. The renderings show substantial glazing. Included on '
+      + 'instruction; the extent is an open question, not a settled negative.',
     openQuestions: [
-      'Is any wall full-height glass? The floor plan says no — confirm there is no glazed option.',
+      'Send the window schedule. The marketing plan has none, so glazing extent is unknown.',
       'How wide is the folding door, and is it glazed full height?',
       'Is the covered deck structurally part of the unit, and does it count against the 400 sq ft?',
       'RVIA / ANSI A119.5 certification in writing. "Will meet the Park Model code" is about size.',
@@ -185,16 +196,39 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     towsPermitFree: false, mirroring: 'unknown',
     evidenceStatus: 'owner-directed',
     foldingDoorToDeck: true,
-    glassEvidence: 'FAILS THE GLASS-WALL BAR ON ITS OWN FLOOR PLAN, exactly as the Cabana does: an '
-      + 'OPTIONAL folding door onto a covered deck, and ordinary windows elsewhere. Included on '
-      + 'instruction.',
+    glassEvidence: 'NOT DETERMINABLE FROM THE PUBLISHED PLAN, exactly as the Cabana. No window '
+      + 'schedule on the drawing; an OPTIONAL folding door onto a covered deck is shown. Included on '
+      + 'instruction; the extent is an open question, not a settled negative.',
     openQuestions: [
-      'Is any wall full-height glass? The floor plan says no — confirm there is no glazed option.',
+      'Send the window schedule. The marketing plan has none, so glazing extent is unknown.',
       'How wide is the folding door, and is it glazed full height?',
       'Which wall is the entry door actually on, and how far along?',
       'Reconcile the price: $102,100 and $120,100 both appear in public listings.',
     ],
     source: 'irontownmodular.com/mysa-400-park-model (floor plan PDF, 2025-06-16)',
+  },
+  {
+    maker: 'Irontown Modular', model: 'Skyview 400', widthFt: 12.67, lengthFt: 33, interiorSqFt: 398,
+    entry: 'side', glassWall: 'side', glassSplitFromDoor: false, doorAtFractionFromGlass: 0.5,
+    entryNote: 'THE ONE IRONTOWN PLAN WITH A WINDOW SCHEDULE, so the only one whose glazing can be '
+      + 'checked rather than guessed. Overall 44\'0" x 12\'8" INCLUDING an 11 ft integrated porch at '
+      + 'the living end — factory-built deck, which is the whole programme. Loft over storage, and a '
+      + 'loft is excluded from the ANSI living-area cap, so it buys sleeping space for free.',
+    factoryPorch: 'integrated porch, 11 ft of the 44 ft overall length, built at the factory',
+    towsPermitFree: false, mirroring: 'unknown',
+    evidenceStatus: 'published',
+    integratedPorchFt: 11,
+    windowSchedule: [
+      '3090FX — 3 ft wide x 9 ft TALL fixed, in the living long wall',
+      '3066FX x2 — 3 ft x 6 ft 6 in fixed, facing the porch',
+      '3068 — 3 ft x 6 ft 8 in glazed door onto the porch',
+      '3060FX / 3030FX — secondary lights at the loft and bedroom',
+    ],
+    glassEvidence: 'WINDOW SCHEDULE, not marketing. A 3090FX is a nine-foot-tall fixed light in the '
+      + 'living wall, with roughly nine feet of glazing and door onto the porch beside it. Full HEIGHT '
+      + 'rather than full width — tall glass composed of discrete lights, not one uninterrupted pane '
+      + 'like the Zook A-frame gable or the ÖÖD facade.',
+    source: 'irontownmodular.com/skyview-400-park-model (floor plan PDF, 2024-07-22)',
   },
 ];
 
@@ -338,16 +372,23 @@ export const UNVERIFIED = [] as const;
 export const FOLDING_DOOR_UNITS = OBSERVED_UNITS.filter((u) => u.foldingDoorToDeck === true);
 
 export const SURVEY = {
-  qualified: 7,
+  qualified: 8,
   rejected: 5,
   awaitingEvidence: 0,
-  /** Of the qualified, how many rest on the maker's own published words. */
-  evidencePublished: 5,
-  /** And how many are in on instruction, with the glass wall assumed. */
+  /** Of the qualified, how many rest on published evidence. */
+  evidencePublished: 6,
+  /** And how many are in on instruction, with glazing extent still open. */
   evidenceOwnerDirected: 2,
   makersQualified: ['Zook', 'ÖÖD', 'Irontown Modular'],
   bar: 'The maker\'s own words must describe a glass WALL or facade. "Large windows", "window '
     + 'designs" and "sliding glass entryway" are not evidence, and neither is a rendering.',
+  /**
+   * A PLAN VIEW IS NOT EVIDENCE EITHER WAY. Without a window schedule it shows
+   * where openings sit and not how big they are. This record briefly recorded
+   * "fails the bar" off exactly such a drawing, which was a claim the drawing
+   * could not support. A window schedule settles it; nothing weaker does.
+   */
+  evidenceRank: ['window schedule', 'dimensioned elevation', 'maker prose', 'plan view', 'rendering'],
 } as const;
 
 export const MIRRORING_BY_MAKER = {

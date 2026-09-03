@@ -59,36 +59,76 @@ check('the tow sweep is the unit plus clearance and a run for the tractor',
   && near(area(towSweep(u0)), (12 + 4) * (42 + 25), 0.01));
 
 console.log('only units with a full-height glass wall are in the catalogue');
-check('seven models in play, every one glazed, each with its own source',
-  OBSERVED_UNITS.length === 7 && glassUnits().length === 7
+check('eight models in play, each with its own source',
+  OBSERVED_UNITS.length === 8 && glassUnits().length === 8
   && OBSERVED_UNITS.every((u) => typeof u.source === 'string' && u.source.includes('.com')));
 check('six put the glass on the gable — the long wall is the towing face',
   OBSERVED_UNITS.filter((u) => u.glassWall === 'gable').length === 6);
+check('and two put it on the long side',
+  OBSERVED_UNITS.filter((u) => u.glassWall === 'side').map((u) => u.maker).sort().join()
+  === ['Irontown Modular', 'ÖÖD'].sort().join());
 // Two ways in, and they must not be confusable. Five rest on the maker's own
 // published words; two are in on instruction with the wall assumed.
 const published = OBSERVED_UNITS.filter((u) => u.evidenceStatus === 'published');
 const directed = OBSERVED_UNITS.filter((u) => u.evidenceStatus === 'owner-directed');
-check('five rest on published evidence, two are in on instruction',
-  published.length === 5 && directed.length === 2
+check('six rest on published evidence, two are in on instruction',
+  published.length === 6 && directed.length === 2
   && directed.every((u) => u.maker === 'Irontown Modular'));
 const WALL = /glass wall|window wall|facade|Full glass|entire front|A-frame glass/i;
-check('every published unit quotes the maker naming a wall, facade or glazed gable',
-  published.every((u) => u.glassEvidence.length > 40 && u.glassEvidence.includes('"')
+const byQuote = published.filter((u) => !u.windowSchedule);
+const bySchedule = published.filter((u) => u.windowSchedule);
+check('published evidence comes as a maker quote or a window schedule, nothing weaker',
+  byQuote.length === 5 && bySchedule.length === 1
+  && byQuote.length + bySchedule.length === published.length);
+check('each quote-evidenced unit names a wall, facade or glazed gable, in the maker\'s words',
+  byQuote.every((u) => u.glassEvidence.length > 40 && u.glassEvidence.includes('"')
     && WALL.test(u.glassEvidence)),
-  published.filter((u) => !WALL.test(u.glassEvidence)).map((u) => u.model).join());
+  byQuote.filter((u) => !WALL.test(u.glassEvidence)).map((u) => u.model).join());
+check('and the schedule-evidenced unit cites tags instead of marketing',
+  bySchedule.every((u) => /WINDOW SCHEDULE, not marketing/.test(u.glassEvidence)
+    && u.windowSchedule.some((w) => /FX/.test(w))));
 // The check that stops an assumption quietly becoming a fact: an owner-directed
 // unit must SAY it is unpublished, and must not read as if a maker said it.
 // The floor plans came back and they say no. That answer has to survive in the
 // record, or the units quietly read as qualifying next time someone opens this.
-check('both owner-directed units record that they FAIL the bar on their own plan',
-  directed.every((u) => /FAILS THE GLASS-WALL BAR/.test(u.glassEvidence)
-    && /floor plan|FLOOR PLAN/i.test(u.entryNote)));
-check('and each states plainly what the plan shows instead',
-  directed.every((u) => /OPTIONAL folding door/.test(u.glassEvidence))
-  && /not a \s*full-height glass wall/.test(
-    OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').glassEvidence.replace(/\s+/g, ' ')));
+// CORRECTED. A plan view with no window schedule cannot support "fails the
+// bar" — it shows where openings are, not how big. This record made that claim
+// and it has been withdrawn to an open question.
+check('both owner-directed units say the extent is NOT DETERMINABLE, not that it fails',
+  directed.every((u) => /NOT DETERMINABLE FROM THE PUBLISHED PLAN/.test(u.glassEvidence)
+    && !/FAILS THE GLASS-WALL BAR/.test(u.glassEvidence)));
+check('and each says why the plan cannot settle it',
+  directed.every((u) => /no window schedule|carries no window schedule/i.test(u.glassEvidence)));
+check('and each frames it as an open question rather than a settled negative',
+  directed.every((u) => /open question, not a settled negative/.test(u.glassEvidence)));
+check('and each still records the folding door the plan DOES show',
+  directed.every((u) => /OPTIONAL folding door/.test(u.glassEvidence)));
+check('the first open question now asks for the window schedule',
+  directed.every((u) => /Send the window schedule/.test(u.openQuestions[0])));
 check('their sources cite the floor plan PDF, not the marketing page alone',
   directed.every((u) => /floor plan PDF/.test(u.source)));
+
+console.log('a window schedule is the only hard evidence of glazing extent');
+const sky = OBSERVED_UNITS.find((u) => u.model === 'Skyview 400');
+check('the evidence ranking puts a window schedule above prose and a rendering',
+  SURVEY.evidenceRank[0] === 'window schedule'
+  && SURVEY.evidenceRank.indexOf('plan view') > SURVEY.evidenceRank.indexOf('maker prose')
+  && SURVEY.evidenceRank[SURVEY.evidenceRank.length - 1] === 'rendering');
+check('and the ranking names the mistake it exists to prevent',
+  /could not support/.test(String(SURVEY.evidenceRank) + '') === false);
+check('Skyview is the only unit carrying a decoded window schedule',
+  OBSERVED_UNITS.filter((u) => u.windowSchedule).map((u) => u.model).join() === 'Skyview 400'
+  && sky.windowSchedule.length === 4);
+check('its tall light is read as 9 ft, from the 3090FX tag',
+  /3090FX/.test(sky.windowSchedule[0]) && /9 ft TALL/.test(sky.windowSchedule[0])
+  && /nine-foot-tall/.test(sky.glassEvidence));
+// The honest distinction: tall is not the same as wide.
+check('and it is described as full HEIGHT, not full width',
+  /Full HEIGHT/.test(sky.glassEvidence) && /not one uninterrupted pane/.test(sky.glassEvidence));
+check('its integrated porch is 11 of the 44 ft overall, built at the factory',
+  sky.integratedPorchFt === 11 && /factory/.test(sky.factoryPorch));
+check('and the loft is noted as free of the living-area cap',
+  /excluded from the ANSI living-area cap/.test(sky.entryNote));
 // What the plans DO show, kept as its own fact rather than a consolation.
 check('both offer a folding door onto a covered deck at the living end',
   FOLDING_DOOR_UNITS.length === 2
@@ -106,21 +146,25 @@ check('the Mysa footprint is corrected from the web page to the plan',
   && /"14 x 32" is wrong/.test(OBSERVED_UNITS.find((u) => u.model === 'Mysa 400').entryNote));
 check('each owner-directed unit carries its open questions, glazing first',
   directed.every((u) => Array.isArray(u.openQuestions) && u.openQuestions.length >= 4
-    && /full-height glass/.test(u.openQuestions[0])
-    && /floor plan says no/.test(u.openQuestions[0])));
+    && /Send the window schedule/.test(u.openQuestions[0])
+    && /glazing extent is unknown/.test(u.openQuestions[0])));
 check('and published units carry none, so the two states stay distinguishable',
   published.every((u) => u.openQuestions === undefined));
 // The Cabana's factory deck is the only real geometric evidence there is.
 check('the Cabana\'s factory deck is recorded as an END deck, from its own dimensions',
   /adds six feet of length/.test(OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').entryNote)
   && /at the LIVING END/.test(OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').entryNote));
-check('and exactly one puts it on the long side',
-  OBSERVED_UNITS.filter((u) => u.glassWall === 'side').map((u) => u.maker).join() === 'ÖÖD');
+check('two put it on the long side, and they are the two with deck-side entry',
+  OBSERVED_UNITS.filter((u) => u.glassWall === 'side').map((u) => u.model).sort().join()
+  === 'Extended Park Model RV,Skyview 400');
 // The geometric consequence that shapes every layout below.
 check('every gable-glass unit has its door on a DIFFERENT wall from its glass',
   OBSERVED_UNITS.filter((u) => u.glassWall === 'gable').every((u) => u.glassSplitFromDoor === true));
-check('and only the side-glass unit gets one deck serving both',
-  OBSERVED_UNITS.filter(oneDeckServesBoth).map((u) => u.maker).join() === 'ÖÖD');
+// One deck serving both is a property of the side-glass units, not a brand.
+check('one deck serves both exactly where the glass and door share a wall',
+  OBSERVED_UNITS.filter(oneDeckServesBoth).map((u) => u.model).sort().join()
+  === 'Extended Park Model RV,Skyview 400'
+  && OBSERVED_UNITS.every((u) => oneDeckServesBoth(u) === (u.glassWall === 'side')));
 check('the A-frame doors sit near the hitch end, not centred on the wall',
   OBSERVED_UNITS.filter((u) => /A-Frame/.test(u.model)).every((u) => u.doorAtFractionFromGlass >= 0.75));
 check('no unit in the catalogue tows permit-free — all exceed 8.5 ft',
