@@ -91,6 +91,59 @@ export const OPEN_DECK = {
  *    and that line must be tied down. The piles come back, for a different
  *    reason and in a different place.
  */
+/**
+ * SCALING A CANTILEVER DOWN IS WHAT SAVES MONEY; SCALING IT UP COSTS.
+ *
+ * Moment grows as c² and deflection as c⁴, so reach is the most expensive
+ * dimension on the deck: 1.5 ft to 12 ft is 64x the moment and 4,096x the
+ * stiffness demand. Cost per square foot RISES with reach. The dramatic
+ * overhangs in the reference photographs are not an economy — they are what you
+ * do when the ground will not take a post at all.
+ *
+ * The saving is in the opposite move: CANTILEVER BOTH WAYS off the same two
+ * girder lines. Pull both girders inboard so the joist overhangs toward the
+ * unit and toward the view, each by a quarter of the backspan.
+ *
+ *   - the deck gets 33% of its area with no post under it
+ *   - the backspan drops to 2/3 of the deck depth, so the JOIST GETS SMALLER —
+ *     a 12 ft deck goes from 2x10 to a 8 ft backspan
+ *   - and it NEVER lifts its supports: the two cantilevers hold each other
+ *     down, so no tie-downs, no steel, no PE stamp
+ *
+ * That last point is what separates it from the single long cantilever, which
+ * lifts its back line and brings the piles back.
+ */
+export const BALANCED_CANTILEVER = {
+  /** Backspan as a fraction of total deck depth, at the quarter rule. */
+  backspanFractionOfDepth: 2 / 3,
+  /** Each cantilever as a fraction of total deck depth. */
+  cantileverFractionOfDepth: 1 / 6,
+  /** Share of the deck standing on nothing. */
+  freeAreaFraction: 1 / 3,
+  source: 'IRC R507 quarter rule applied both ways; statics for the balanced case',
+};
+
+/**
+ * For a target deck depth, the balanced arrangement and what it saves.
+ * Returns the backspan a single-span deck would need versus the balanced one,
+ * so the joist size can be read off the same App M table for both.
+ */
+export function balancedSpanFor(depthFt: number): {
+  singleSpanFt: number; backspanFt: number; cantileverFt: number;
+  freeAreaFraction: number; liftsSupports: boolean; backReactionPlf: number;
+} {
+  const L = round2(depthFt * BALANCED_CANTILEVER.backspanFractionOfDepth);
+  const c = round2(depthFt * BALANCED_CANTILEVER.cantileverFractionOfDepth);
+  const wd = APPENDIX_M.deckDeadPsf, wl = APPENDIX_M.deckLivePsf;
+  // Worst uplift at the far line: live on the near cantilever only, dead everywhere.
+  const backReactionPlf = round2((wd * (2 * c + L)) / 2 - (wl * c * c) / (2 * L));
+  return {
+    singleSpanFt: round2(depthFt), backspanFt: L, cantileverFt: c,
+    freeAreaFraction: BALANCED_CANTILEVER.freeAreaFraction,
+    liftsSupports: backReactionPlf < 0, backReactionPlf,
+  };
+}
+
 export const CANTILEVER = {
   /** IRC R507 / App M: joist cantilever as a fraction of backspan. Wood only. */
   woodMaxFractionOfBackspan: 0.25,
@@ -683,6 +736,17 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
           + 'and a different place from the pergola.'
         : ` The back line still bears (${cc.backReactionPlf} plf), so no tie-down is needed for it.`)
       + ` Deflection governs the feel: ${CANTILEVER.tipDeflectionLimit}.`);
+    if (!cc.woodOk) {
+      const bal = balancedSpanFor(sd.depthFt + cc.cantileverFt);
+      notes.push(`CHEAPER ALTERNATIVE TO REACHING FURTHER: reach is the dearest dimension on a deck — `
+        + 'moment grows as c² and deflection as c⁴, so cost per sq ft RISES with the overhang. For the same '
+        + `${round2(sd.depthFt + cc.cantileverFt)} ft of deck, CANTILEVER BOTH WAYS off the same two girder lines: `
+        + `${bal.backspanFt} ft backspan with ${bal.cantileverFt} ft overhanging each side. That is `
+        + `${Math.round(bal.freeAreaFraction * 100)}% of the deck standing on nothing, a SMALLER joist (the span `
+        + `drops from ${bal.singleSpanFt} to ${bal.backspanFt} ft), and it never lifts its supports `
+        + `(${bal.backReactionPlf} plf) — so no tie-downs, no steel, no PE stamp. Reach further only when the `
+        + 'GROUND will not take a post, which is what the reference houses are actually doing.');
+    }
     notes.push(`AND THE CANTILEVER IS THE BEST PREFAB CANDIDATE HERE. A post ring is many small field `
       + 'connections on a 12.8% slope; a cantilevered bay is ONE moment connection to a backspan, made in a shop '
       + 'with camber built in. Fabricate the bay complete, set it on the two girder lines, bolt it down. That is '

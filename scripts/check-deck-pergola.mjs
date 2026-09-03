@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -167,6 +167,39 @@ check('the cantilever adds deck area',
     > plan.sides.find((x) => x.id === 'farSide').areaSqFt);
 check('the prefab argument is stated where the cantilever appears',
   cantSteel.notes.some((n) => /BEST PREFAB CANDIDATE HERE/.test(n) && /ONE moment connection/.test(n)));
+
+console.log('scaling a cantilever DOWN saves; scaling it UP costs');
+// Moment ∝ c², deflection ∝ c⁴, so reach is the dearest dimension on the deck.
+// The saving is the opposite move: cantilever BOTH ways off the same two lines.
+for (const D of [6, 10, 12, 14, 18]) {
+  const b = balancedSpanFor(D);
+  check(`${D} ft deck: balanced backspan is 2/3 of the depth`,
+    Math.abs(b.backspanFt - D * 2 / 3) < 0.02 && Math.abs(b.cantileverFt - D / 6) < 0.02);
+  check(`${D} ft deck: the balanced case never lifts its supports`,
+    b.liftsSupports === false && b.backReactionPlf > 0, `${b.backReactionPlf} plf`);
+  check(`${D} ft deck: the backspan is shorter than the single span`, b.backspanFt < b.singleSpanFt);
+}
+check('a third of a balanced deck stands on nothing',
+  Math.abs(BALANCED_CANTILEVER.freeAreaFraction - 1 / 3) < 1e-9);
+// The contrast that matters: single long cantilever lifts, balanced does not.
+check('a single 5 ft cantilever off a 6 ft backspan LIFTS its back line',
+  checkCantilever(5, 6).liftsBackLine === true);
+check('the balanced equivalent does not', balancedSpanFor(11).liftsSupports === false);
+// And the deeper the deck, the bigger the joist saving.
+check('a 12 ft deck drops from a 12 ft span to an 8 ft backspan',
+  Math.abs(balancedSpanFor(12).backspanFt - 8) < 0.02);
+check('an 18 ft deck drops from beyond the 2x10 table to 12 ft, inside it',
+  balancedSpanFor(18).singleSpanFt > APPENDIX_M.joistSpanFt['2x10']
+  && balancedSpanFor(18).backspanFt <= APPENDIX_M.joistSpanFt['2x10'],
+  `${balancedSpanFor(18).backspanFt}`);
+// The advice has to reach the reader at the point they are over-reaching.
+const reaching = buildDeckPlan({ ...base, cantileverFt: { farSide: 5 } });
+check('an over-reaching cantilever is offered the cheaper arrangement',
+  reaching.notes.some((n) => /CHEAPER ALTERNATIVE TO REACHING FURTHER/.test(n)
+    && /never lifts its supports/.test(n) && /GROUND will not take a post/.test(n)));
+const withinRule = buildDeckPlan({ ...base, cantileverFt: { farSide: 1.5 } });
+check('a wood-rule cantilever is not lectured about it',
+  !withinRule.notes.some((n) => /CHEAPER ALTERNATIVE/.test(n)));
 
 console.log('the deck is designed to the ENVELOPE, not to one manufacturer');
 // Building around one unit locks the site plan to that unit's maker — the same
