@@ -212,8 +212,10 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entry: 'side', glassWall: 'side', glassSplitFromDoor: false, doorAtFractionFromGlass: 0.5,
     entryNote: 'THE ONE IRONTOWN PLAN WITH A WINDOW SCHEDULE, so the only one whose glazing can be '
       + 'checked rather than guessed. Overall 44\'0" x 12\'8" INCLUDING an 11 ft integrated porch at '
-      + 'the living end — factory-built deck, which is the whole programme. Loft over storage, and a '
-      + 'loft is excluded from the ANSI living-area cap, so it buys sleeping space for free.',
+      + 'the living end — factory-built deck, which is the whole programme. Loft over storage. ⚠️ CORRECTED: a loft is NOT '
+      + 'automatically free of the area cap. NCDOI counts a habitable loft — 5 ft or more of ceiling — '
+      + 'inside the gross trailer area, so a loft you intend to sleep in counts against the 400. See '
+      + 'nc-classification.ts. Ask Irontown whether the quoted 398 sq ft already includes it.',
     factoryPorch: 'integrated porch, 11 ft of the 44 ft overall length, built at the factory',
     towsPermitFree: false, mirroring: 'unknown',
     evidenceStatus: 'published',
@@ -286,7 +288,10 @@ export const OOD_CLASSIFICATION_CONFLICT = {
   theirWording: 'designed to meet Park Model RV standards',
   theRisk: 'The wheels and the tow bar of the chassis can be hidden or removed for a nice terrace '
     + 'to be built around the house.',
-  conflictsWith: 'Zook site prep: the park model must remain ATTACHED to its wheels.',
+  conflictsWith: 'Zook site prep: the park model must remain ATTACHED to its wheels. And NC is '
+    + 'stricter still — the NCDOI memo requires that "the wheels and axles must remain on the unit at '
+    + 'all times" for the unit to stay classified as a temporary structure. In North Carolina, taking '
+    + 'the tow bar off is not a grey area. See nc-classification.ts.',
   resolveBefore: 'order' as const,
   actions: [
     'Get the RVIA / ANSI A119.5 certification in writing, not "designed to meet".',

@@ -127,8 +127,16 @@ check('and it is described as full HEIGHT, not full width',
   /Full HEIGHT/.test(sky.glassEvidence) && /not one uninterrupted pane/.test(sky.glassEvidence));
 check('its integrated porch is 11 of the 44 ft overall, built at the factory',
   sky.integratedPorchFt === 11 && /factory/.test(sky.factoryPorch));
-check('and the loft is noted as free of the living-area cap',
-  /excluded from the ANSI living-area cap/.test(sky.entryNote));
+// CORRECTED. This check previously asserted the loft was free of the cap. It
+// is not, in North Carolina: NCDOI counts a habitable loft (5 ft or more of
+// ceiling) inside the gross trailer area. The check now guards the correction
+// rather than the error it replaced.
+check('the loft is NOT claimed to be free of the area cap',
+  !/excluded from the ANSI living-area cap/.test(sky.entryNote)
+  && /CORRECTED/.test(sky.entryNote)
+  && /counts against the 400/.test(sky.entryNote));
+check('and it points at the module holding the state\'s wording',
+  /nc-classification\.ts/.test(sky.entryNote));
 // What the plans DO show, kept as its own fact rather than a consolation.
 check('both offer a folding door onto a covered deck at the living end',
   FOLDING_DOOR_UNITS.length === 2
