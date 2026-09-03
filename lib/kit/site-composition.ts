@@ -1,6 +1,12 @@
 /**
  * SITE COMPOSITION — arranging one, two or three park units around open decks.
  *
+ * EVERY UNIT SITS SQUARE. Rotations are multiples of 90 degrees and nothing is
+ * splayed: an angled unit needs an angled pad, angled deck framing and a bevel
+ * on every board that meets it, which is site labour spent on geometry rather
+ * than on the building. Orthogonal shapes — the L, the U, the parallel pair —
+ * do the same work with square cuts. ORTHOGONAL_ONLY is enforced by the gate.
+ *
  * Two facts from the catalogues drive everything here, and neither is obvious
  * until you go looking for a floor plan:
  *
@@ -103,6 +109,103 @@ export const SKIRTING_IS_DELEGATED = {
   instruction: 'Removable panels only. Never masonry. Never cut the hitch.',
 } as const;
 
+/**
+ * WHAT THE MANUFACTURER ACTUALLY REQUIRES — Zook site-prep and delivery pages.
+ *
+ * The site-prep page settles a question this kit had been arguing on tax grounds
+ * alone. Zook states plainly that the unit "must remain attached to its wheels",
+ * recommends blocking it up so it is not RESTING on them, and then forbids the
+ * exact thing the treehouse photographs show:
+ *
+ *     "You should not install foundations such as pier and beam, crawl space,
+ *      or pit foundations"
+ *
+ * So lifting a park model onto a timber post frame is not merely a tax risk. It
+ * is outside the manufacturer's own site-prep instructions, which is a warranty
+ * and a listing problem before anyone reaches the depreciation question. The
+ * accent budget's answer — cut the pad, do not lift the box — is now sourced,
+ * not merely argued.
+ */
+export const PAD_SPEC = {
+  stoneDepthIn: [4, 5] as const,
+  concreteDepthIn: [4, 6] as const,
+  /** The pad runs past the unit on every side. */
+  marginPastUnitFt: 1,
+  requirements: [
+    'As level a location as possible — the more sloped, the harder a lasting foundation becomes.',
+    'Ground as firm as possible; if recently excavated, wait or choose another location.',
+    'Grade for drainage — bad drainage causes settling, water damage and uneven moisture.',
+  ],
+  blocking: 'Block up on wooden or masonry blocks so the unit is not RESTING on its wheels.',
+  wheelsStayOn: 'The park model must remain ATTACHED to its wheels.',
+  source: 'zookcabins.com/planning/park-model/site-prep',
+} as const;
+
+/** Foundations the manufacturer explicitly rules out. Note what is on this list. */
+export const PROHIBITED_FOUNDATIONS = ['pier and beam', 'crawl space', 'pit'] as const;
+
+export function foundationAllowed(kind: string): boolean {
+  return !PROHIBITED_FOUNDATIONS.some((f) => kind.toLowerCase().includes(f));
+}
+
+/**
+ * DELIVERY ACCESS. The corner figure is the one that matters on a switchback
+ * road, because it is not a constant — it grows with the unit.
+ */
+export const DELIVERY_ACCESS = {
+  straightWidthFt: 18,
+  straightClearanceFt: 16,
+  verticalClearanceFt: 16,
+  /** Corners need this PLUS the unit's own width. */
+  cornerBaseFt: 16,
+  notes: [
+    'All corners must be accessible for a semi truck; branches trimmed and low wires tied up.',
+    'Curbside is the delivery policy — placement on the pad happens only on request.',
+    'If the pad is unreachable, a skid steer is rented on the day and charged to the customer.',
+    'The customer carries liability for wires, cables, septic tanks and pipes broken during delivery.',
+    'Zook does not do site preparation; the pad is entirely the customer\'s scope.',
+  ],
+  source: 'zookcabins.com/planning/park-model/delivery-details',
+} as const;
+
+/** Clearance a corner must hold for a unit of this width. Grows with the unit. */
+export function cornerClearanceFt(unitWidthFt: number): number {
+  return DELIVERY_ACCESS.cornerBaseFt + unitWidthFt;
+}
+
+/** Corner width saved per switchback by choosing the narrower unit. */
+export function cornerSavingFt(wideFt: number, narrowFt: number): number {
+  return Math.round((cornerClearanceFt(wideFt) - cornerClearanceFt(narrowFt)) * 100) / 100;
+}
+
+/**
+ * CUSTOMISATION IS A VOLUME UNLOCK, NOT A LINE ITEM.
+ *
+ *   "Our Zook Cabin Park Model Homes are not customizable when ordered as a
+ *    single unit."
+ *   "If you want to purchase 10 or more park-model homes, we would be willing
+ *    to create a custom floor plan."
+ *
+ * Every layout below that needs a reversed plan is therefore unavailable at
+ * small volume from this maker. Door position is a CONSTRAINT under ten units
+ * and a VARIABLE at ten or more, which makes the tenth unit worth more than the
+ * ninth for reasons that have nothing to do with price.
+ */
+export const CUSTOMISATION = {
+  singleUnit: 'Not customizable when ordered as a single unit.',
+  unlockAtUnits: 10,
+  unlocked: 'At ten or more units the maker will create a custom floor plan.',
+  whatMirroringBuys:
+    'A reversed plan moves the door to the other long wall while the hitch stays at the same end. '
+    + 'Rotating the unit 180 degrees also moves the door, but it reverses the exit direction with it. '
+    + 'Mirroring buys door position without spending tow direction.',
+  source: 'zookcabins.com/planning/park-model/construction-details',
+} as const;
+
+export function customisationAvailableAt(unitsOrdered: number): boolean {
+  return unitsOrdered >= CUSTOMISATION.unlockAtUnits;
+}
+
 // ---------------------------------------------------------------------------
 // Geometry
 // ---------------------------------------------------------------------------
@@ -120,6 +223,14 @@ export interface PlacedUnit {
   rotDeg: number;
   entry: EntryPattern;
   hitch: HitchEnd;
+  /**
+   * A reversed (handed) plan. Mirroring flips LEFT/RIGHT only: the door moves
+   * to the opposite long wall while the hitch stays at the same physical end.
+   * That is the whole reason it matters — rotating a unit 180 degrees also moves
+   * the door, but it reverses the exit direction with it. Mirroring buys door
+   * position without spending tow direction.
+   */
+  mirrored?: boolean;
 }
 
 export interface DeckPlane {
@@ -153,6 +264,60 @@ export function unitCorners(u: PlacedUnit): Pt[] {
     x: u.at.x + x * c - y * s,
     y: u.at.y + x * s + y * c,
   }));
+}
+
+/**
+ * Outward normal of the wall the door is in. For end entry the door is always in
+ * the entry gable, so mirroring cannot move it; for side entry it is in one long
+ * wall, and mirroring is the only thing that moves it to the other.
+ */
+export function doorFacing(u: PlacedUnit): Pt {
+  const c = Math.cos(rad(u.rotDeg)), s2 = Math.sin(rad(u.rotDeg));
+  if (u.entry === 'end') { const a = lengthAxis(u); return { x: -a.x, y: -a.y }; }
+  return u.mirrored ? { x: -c, y: -s2 } : { x: c, y: s2 };
+}
+
+/** Mid-point of the door wall, on the face of the unit. */
+export function doorPoint(u: PlacedUnit): Pt {
+  const f = doorFacing(u);
+  const reach = u.entry === 'end' ? u.lengthFt / 2 : u.widthFt / 2;
+  return { x: u.at.x + f.x * reach, y: u.at.y + f.y * reach };
+}
+
+export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > p.y) !== (b.y > p.y)
+      && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/** How far off the door wall we sample to ask "is there deck here". */
+export const DOOR_LANDING_FT = 1.5;
+
+/**
+ * A door that does not open onto a deck opens onto a drop. This is the check the
+ * first draft of these layouts did not have, and half of them failed it.
+ */
+export function doorOpensOntoDeck(u: PlacedUnit, layout: SiteLayout): boolean {
+  const f = doorFacing(u), d = doorPoint(u);
+  const probe = { x: d.x + f.x * DOOR_LANDING_FT, y: d.y + f.y * DOOR_LANDING_FT };
+  return layout.decks.some((deck) => pointInPolygon(probe, deck.outline));
+}
+
+export function everyDoorLands(layout: SiteLayout): boolean {
+  return layout.units.every((u) => doorOpensOntoDeck(u, layout));
+}
+
+/** Units in this layout that must be ordered as reversed plans. */
+export function mirroredUnits(layout: SiteLayout): string[] {
+  return layout.units.filter((u) => u.mirrored).map((u) => u.id);
+}
+
+export function requiresMirroring(layout: SiteLayout): boolean {
+  return mirroredUnits(layout).length > 0;
 }
 
 /** Unit vector along the unit's length, pointing away from the entry end. */
@@ -245,6 +410,18 @@ export function minGapFt(layout: SiteLayout): number {
 /** Below this two units stop reading as two objects and start reading as one. */
 export const MIN_SEPARATION_FT = 8;
 
+/**
+ * Units sit square. An angled unit costs an angled pad, angled framing and a
+ * bevel on every board that lands on it — site labour spent on geometry rather
+ * than on the building, and this programme is trying to move labour the other
+ * way. The L and the U reach the same shapes with square cuts.
+ */
+export const ORTHOGONAL_ONLY = true;
+
+export function isOrthogonal(layout: SiteLayout): boolean {
+  return layout.units.every((u) => ((u.rotDeg % 90) + 90) % 90 === 0);
+}
+
 // ---------------------------------------------------------------------------
 // The layouts
 // ---------------------------------------------------------------------------
@@ -291,23 +468,23 @@ export const LAYOUTS: readonly SiteLayout[] = [
       + 'The unit tows straight out the back. This is the least deck per unit of anything here.',
   },
   {
-    id: 'splayed-v',
-    title: 'Two units — splayed V on one open deck',
+    id: 'l-pair',
+    title: 'Two units — right-angle L on a corner deck',
     unitCount: 2,
     requiresEntry: 'end',
     units: [
-      { id: 'A', model: 'Nook Family', ...nook, at: { x: -14.6, y: 29.6 }, rotDeg: 14, hitch: 'far-end' },
-      { id: 'B', model: 'Nook Family', ...nook, at: { x: 14.6, y: 29.6 }, rotDeg: -14, hitch: 'far-end' },
+      { id: 'A', model: 'Nook Family', ...nook, at: { x: 0, y: 26 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'B', model: 'Nook Family', ...nook, at: { x: 26, y: 0 }, rotDeg: -90, hitch: 'far-end' },
     ],
     decks: [{
       id: 'deck', cantileverFt: 2,
-      outline: [{ x: -24, y: 0 }, { x: 24, y: 0 }, { x: 20, y: 15 }, { x: -20, y: 15 }],
+      outline: [{ x: -10, y: -10 }, { x: 11, y: -10 }, { x: 11, y: 11 }, { x: -10, y: 11 }],
     }],
     why:
-      'Both gable ends face one open deck and the units fan apart behind it, so neither looks into the '
-      + 'other and each gets its own slice of view. The gap between them stays walkable and becomes the '
-      + 'path up the hill. Because they diverge, their tow lanes diverge too — each leaves without the '
-      + 'other moving. This is the arrangement the reference render shows.',
+      'Two units set square to each other, both gable doors opening onto one deck in the crook of the L. '
+      + 'Neither looks into the other because they face ninety degrees apart, and the open corner points '
+      + 'downhill at the view, which is where the cantilever goes. Every cut on the deck is a square cut. '
+      + 'They tow in opposite directions, so neither waits on the other.',
   },
   {
     id: 'parallel-open',
@@ -316,36 +493,62 @@ export const LAYOUTS: readonly SiteLayout[] = [
     requiresEntry: 'side',
     units: [
       { id: 'A', model: 'Denali', ...denali, at: { x: -16, y: 0 }, rotDeg: 0, hitch: 'far-end' },
-      { id: 'B', model: 'Denali', ...denali, at: { x: 16, y: 0 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'B', model: 'Denali', ...denali, at: { x: 16, y: 0 }, rotDeg: 0, hitch: 'far-end', mirrored: true },
     ],
     decks: [{
       id: 'deck', cantileverFt: 2,
       outline: [{ x: -10, y: -32 }, { x: 10, y: -32 }, { x: 10, y: 14 }, { x: -10, y: 14 }],
     }],
     why:
-      'Side doors face each other across one open deck, which runs past the downhill ends to make a '
-      + 'view terrace rather than a corridor between two walls. It is the most efficient shape per foot of deck '
+      'Side doors face each other across one open deck, which runs past the downhill ends to make a view '
+      + 'terrace rather than a corridor between two walls. It is the most efficient shape per foot of deck '
       + 'and the tow lanes run parallel and clear. It is also the shape that most tempts someone to roof '
       + 'the gap — which is the one move that would make the pair a single dwelling.',
   },
   {
-    id: 'fan-of-three',
-    title: 'Three units — fan onto a shared deck',
+    id: 'trident-three',
+    title: 'Three units — three doors onto one deck',
     unitCount: 3,
     requiresEntry: 'end',
     units: [
-      { id: 'A', model: 'Nook Family', ...nook, at: { x: -25.5, y: 30 }, rotDeg: 24, hitch: 'far-end' },
-      { id: 'B', model: 'Nook Family', ...nook, at: { x: 0, y: 31 }, rotDeg: 0, hitch: 'far-end' },
-      { id: 'C', model: 'Nook Family', ...nook, at: { x: 25.5, y: 30 }, rotDeg: -24, hitch: 'far-end' },
+      { id: 'A', model: 'Nook Family', ...nook, at: { x: -26, y: 4 }, rotDeg: 90, hitch: 'far-end' },
+      { id: 'B', model: 'Nook Family', ...nook, at: { x: 0, y: 34 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'C', model: 'Nook Family', ...nook, at: { x: 26, y: 4 }, rotDeg: -90, hitch: 'far-end' },
     ],
     decks: [{
       id: 'deck', cantileverFt: 2,
-      outline: [{ x: -34, y: 0 }, { x: 34, y: 0 }, { x: 30, y: 17 }, { x: -30, y: 17 }],
+      outline: [{ x: -11, y: -6 }, { x: 11, y: -6 }, { x: 11, y: 19 }, { x: -11, y: 19 }],
     }],
     why:
-      'The splayed V extended. Three gable ends onto one deck with the fire at the centroid, each unit '
-      + 'turned far enough that no two look into each other. The fan is what keeps the tow lanes apart: '
-      + 'they radiate, so the middle unit is never trapped behind its neighbours.',
+      'End entry puts the door on the SHORT wall, so three of these cannot line the sides of a court — '
+      + 'they point into it like spokes, and that is the honest name for this shape. It works well: three '
+      + 'doors onto one deck, the fourth side open downhill for the view and the cantilever, and every '
+      + 'hitch pointing outward so each unit draws straight out without the others moving. The gaps '
+      + 'between the arms stay walkable, which is what keeps three vehicles reading as three.',
+  },
+  {
+    id: 'u-court',
+    title: 'Three units — true U, doors lining three sides',
+    unitCount: 3,
+    requiresEntry: 'side',
+    units: [
+      { id: 'A', model: 'Denali', ...denali, at: { x: -30, y: 5 }, rotDeg: 0, hitch: 'far-end' },
+      { id: 'B', model: 'Denali', ...denali, at: { x: 0, y: 42 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
+      { id: 'C', model: 'Denali', ...denali, at: { x: 30, y: 5 }, rotDeg: 0, hitch: 'far-end', mirrored: true },
+    ],
+    decks: [
+      { id: 'deck-court', cantileverFt: 2, outline: [{ x: -24, y: -16 }, { x: 24, y: -16 }, { x: 24, y: 25 }, { x: -24, y: 25 }] },
+      { id: 'deck-back', cantileverFt: 0, outline: [{ x: -21, y: 25 }, { x: 21, y: 25 }, { x: 21, y: 36 }, { x: -21, y: 36 }] },
+    ],
+    why:
+      'This is the U proper, and it needs SIDE entry to exist: the door on the long wall is what lets a '
+      + 'unit lie along an edge of the court and still open onto it. Two units down the sides, one across '
+      + 'the head, the fourth side left open downhill for the view and the cantilever. The deck is drawn '
+      + 'as two planes for a reason — the upper one narrows to stay out of the side units\' tow lanes, '
+      + 'which is what lets every unit leave from a shape that looks enclosed. '
+      + '⚠️ It is also the shape closest to the line: three units around a court can start reading as one '
+      + 'compound rather than three vehicles parked near each other. Keep the fourth side genuinely open, '
+      + 'never roof any part of it, and put the question to the tax workstream before building.',
   },
   {
     id: 'contour-line-three',
@@ -353,9 +556,9 @@ export const LAYOUTS: readonly SiteLayout[] = [
     unitCount: 3,
     requiresEntry: 'side',
     units: [
-      { id: 'A', model: 'Denali', ...denali, at: { x: -50, y: -20 }, rotDeg: 90, hitch: 'far-end' },
-      { id: 'B', model: 'Denali', ...denali, at: { x: 0, y: 0 }, rotDeg: 90, hitch: 'far-end' },
-      { id: 'C', model: 'Denali', ...denali, at: { x: 50, y: 20 }, rotDeg: 90, hitch: 'far-end' },
+      { id: 'A', model: 'Denali', ...denali, at: { x: -50, y: -20 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
+      { id: 'B', model: 'Denali', ...denali, at: { x: 0, y: 0 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
+      { id: 'C', model: 'Denali', ...denali, at: { x: 50, y: 20 }, rotDeg: 90, hitch: 'far-end', mirrored: true },
     ],
     decks: [
       { id: 'deck-A', cantileverFt: 2, outline: [{ x: -65, y: -38 }, { x: -29, y: -38 }, { x: -29, y: -26 }, { x: -65, y: -26 }] },
@@ -370,28 +573,26 @@ export const LAYOUTS: readonly SiteLayout[] = [
       + 'its neighbour. Every deck also stops short of the lane behind it.',
   },
   {
-    id: 'courtyard-three',
-    title: 'Three units — courtyard (do not build)',
+    id: 'trident-hitched-in',
+    title: 'Three units — the same trident, one hitch turned the wrong way',
     unitCount: 3,
     requiresEntry: 'end',
     units: [
-      { id: 'A', model: 'Nook Family', ...nook, at: { x: -22, y: 20 }, rotDeg: 90, hitch: 'far-end' },
-      { id: 'B', model: 'Nook Family', ...nook, at: { x: 0, y: 38 }, rotDeg: 180, hitch: 'far-end' },
-      { id: 'C', model: 'Nook Family', ...nook, at: { x: 22, y: 20 }, rotDeg: -90, hitch: 'far-end' },
+      { id: 'A', model: 'Nook Family', ...nook, at: { x: -26, y: 4 }, rotDeg: 90, hitch: 'far-end' },
+      { id: 'B', model: 'Nook Family', ...nook, at: { x: 0, y: 34 }, rotDeg: 0, hitch: 'entry-end' },
+      { id: 'C', model: 'Nook Family', ...nook, at: { x: 26, y: 4 }, rotDeg: -90, hitch: 'far-end' },
     ],
     decks: [{
-      id: 'deck', cantileverFt: 0,
-      outline: [{ x: -14, y: 4 }, { x: 14, y: 4 }, { x: 14, y: 26 }, { x: -14, y: 26 }],
+      id: 'deck', cantileverFt: 2,
+      outline: [{ x: -11, y: -6 }, { x: 11, y: -6 }, { x: 11, y: 19 }, { x: -11, y: 19 }],
     }],
     why:
-      'Three units enclosing a deck on three sides. It photographs well and it is the shape to refuse: '
-      + 'the units face inward, so the back unit tows straight across the deck and cannot leave at all. '
-      + 'The flanking units happen to have clear lanes outward, which is exactly what makes this shape '
-      + 'seductive on paper — two thirds of it works. The gap between units also closes to a few feet, '
-      + 'at which point three vehicles parked near each other start reading as one compound: the whole '
-      + 'argument traded away for an enclosed yard.',
-    rejected: 'The back unit\'s tow lane crosses the shared deck, and the units close to under the '
-      + 'minimum separation. One unit cannot leave without the site coming apart.',
+      'Exactly the trident above, to the inch, with one difference: the back unit was set down with its tongue '
+      + 'pointing into the court instead of uphill. Nothing about the drawing looks wrong. The unit is '
+      + 'now permanently parked, because the only way out is across its own deck. This is why hitch '
+      + 'orientation belongs on the delivery drawing and not in someone\'s head on the day.',
+    rejected: 'The back unit\'s tow lane runs across the shared deck. Same geometry as the working '
+      + 'trident — one placement decision, made once, at delivery.',
   },
 ];
 

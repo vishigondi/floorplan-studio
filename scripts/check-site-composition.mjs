@@ -18,6 +18,10 @@ const {
   LAYOUTS, layoutById, layoutsFor, unitCorners, lengthAxis, polysOverlap,
   towSweep, checkTowEgress, layoutTowsClear, minGapFt, MIN_SEPARATION_FT,
   TOW_SIDE_CLEARANCE_FT, TOW_EXIT_RUN_FT,
+  doorFacing, doorPoint, pointInPolygon, doorOpensOntoDeck, everyDoorLands,
+  mirroredUnits, requiresMirroring, isOrthogonal, ORTHOGONAL_ONLY,
+  PAD_SPEC, PROHIBITED_FOUNDATIONS, foundationAllowed, DELIVERY_ACCESS,
+  cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
 } = await import(join(root, 'lib/kit/site-composition.ts'));
 
 let failures = 0;
@@ -81,21 +85,23 @@ check('the delegated-skirting risk is recorded with the maker\'s own wording',
 
 console.log('entry pattern decides which arrangements exist');
 const buildable = LAYOUTS.filter((l) => !l.rejected);
-check('seven layouts, one of them recorded as unbuildable',
-  LAYOUTS.length === 7 && buildable.length === 6);
+check('eight layouts, one of them recorded as unbuildable',
+  LAYOUTS.length === 8 && buildable.length === 7);
 check('one, two and three unit options all exist',
   [1, 2, 3].every((n) => buildable.some((l) => l.unitCount === n)));
 check('every layout\'s unit count matches the units actually placed in it',
   LAYOUTS.every((l) => l.units.length === l.unitCount));
 // The central claim: a shared deck that gable ends face needs END entry.
-check('the shared-deck shapes require END entry',
-  ['splayed-v', 'fan-of-three'].every((id) => layoutById(id).requiresEntry === 'end'));
-check('and the long-wall shapes require SIDE entry',
+check('the spoke shapes require END entry — a short-wall door can only point inward',
+  ['l-pair', 'trident-three'].every((id) => layoutById(id).requiresEntry === 'end'));
+check('and the true U requires SIDE entry — only a long-wall door can line a court edge',
+  layoutById('u-court').requiresEntry === 'side');
+check('and the other long-wall shapes require SIDE entry too',
   ['single-l-wrap', 'parallel-open', 'contour-line-three'].every((id) => layoutById(id).requiresEntry === 'side'));
 const forDenali = layoutsFor(OBSERVED_UNITS.find((u) => u.model === 'Denali')).map((l) => l.id);
 const forNook = layoutsFor(OBSERVED_UNITS.find((u) => u.model === 'Nook Family')).map((l) => l.id);
-check('a side-entry unit cannot be put in the fan',
-  !forDenali.includes('fan-of-three') && !forDenali.includes('splayed-v'));
+check('a side-entry unit cannot be put in the spoke shapes',
+  !forDenali.includes('trident-three') && !forDenali.includes('l-pair'));
 check('and an end-entry unit cannot be put in the parallel or L-wrap shapes',
   !forNook.includes('parallel-open') && !forNook.includes('single-l-wrap'));
 check('every buildable layout is offered to exactly one entry pattern',
@@ -105,7 +111,7 @@ console.log('a unit that cannot be towed out is not a vehicle');
 check('every buildable layout has all its tow lanes clear',
   buildable.every((l) => layoutTowsClear(l)),
   buildable.filter((l) => !layoutTowsClear(l)).map((l) => l.id).join());
-const yard = layoutById('courtyard-three');
+const yard = layoutById('trident-hitched-in');
 check('the courtyard is recorded as unbuildable',
   typeof yard.rejected === 'string' && yard.rejected.length > 0);
 check('and it genuinely fails — the back unit\'s lane crosses the shared deck',
@@ -113,15 +119,17 @@ check('and it genuinely fails — the back unit\'s lane crosses the shared deck'
 const yardBlocked = checkTowEgress(yard).filter((v) => !v.clear);
 check('exactly one unit is trapped, and it is trapped by the deck',
   yardBlocked.length === 1 && yardBlocked[0].unitId === 'B' && yardBlocked[0].blockedBy.includes('deck'));
-check('the rejection text names the deck and the separation, not a vague objection',
-  /tow lane crosses the shared deck/.test(yard.rejected) && /minimum separation/.test(yard.rejected));
+check('the rejection isolates ONE variable — same geometry, one hitch turned',
+  /Same geometry as the working/.test(yard.rejected) && /one placement decision/.test(yard.rejected)
+  && JSON.stringify(yard.units.map((u) => [u.at, u.rotDeg]))
+     === JSON.stringify(layoutById('trident-three').units.map((u) => [u.at, u.rotDeg])));
 // The tow model must actually depend on hitch placement, or it is theatre.
-const v = layoutById('splayed-v');
-const flipped = { ...v, units: v.units.map((u) => ({ ...u, hitch: 'entry-end' })) };
-check('turning the hitches to face the deck makes the splayed V fail',
-  layoutTowsClear(v) === true && layoutTowsClear(flipped) === false);
-check('and with the hitches reversed BOTH units are trapped, by the deck',
-  checkTowEgress(flipped).filter((x) => !x.clear).length === 2
+const tri = layoutById('trident-three');
+const flipped = { ...tri, units: tri.units.map((u) => ({ ...u, hitch: 'entry-end' })) };
+check('turning every hitch inward makes the working trident fail',
+  layoutTowsClear(tri) === true && layoutTowsClear(flipped) === false);
+check('and all three are then trapped, by the deck they face',
+  checkTowEgress(flipped).filter((x) => !x.clear).length === 3
   && checkTowEgress(flipped).every((x) => x.blockedBy.includes('deck')));
 
 console.log('units stay far enough apart to read as separate objects');
@@ -130,10 +138,15 @@ check('the minimum separation is 8 ft',
 check('every buildable multi-unit layout clears it',
   buildable.filter((l) => l.unitCount > 1).every((l) => minGapFt(l) > MIN_SEPARATION_FT),
   buildable.filter((l) => l.unitCount > 1).map((l) => `${l.id}=${minGapFt(l)}`).join(' '));
-check('and the courtyard does not — it closes to 3 ft',
-  minGapFt(yard) === 3 && minGapFt(yard) < MIN_SEPARATION_FT);
-check('the splayed V leaves a walkable path between the units',
-  minGapFt(layoutById('splayed-v')) === 13.7);
+// The rejected layout deliberately passes every OTHER test. Its gaps are fine,
+// its shape is fine; one hitch was turned. If it ever starts failing on
+// separation too, the example has stopped isolating its variable.
+check('the rejected layout passes separation — it fails on one thing only',
+  minGapFt(yard) === 12.7 && minGapFt(yard) > MIN_SEPARATION_FT
+  && everyDoorLands(yard) === true && isOrthogonal(yard) === true
+  && layoutTowsClear(yard) === false);
+check('the trident leaves a walkable path between the units',
+  minGapFt(layoutById('trident-three')) === 12.7);
 check('a single unit has no separation to measure',
   minGapFt(layoutById('single-end-deck')) === Infinity);
 
@@ -143,10 +156,88 @@ check('no layout gives any deck a roof, because a DeckPlane cannot carry one',
 check('the parallel shape warns about the temptation to roof its gap',
   /most tempts someone to roof the gap/.test(layoutById('parallel-open').why)
   && /single dwelling/.test(layoutById('parallel-open').why));
+check('the true U explains why its deck is split into two planes',
+  /narrows to stay out of the side units/.test(layoutById('u-court').why));
+check('and carries the one-compound caution rather than deciding it',
+  /reading as one compound/.test(layoutById('u-court').why) && /tax workstream/.test(layoutById('u-court').why));
 check('the contour shape explains why the units lie along the slope',
   /shallow, even cut/.test(layoutById('contour-line-three').why));
 check('the L-wrap explains that the door and the glass are on different walls',
   /door is on the long side and the glass is on the gable/.test(layoutById('single-l-wrap').why));
+
+console.log('every door has to land on a deck, not on a drop');
+// The check the first draft of these layouts did not have. Six doors across
+// three layouts opened onto nothing, and only mirroring fixed them.
+check('every buildable layout lands every door on a deck',
+  buildable.every((l) => everyDoorLands(l)),
+  buildable.filter((l) => !everyDoorLands(l)).map((l) => l.id).join());
+check('point-in-polygon agrees with hand-checked cases',
+  pointInPolygon({ x: 5, y: 5 }, sq) === true && pointInPolygon({ x: 15, y: 5 }, sq) === false
+  && pointInPolygon({ x: -1, y: 5 }, sq) === false);
+// Mirroring must move a SIDE door and must NOT move an END one.
+const sideU = { id: 'S', model: 's', widthFt: 12, lengthFt: 42, at: { x: 0, y: 0 }, rotDeg: 0, entry: 'side', hitch: 'far-end' };
+const endU = { ...sideU, entry: 'end' };
+check('mirroring flips a side door to the opposite long wall',
+  near(doorFacing(sideU).x, 1) && near(doorFacing({ ...sideU, mirrored: true }).x, -1));
+check('but mirroring cannot move an END door — it is in the gable',
+  near(doorFacing(endU).y, -1) && near(doorFacing({ ...endU, mirrored: true }).y, -1));
+// The whole reason mirroring is worth buying.
+check('mirroring leaves the exit direction untouched',
+  JSON.stringify(towSweep(sideU)) === JSON.stringify(towSweep({ ...sideU, mirrored: true })));
+check('whereas rotating 180 degrees moves the door AND reverses the exit',
+  near(doorFacing({ ...sideU, rotDeg: 180 }).x, -1)
+  && JSON.stringify(towSweep(sideU)) !== JSON.stringify(towSweep({ ...sideU, rotDeg: 180 })));
+check('the door sits on the face of the unit, not at its centre',
+  near(doorPoint(sideU).x, 6) && near(doorPoint(endU).y, -21));
+
+console.log('mirroring is a volume unlock, so it is recorded as a constraint');
+check('three layouts need reversed plans, and the rest do not',
+  buildable.filter(requiresMirroring).map((l) => l.id).sort().join(',')
+  === 'contour-line-three,parallel-open,u-court');
+check('the contour line needs all three units reversed',
+  mirroredUnits(layoutById('contour-line-three')).length === 3);
+check('customisation unlocks at ten units, and nine is not ten',
+  CUSTOMISATION.unlockAtUnits === 10
+  && customisationAvailableAt(10) === true && customisationAvailableAt(9) === false);
+check('the single-unit position is quoted, not paraphrased',
+  /[Nn]ot customizable when ordered as a single unit/.test(CUSTOMISATION.singleUnit));
+check('and what mirroring actually buys is stated',
+  /without spending tow direction/.test(CUSTOMISATION.whatMirroringBuys));
+
+console.log('units sit square — no angled pads, no bevelled framing');
+check('orthogonal-only is declared and every layout obeys it',
+  ORTHOGONAL_ONLY === true && LAYOUTS.every(isOrthogonal));
+check('and the check would actually catch a splayed unit',
+  isOrthogonal({ units: [{ rotDeg: 14 }] }) === false && isOrthogonal({ units: [{ rotDeg: -90 }] }) === true);
+
+console.log('the manufacturer\'s own pad and access requirements');
+check('the pad is stone 4-5 in or concrete 4-6 in, running 1 ft past the unit',
+  PAD_SPEC.stoneDepthIn[0] === 4 && PAD_SPEC.stoneDepthIn[1] === 5
+  && PAD_SPEC.concreteDepthIn[0] === 4 && PAD_SPEC.concreteDepthIn[1] === 6
+  && PAD_SPEC.marginPastUnitFt === 1);
+// The finding that settles the elevated-cabin question on non-tax grounds.
+check('the maker forbids pier and beam, crawl space and pit foundations',
+  PROHIBITED_FOUNDATIONS.length === 3
+  && ['pier and beam', 'crawl space', 'pit'].every((f) => PROHIBITED_FOUNDATIONS.includes(f)));
+check('so a post frame under the unit is not an allowed foundation',
+  foundationAllowed('timber pier and beam frame') === false
+  && foundationAllowed('crawl space') === false
+  && foundationAllowed('crushed stone pad') === true);
+check('and the wheels stay attached, blocked up rather than bearing',
+  /must remain ATTACHED to its wheels/.test(PAD_SPEC.wheelsStayOn)
+  && /not RESTING on its wheels/.test(PAD_SPEC.blocking));
+check('access is 18 ft wide with 16 ft of clearance both ways',
+  DELIVERY_ACCESS.straightWidthFt === 18 && DELIVERY_ACCESS.straightClearanceFt === 16
+  && DELIVERY_ACCESS.verticalClearanceFt === 16);
+// The corner figure is not a constant — it is the road argument, quantified.
+check('corner clearance is DERIVED from the unit width, not stored',
+  cornerClearanceFt(8.5) === 24.5 && cornerClearanceFt(12) === 28 && cornerClearanceFt(0) === 16);
+check('and the narrow unit saves real width at every corner',
+  cornerSavingFt(13.83, 8.5) === 5.33 && cornerSavingFt(12, 8.5) === 3.5
+  && cornerSavingFt(8.5, 8.5) === 0);
+check('delivery is curbside by default and site prep is the customer\'s scope',
+  DELIVERY_ACCESS.notes.some((n) => /Curbside is the delivery policy/.test(n))
+  && DELIVERY_ACCESS.notes.some((n) => /does not do site preparation/.test(n)));
 
 if (failures > 0) { console.error(`\nsite-composition battery: ${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nsite-composition battery clean');
