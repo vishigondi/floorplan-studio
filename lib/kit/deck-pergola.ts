@@ -208,6 +208,34 @@ export const PREFAB_PANEL = {
  * climate did not buy one. It is NOT support for skipping frost protection —
  * see the caveat below, which is the part a photograph cannot settle.
  */
+/**
+ * A SECOND OBSERVED CONFIGURATION — two units composed, not attached.
+ *
+ * Owner-supplied photograph: two separately-sided units with a visible gap
+ * between them, one open deck running across both, and a slatted canopy over
+ * the DINING END ONLY — the rest open to the sky. That is the arrangement this
+ * module derives: composition rather than attachment, and a covered zone rather
+ * than a covered deck.
+ *
+ * ⚠️ THE DETAIL DOING THE MOST WORK IS THE ONE EASIEST TO DESIGN AWAY. The
+ * right-hand unit's CHASSIS AND HITCH END ARE VISIBLE — not skirted in, not
+ * removed. That is the conservative reading of the vehicle identity everything
+ * else rests on, and Blueprint §14 #105 has it as an open question: which field
+ * modifications (skirting, a removed hitch, hard-wired equipment) void the
+ * A119.5 seal. A full masonry skirt and a cut-off hitch are the two cheapest
+ * ways to make a park model stop looking like one.
+ *
+ * This module therefore does NOT skirt to grade, and says so.
+ */
+export const COMPOSED_PAIR = {
+  arrangement: 'two units, visible gap between them, one open deck across both',
+  coveredZone: 'slatted canopy over the dining end only; the rest open to the sky',
+  chassis: 'visible, hitch end exposed — not skirted, not removed',
+  openQuestion: 'Blueprint §14 #105: which field modifications (skirting, removed hitch, hard-wired '
+    + 'equipment) void the RVIA seal — get it in writing from the manufacturer AND the insurer',
+  source: 'Owner-supplied photograph, Sep 2026',
+};
+
 export const OBSERVED_COMPARABLE = {
   deckFoundation: 'posts on precast/poured pier blocks at grade',
   guardSystem: 'horizontal cable on dark metal posts, including the stair',
@@ -831,6 +859,10 @@ export function buildDeckPlan(cfg: DeckConfig): DeckPlan {
       + 'manufacturer the deck was drawn around — including next year\'s catalogue.'
     : `⚠️ THIS UNIT IS OUTSIDE THE ENVELOPE (${fit.failures.join('; ')}). The deck still computes, but it is now `
       + 'a one-off for one model rather than a design any park model can sit on.');
+  notes.push(`SKIRTING IS NOT SPECIFIED HERE, AND THAT IS DELIBERATE. ${COMPOSED_PAIR.chassis} in the observed `
+    + 'pair, which is the conservative reading of the vehicle identity the whole tax position rests on. A full '
+    + `skirt to grade and a removed hitch are the two cheapest ways to make a park model stop looking like one. `
+    + `${COMPOSED_PAIR.openQuestion}. Removable skirting panels keep both readings available; masonry does not.`);
   notes.push(`THE OPERATING COMPARABLE USES ${OBSERVED_COMPARABLE.deckFoundation.toUpperCase()} — observed, `
     + 'not inferred, on the nearest working resort in the same climate, and the same detail carries their '
     + `cabins. ⚠️ ${OBSERVED_COMPARABLE.unresolved}`);

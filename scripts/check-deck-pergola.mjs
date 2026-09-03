@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS, COMPOSED_PAIR } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -305,6 +305,18 @@ console.log('the observed comparable is recorded as observation, not as approval
 // blocks at grade — no piles. That supports splitting the foundation by load.
 // It does NOT show what is under the blocks, and a photo cannot approve a
 // footing detail, so the unresolved part has to travel with the finding.
+// The second observed configuration is the arrangement this module derives:
+// composition not attachment, a covered ZONE not a covered deck — and a visible
+// chassis, which is the detail easiest to design away and most costly to lose.
+check('the composed pair is recorded as composition, not attachment',
+  /visible gap/.test(COMPOSED_PAIR.arrangement) && /open deck across both/.test(COMPOSED_PAIR.arrangement));
+check('its covered zone is partial, matching what this module caps',
+  /dining end only/.test(COMPOSED_PAIR.coveredZone) && /open to the sky/.test(COMPOSED_PAIR.coveredZone));
+check('the visible chassis is recorded, with the seal question attached',
+  /not skirted, not removed/.test(COMPOSED_PAIR.chassis) && /#105/.test(COMPOSED_PAIR.openQuestion));
+check('the plan refuses to specify skirting, and says why',
+  plan.notes.some((n) => /SKIRTING IS NOT SPECIFIED HERE/.test(n) && /stop looking like one/.test(n)
+    && /Removable skirting panels/.test(n)));
 check('the observed deck foundation is recorded', /pier blocks at grade/.test(OBSERVED_COMPARABLE.deckFoundation));
 check('and reaches the plan notes', plan.notes.some((n) => /THE OPERATING COMPARABLE USES/.test(n)));
 check('the note carries what a photograph cannot settle',
