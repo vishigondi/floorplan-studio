@@ -23,6 +23,7 @@ const {
   deckAreaSqFt, flankStripCostSqFt, FLANK_STRIP_WIDTH_FT, mirroredUnits, requiresMirroring,
   isOrthogonal, ORTHOGONAL_ONLY, PAD_SPEC, PROHIBITED_FOUNDATIONS, foundationAllowed,
   DELIVERY_ACCESS, cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
+  NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED,
 } = M;
 
 let failures = 0;
@@ -58,11 +59,19 @@ check('the tow sweep is the unit plus clearance and a run for the tractor',
   && near(area(towSweep(u0)), (12 + 4) * (42 + 25), 0.01));
 
 console.log('only units with a full-height glass wall are in the catalogue');
-check('six models, every one of them glazed, each with its own source',
-  OBSERVED_UNITS.length === 6 && glassUnits().length === 6
+check('five models survive, every one glazed, each with its own source',
+  OBSERVED_UNITS.length === 5 && glassUnits().length === 5
   && OBSERVED_UNITS.every((u) => typeof u.source === 'string' && u.source.includes('.com')));
-check('five put the glass on the gable — the long wall is the towing face',
-  OBSERVED_UNITS.filter((u) => u.glassWall === 'gable').length === 5);
+check('four put the glass on the gable — the long wall is the towing face',
+  OBSERVED_UNITS.filter((u) => u.glassWall === 'gable').length === 4);
+// The bar that keeps a window from being read as a wall. Every unit has to
+// carry the maker's own words, quoted.
+check('every unit carries quoted evidence of a glass WALL, not a window',
+  OBSERVED_UNITS.every((u) => typeof u.glassEvidence === 'string'
+    && u.glassEvidence.length > 40 && u.glassEvidence.includes('"')));
+check('and the evidence names a wall, a facade or a glazed gable in each case',
+  OBSERVED_UNITS.every((u) => /glass wall|window wall|facade|Full glass|entire front|A-frame glass/i.test(u.glassEvidence)),
+  OBSERVED_UNITS.filter((u) => !/glass wall|window wall|facade|Full glass|entire front|A-frame glass/i.test(u.glassEvidence)).map((u) => u.model).join());
 check('and exactly one puts it on the long side',
   OBSERVED_UNITS.filter((u) => u.glassWall === 'side').map((u) => u.maker).join() === 'ÖÖD');
 // The geometric consequence that shapes every layout below.
@@ -76,21 +85,63 @@ check('no unit in the catalogue tows permit-free — all exceed 8.5 ft',
   PERMIT_FREE_WIDTH_FT === 8.5 && OBSERVED_UNITS.every((u) => u.towsPermitFree === false)
   && OBSERVED_UNITS.every((u) => u.widthFt > PERMIT_FREE_WIDTH_FT));
 check('the unresolved door positions are flagged, not guessed',
-  OBSERVED_UNITS.filter((u) => /not published/.test(u.entryNote)).length === 3);
+  OBSERVED_UNITS.filter((u) => /not published/.test(u.entryNote)).length === 2);
 check('and the mirror glazing carries its own warnings',
   /bird-strike/.test(OBSERVED_UNITS.find((u) => u.maker === 'ÖÖD').entryNote)
   && /mirror whatever stands in front/.test(OBSERVED_UNITS.find((u) => u.maker === 'ÖÖD').entryNote));
 
-console.log('reversed plans — one maker sells them, one gates them');
-check('Elevation offers it as standard, Zook only at volume',
-  MIRRORING_BY_MAKER.Elevation.availability === 'standard'
-  && MIRRORING_BY_MAKER.Zook.availability === 'volume-only');
-check('and both positions are quoted rather than paraphrased',
-  /rolled side-to-side/.test(MIRRORING_BY_MAKER.Elevation.quote)
-  && /not customizable when ordered as a single unit/.test(MIRRORING_BY_MAKER.Zook.quote));
+console.log('what was looked at and rejected, and why');
+// The summary must be derived from the data it summarises, or it drifts.
+check('the survey count matches the catalogue it describes',
+  SURVEY.qualified === OBSERVED_UNITS.length && SURVEY.rejected === NEAR_MISSES.length);
+check('and the makers it names are exactly the makers in the catalogue',
+  SURVEY.makersQualified.slice().sort().join()
+  === [...new Set(OBSERVED_UNITS.map((u) => u.maker))].sort().join());
+check('five near-misses recorded, each with a reason',
+  NEAR_MISSES.length === 5 && NEAR_MISSES.every((n) => n.why.length > 60));
+check('Elevation is recorded as rejected, with the window-versus-wall reason',
+  NEAR_MISSES.some((n) => n.maker === 'Elevation' && /not a glass wall/.test(n.why)));
+check('and no rejected maker is still sitting in the catalogue',
+  NEAR_MISSES.every((n) => !OBSERVED_UNITS.some((u) => u.maker === n.maker)));
+check('the bar is written down, naming what does NOT count as evidence',
+  /glass WALL or facade/.test(SURVEY.bar) && /not evidence/.test(SURVEY.bar)
+  && /neither is a rendering/.test(SURVEY.bar));
+// Unknown is its own answer. Keeping it separate from "rejected" is what stops
+// a rendering being promoted to evidence a second time.
+check('two candidates are held as awaiting evidence, not rejected and not used',
+  UNVERIFIED.length === 2 && SURVEY.awaitingEvidence === UNVERIFIED.length);
+check('and neither has been quietly added to the catalogue or the reject list',
+  UNVERIFIED.every((c) => !OBSERVED_UNITS.some((u) => u.model === c.model))
+  && UNVERIFIED.every((c) => !NEAR_MISSES.some((n) => n.model === c.model)));
+check('each says what is missing and what to ask for',
+  UNVERIFIED.every((c) => /glazing|elevation|silence on glazing/i.test(c.missing)
+    && /floor plan|elevations/i.test(c.ask)));
+check('and each flags the missing certification claim separately from the glazing',
+  UNVERIFIED.every((c) => /RVIA or ANSI A119\.5/.test(c.alsoMissing)));
+check('the size-threshold wording is called out as not being a certification',
+  /is a size statement, not a certification/.test(UNVERIFIED[0].alsoMissing));
+check('the permit-free unit is remembered even though it failed the glass test',
+  NEAR_MISSES.some((n) => /no permit, escort or route approval/.test(n.why)));
+
+console.log('reversed plans, and one maker whose guidance contradicts the kit');
+check('Zook gate reversed plans behind volume; ÖÖD do not say either way',
+  MIRRORING_BY_MAKER.Zook.availability === 'volume-only'
+  && MIRRORING_BY_MAKER['ÖÖD'].availability === 'unknown');
+check('the Zook position is quoted rather than paraphrased',
+  /not customizable when ordered as a single unit/.test(MIRRORING_BY_MAKER.Zook.quote));
 check('the maker records agree with the unit records',
-  OBSERVED_UNITS.filter((u) => u.maker === 'Elevation').every((u) => u.mirroring === 'standard')
-  && OBSERVED_UNITS.filter((u) => u.maker === 'Zook').every((u) => u.mirroring === 'volume-only'));
+  OBSERVED_UNITS.filter((u) => u.maker === 'Zook').every((u) => u.mirroring === 'volume-only')
+  && OBSERVED_UNITS.filter((u) => u.maker === 'ÖÖD').every((u) => u.mirroring === 'unknown'));
+// The conflict is the single most consequential thing in this file.
+check('ÖÖD\'s tow-bar advice is recorded verbatim against Zook\'s requirement',
+  /tow bar of the chassis can be hidden or removed/.test(OOD_CLASSIFICATION_CONFLICT.theRisk)
+  && /must remain ATTACHED to its wheels/.test(OOD_CLASSIFICATION_CONFLICT.conflictsWith));
+check('and their wording is flagged as designed-to-meet, not certified',
+  OOD_CLASSIFICATION_CONFLICT.theirWording === 'designed to meet Park Model RV standards');
+check('it is to be resolved before an order, with three named actions',
+  OOD_CLASSIFICATION_CONFLICT.resolveBefore === 'order'
+  && OOD_CLASSIFICATION_CONFLICT.actions.length === 3
+  && OOD_CLASSIFICATION_CONFLICT.actions.some((a) => /in writing, not "designed to meet"/.test(a)));
 check('customisation unlocks at ten units, and nine is not ten',
   CUSTOMISATION.unlockAtUnits === 10
   && customisationAvailableAt(10) === true && customisationAvailableAt(9) === false);

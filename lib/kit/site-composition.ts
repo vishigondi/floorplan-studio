@@ -62,6 +62,13 @@ export interface ObservedUnit {
   doorAtFractionFromGlass: number;
   /** Reversed plans: what it takes to get one from this maker. */
   mirroring: 'standard' | 'volume-only' | 'unknown';
+  /**
+   * The maker's OWN words evidencing a full-height glass wall. Marketing that
+   * merely promises "large windows", or a choice of "window designs", is not
+   * evidence — a window is not a wall, and reading one as the other is how a
+   * unit gets onto this list that does not belong on it.
+   */
+  glassEvidence: string;
   /** Tows inside the 8.5 ft limit with no permit, escort or route approval. */
   towsPermitFree: boolean;
   source: string;
@@ -78,6 +85,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Full-lite entry door on the LONG SIDE at the hitch end, beside the bathroom bump-out; '
       + 'custom full-glass A-frame window with black aluminium frame fills the front gable.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    glassEvidence: "\"Custom Full glass Aframe window in livingroom with tempered glass and black aluminum frame\"; the spec sheet also lists a 1 ft overhang around the 'Aframe glass wall'.",
     source: 'zookcabins.com/cabin/a-frame-studio',
   },
   {
@@ -86,6 +94,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Recessed entry niche with full-lite door on the LONG SIDE; custom tempered A-frame '
       + 'window with black aluminium frame on the front gable.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    glassEvidence: "\"breathtaking views through the beautiful A-frame glass on the front end of the building\"; \"a custom tempered A-frame window with black aluminum frame\".",
     source: 'zookcabins.com/cabin/a-frame-bunkhouse',
   },
   {
@@ -94,6 +103,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Front door set along the SIDE with an inset for weather protection; custom tempered '
       + 'glass with aluminium frame fills the living-room A-frame gable.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    glassEvidence: "\"the huge window spanning the entire front of the house\"; \"Custom tempered glass with an aluminum frame in the living room A-frame\".",
     source: 'zookcabins.com/cabin/a-frame-park-model-home',
   },
   {
@@ -102,6 +112,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Fiberglass full-lite entry door; dramatic window wall on the GABLE end, black stained '
       + 'cedar surround with LED valance lighting. ⚠️ Door wall not published — confirm before siting.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    glassEvidence: "\"anchored by a dramatic window wall that frames the outdoors\"; black stained cedar surround to a 'large gable window' with LED valance lighting.",
     source: 'zookcabins.com/cabin/luna',
   },
   {
@@ -112,16 +123,8 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
       + '⚠️ Door position within the facade not published; confirm. ⚠️ Reflective glazing carries a real '
       + 'bird-strike duty and will mirror whatever stands in front of it, including the next unit.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'unknown',
+    glassEvidence: "\"stretches the Signature glass facade by one full panel\" — a full mirror-glass facade forming the entire long elevation.",
     source: 'oodhouse.com/en-us/products/rvs/extended-park-model-rv',
-  },
-  {
-    maker: 'Elevation', model: '7-Series (7-105 shown)', widthFt: 12, lengthFt: 36, interiorSqFt: 400,
-    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.75,
-    entryNote: 'FIVE front-end window designs are a buyer choice, so the gable glazing is specified '
-      + 'rather than inherited. Sixteen 7-Series plans run 11-12 ft by 36-39 ft. ⚠️ Door wall and '
-      + 'position not published — confirm before siting.',
-    factoryPorch: null, towsPermitFree: false, mirroring: 'standard',
-    source: 'elevationparkmodels.com/floor-plans/7-series-floor-plans',
   },
 ];
 
@@ -155,19 +158,130 @@ export function oneDeckServesBoth(u: ObservedUnit): boolean {
  * or rolled side-to-side". Rolled side-to-side is the reversed plan Zook gates
  * behind a ten-unit order. It is the strongest procurement argument in this file.
  */
-export const MIRRORING_BY_MAKER = {
-  Elevation: {
-    availability: 'standard' as const,
-    quote: 'customers can select to have the floorplan flipped end-to-end or rolled side-to-side',
-    note: 'Rolled side-to-side is a reversed plan. No minimum order is stated. ⚠️ Confirm whether '
-      + 'flipping end-to-end also moves the glass relative to the hitch — that decides tow direction.',
-    source: 'elevationparkmodels.com/floor-plans',
+/**
+ * ⚠️ ÖÖD'S OWN GUIDANCE CONTRADICTS THE POSITION THE REST OF THIS KIT PROTECTS.
+ *
+ * Their US launch page says the unit is "designed to meet Park Model RV
+ * standards" — designed to meet, not certified to — and then, in the same
+ * breath about building a terrace around it:
+ *
+ *     "The wheels and the tow bar of the chassis can be hidden or removed for
+ *      a nice terrace to be built around the house."
+ *
+ * Removing the tow bar is the most identity-destroying act available on a park
+ * model, and it is being suggested in exactly the situation this project is in.
+ * Zook's site-prep page says the opposite in plain words: the unit "must remain
+ * ATTACHED to its wheels". Both cannot be right.
+ *
+ * This does not disqualify the unit — it is still the most deck-efficient thing
+ * in the catalogue. It means the terrace detail and the certification get
+ * settled in writing BEFORE an order, not after one.
+ */
+export const OOD_CLASSIFICATION_CONFLICT = {
+  maker: 'ÖÖD',
+  theirWording: 'designed to meet Park Model RV standards',
+  theRisk: 'The wheels and the tow bar of the chassis can be hidden or removed for a nice terrace '
+    + 'to be built around the house.',
+  conflictsWith: 'Zook site prep: the park model must remain ATTACHED to its wheels.',
+  resolveBefore: 'order' as const,
+  actions: [
+    'Get the RVIA / ANSI A119.5 certification in writing, not "designed to meet".',
+    'Write into the purchase order that the tow bar and wheels stay attached and reachable.',
+    'Detail the terrace to conceal nothing structurally — removable panels only, as everywhere else here.',
+  ],
+} as const;
+
+/**
+ * Makers looked at and NOT used, each with the reason. Recorded so that nobody
+ * repeats this search and reaches a different answer from the same evidence.
+ */
+export const NEAR_MISSES = [
+  {
+    maker: 'Elevation', model: '7-Series',
+    why: 'A choice of "five front-end window designs" is a window configuration, not a glass wall. '
+      + 'This was read as a glass wall on a first pass. It is not one.',
   },
+  {
+    maker: 'Hilltop Structures', model: 'Smoky Mountain Park Model RV',
+    why: '"2 reverse gables with glass" is ambiguous, and the same spec lists ordinary double-pane '
+      + 'clay vinyl windows. Worth one phone call; not worth an assumption.',
+  },
+  {
+    maker: 'ESCAPE Traveler', model: 'Vista',
+    why: 'Four large Low-E windows is four windows, not a wall, and at 25 x 8.5 ft it is a 212 sq ft '
+      + 'travel trailer rather than a park model. Worth remembering for one reason only: at 8.5 ft '
+      + 'wide it is the only unit encountered that tows with no permit, escort or route approval.',
+  },
+  {
+    maker: 'Wheelhaus', model: 'Wedge',
+    why: 'A "sliding glass entryway" is a slider. It does ship a fully covered front deck, which is '
+      + 'the one idea worth taking from it.',
+  },
+  {
+    maker: 'Deep Blue', model: 'Mirror Cabin',
+    why: 'A real mirrored-facade prefab at roughly 270 sq ft, but a Chinese modular product with no '
+      + 'RVIA or ANSI A119.5 evidence. Without park-model status the tax position goes with it.',
+  },
+] as const;
+
+/**
+ * NOT REJECTED, NOT ACCEPTED — the maker simply does not publish enough to tell.
+ *
+ * This is a separate box from NEAR_MISSES on purpose. A near-miss was looked at
+ * and ruled out on evidence; these were looked at and could not be ruled either
+ * way, because the page says nothing about glazing at all. Guessing from a
+ * rendering is exactly the mistake that put Elevation on the list, so these wait
+ * for a floor plan instead.
+ */
+export const UNVERIFIED = [
+  {
+    maker: 'Irontown Modular', model: 'Cabana 400', widthFt: 14, lengthFt: 32, interiorSqFt: 397,
+    priceUsd: 118700,
+    missing: 'No window placement, glazing layout or elevation published; renderings only.',
+    alsoMissing: 'No RVIA or ANSI A119.5 claim anywhere on the page. "At 399 sq ft this unit will meet '
+      + 'the Park Model code" is a size statement, not a certification — the same designed-to-meet '
+      + 'wording that needs pinning down at ÖÖD.',
+    ask: 'Request the floor plan PDF and a glazed elevation. Two questions settle it: is any wall '
+      + 'full-height glass, and is it the gable or the long side?',
+  },
+  {
+    maker: 'Irontown Modular', model: 'Mysa 400', widthFt: 14, lengthFt: 32, interiorSqFt: 397,
+    priceUsd: 120100,
+    missing: 'Same footprint as the Cabana 400 and the same silence on glazing.',
+    alsoMissing: 'No RVIA or ANSI A119.5 claim published.',
+    ask: 'Ask what actually differs from the Cabana 400 besides finishes, and get both elevations.',
+  },
+] as const;
+
+/**
+ * The market for a park model with a genuine full-height glass wall is THIN.
+ * Five models from two makers survived; five more were looked at and rejected.
+ * That is the finding, not a gap in the search — and it is why the door and
+ * glazing positions above are constraints to design around rather than
+ * preferences to state.
+ */
+export const SURVEY = {
+  qualified: 5,
+  rejected: 5,
+  awaitingEvidence: 2,
+  makersQualified: ['Zook', 'ÖÖD'],
+  bar: 'The maker\'s own words must describe a glass WALL or facade. "Large windows", "window '
+    + 'designs" and "sliding glass entryway" are not evidence, and neither is a rendering.',
+} as const;
+
+export const MIRRORING_BY_MAKER = {
   Zook: {
     availability: 'volume-only' as const,
     quote: 'not customizable when ordered as a single unit',
     note: 'Custom plans only at ten or more units.',
     source: 'zookcabins.com/planning/park-model/construction-details',
+  },
+  'ÖÖD': {
+    availability: 'unknown' as const,
+    quote: 'not published',
+    note: 'Handing is not addressed either way. Ask — the facade IS the long elevation, so which way '
+      + 'it faces is the entire siting decision.',
+    source: 'oodhouse.com/en-us/products/rvs/extended-park-model-rv',
   },
 } as const;
 
