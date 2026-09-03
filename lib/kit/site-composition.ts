@@ -69,6 +69,27 @@ export interface ObservedUnit {
    * unit gets onto this list that does not belong on it.
    */
   glassEvidence: string;
+  /**
+   * How the glass wall got into this record.
+   *
+   *   'published'      the maker's own words describe a glass wall or facade
+   *   'owner-directed' included on instruction; the maker publishes no glazing
+   *                    layout, so the wall it is on is an ASSUMPTION
+   *
+   * Kept as a field rather than a footnote because an assumption that decides
+   * which layouts a unit can occupy has to travel with the unit, not sit in a
+   * paragraph someone skims.
+   */
+  evidenceStatus: 'published' | 'owner-directed';
+  /** For owner-directed units: what has to come back from the maker. */
+  openQuestions?: readonly string[];
+  /**
+   * A wide folding door from the living end onto a covered deck. Not a glass
+   * WALL — but arguably better for this programme, because a fixed pane frames
+   * the view and a folding door removes the wall entirely. Worth its own field
+   * because it changes how the deck is used, not just how it looks.
+   */
+  foldingDoorToDeck?: boolean;
   /** Tows inside the 8.5 ft limit with no permit, escort or route approval. */
   towsPermitFree: boolean;
   source: string;
@@ -85,6 +106,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Full-lite entry door on the LONG SIDE at the hitch end, beside the bathroom bump-out; '
       + 'custom full-glass A-frame window with black aluminium frame fills the front gable.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    evidenceStatus: 'published',
     glassEvidence: "\"Custom Full glass Aframe window in livingroom with tempered glass and black aluminum frame\"; the spec sheet also lists a 1 ft overhang around the 'Aframe glass wall'.",
     source: 'zookcabins.com/cabin/a-frame-studio',
   },
@@ -94,6 +116,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Recessed entry niche with full-lite door on the LONG SIDE; custom tempered A-frame '
       + 'window with black aluminium frame on the front gable.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    evidenceStatus: 'published',
     glassEvidence: "\"breathtaking views through the beautiful A-frame glass on the front end of the building\"; \"a custom tempered A-frame window with black aluminum frame\".",
     source: 'zookcabins.com/cabin/a-frame-bunkhouse',
   },
@@ -103,6 +126,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Front door set along the SIDE with an inset for weather protection; custom tempered '
       + 'glass with aluminium frame fills the living-room A-frame gable.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    evidenceStatus: 'published',
     glassEvidence: "\"the huge window spanning the entire front of the house\"; \"Custom tempered glass with an aluminum frame in the living room A-frame\".",
     source: 'zookcabins.com/cabin/a-frame-park-model-home',
   },
@@ -112,6 +136,7 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
     entryNote: 'Fiberglass full-lite entry door; dramatic window wall on the GABLE end, black stained '
       + 'cedar surround with LED valance lighting. ⚠️ Door wall not published — confirm before siting.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
+    evidenceStatus: 'published',
     glassEvidence: "\"anchored by a dramatic window wall that frames the outdoors\"; black stained cedar surround to a 'large gable window' with LED valance lighting.",
     source: 'zookcabins.com/cabin/luna',
   },
@@ -123,8 +148,53 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
       + '⚠️ Door position within the facade not published; confirm. ⚠️ Reflective glazing carries a real '
       + 'bird-strike duty and will mirror whatever stands in front of it, including the next unit.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'unknown',
+    evidenceStatus: 'published',
     glassEvidence: "\"stretches the Signature glass facade by one full panel\" — a full mirror-glass facade forming the entire long elevation.",
     source: 'oodhouse.com/en-us/products/rvs/extended-park-model-rv',
+  },
+  {
+    maker: 'Irontown Modular', model: 'Cabana PMRV', widthFt: 13.67, lengthFt: 29.17, interiorSqFt: 399,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.4,
+    entryNote: 'FLOOR PLAN OBTAINED. Bedroom at one end, living at the other, entry on the LONG wall '
+      + 'about 40% back from the living end — far closer to the deck than any A-frame. Overall 29\'2" '
+      + 'x 13\'8", or 35\'2" with the deck option, so the covered deck bolts on at the LIVING END and '
+      + 'adds six feet of length. Kitchen comes as wet bar, kitchenette or full galley.',
+    factoryPorch: 'covered deck at the living end, +6 ft of overall length (optional)',
+    towsPermitFree: false, mirroring: 'unknown',
+    evidenceStatus: 'owner-directed',
+    foldingDoorToDeck: true,
+    glassEvidence: 'FAILS THE GLASS-WALL BAR ON ITS OWN FLOOR PLAN. What the drawing actually shows is '
+      + 'a window in the living gable plus an OPTIONAL folding door onto the covered deck — not a '
+      + 'full-height glass wall. Included on instruction, with that stated rather than smoothed over.',
+    openQuestions: [
+      'Is any wall full-height glass? The floor plan says no — confirm there is no glazed option.',
+      'How wide is the folding door, and is it glazed full height?',
+      'Is the covered deck structurally part of the unit, and does it count against the 400 sq ft?',
+      'RVIA / ANSI A119.5 certification in writing. "Will meet the Park Model code" is about size.',
+    ],
+    source: 'irontownmodular.com/cabin-hotel-cabana-pmrv (floor plan PDF, 2025-06-16)',
+  },
+  {
+    maker: 'Irontown Modular', model: 'Mysa 400', widthFt: 13.67, lengthFt: 32.17, interiorSqFt: 399,
+    entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.75,
+    entryNote: 'FLOOR PLAN OBTAINED. Overall 32\'2" x 13\'8" — the web page\'s "14 x 32" is wrong. '
+      + 'Same family as the Cabana, but the covered deck is carved INSIDE the footprint rather than '
+      + 'bolted on, so roughly 40-55 sq ft of the overall length is deck rather than room. Entry reads '
+      + 'as the long wall toward the bedroom end; confirm before siting.',
+    factoryPorch: 'covered deck at the living end, integral to the 32 ft 2 in overall length',
+    towsPermitFree: false, mirroring: 'unknown',
+    evidenceStatus: 'owner-directed',
+    foldingDoorToDeck: true,
+    glassEvidence: 'FAILS THE GLASS-WALL BAR ON ITS OWN FLOOR PLAN, exactly as the Cabana does: an '
+      + 'OPTIONAL folding door onto a covered deck, and ordinary windows elsewhere. Included on '
+      + 'instruction.',
+    openQuestions: [
+      'Is any wall full-height glass? The floor plan says no — confirm there is no glazed option.',
+      'How wide is the folding door, and is it glazed full height?',
+      'Which wall is the entry door actually on, and how far along?',
+      'Reconcile the price: $102,100 and $120,100 both appear in public listings.',
+    ],
+    source: 'irontownmodular.com/mysa-400-park-model (floor plan PDF, 2025-06-16)',
   },
 ];
 
@@ -233,25 +303,13 @@ export const NEAR_MISSES = [
  * rendering is exactly the mistake that put Elevation on the list, so these wait
  * for a floor plan instead.
  */
-export const UNVERIFIED = [
-  {
-    maker: 'Irontown Modular', model: 'Cabana 400', widthFt: 14, lengthFt: 32, interiorSqFt: 397,
-    priceUsd: 118700,
-    missing: 'No window placement, glazing layout or elevation published; renderings only.',
-    alsoMissing: 'No RVIA or ANSI A119.5 claim anywhere on the page. "At 399 sq ft this unit will meet '
-      + 'the Park Model code" is a size statement, not a certification — the same designed-to-meet '
-      + 'wording that needs pinning down at ÖÖD.',
-    ask: 'Request the floor plan PDF and a glazed elevation. Two questions settle it: is any wall '
-      + 'full-height glass, and is it the gable or the long side?',
-  },
-  {
-    maker: 'Irontown Modular', model: 'Mysa 400', widthFt: 14, lengthFt: 32, interiorSqFt: 397,
-    priceUsd: 120100,
-    missing: 'Same footprint as the Cabana 400 and the same silence on glazing.',
-    alsoMissing: 'No RVIA or ANSI A119.5 claim published.',
-    ask: 'Ask what actually differs from the Cabana 400 besides finishes, and get both elevations.',
-  },
-] as const;
+/**
+ * Held here when a maker publishes nothing about glazing. Both Irontown models
+ * sat in this box and were then INCLUDED ON INSTRUCTION — they now carry
+ * evidenceStatus 'owner-directed' in the catalogue above, with their open
+ * questions attached, rather than being silently promoted to verified.
+ */
+export const UNVERIFIED = [] as const;
 
 /**
  * The market for a park model with a genuine full-height glass wall is THIN.
@@ -260,11 +318,34 @@ export const UNVERIFIED = [
  * glazing positions above are constraints to design around rather than
  * preferences to state.
  */
+/**
+ * THE FOLDING DOOR IS A BETTER ANSWER THAN THE ONE WE WENT LOOKING FOR.
+ *
+ * Both Irontown plans fail the glass-wall bar and do something else instead: a
+ * folding door across the living end onto a covered deck that is part of the
+ * unit. A fixed glazed gable frames a view from inside. A folding door DELETES
+ * the wall, so the living room and the deck become one room in good weather —
+ * which is what this whole programme is actually trying to buy.
+ *
+ * It also solves the flank strip. On the Cabana the entry sits about 40% back
+ * from the living end rather than 75-85% like the A-frames, so the walk from
+ * deck to door is short enough that a wrap may not be needed at all.
+ *
+ * They are in the catalogue on instruction, flagged as failing the stated bar.
+ * If the bar is what matters, they come out. If the DECK is what matters, they
+ * may be the strongest thing here.
+ */
+export const FOLDING_DOOR_UNITS = OBSERVED_UNITS.filter((u) => u.foldingDoorToDeck === true);
+
 export const SURVEY = {
-  qualified: 5,
+  qualified: 7,
   rejected: 5,
-  awaitingEvidence: 2,
-  makersQualified: ['Zook', 'ÖÖD'],
+  awaitingEvidence: 0,
+  /** Of the qualified, how many rest on the maker's own published words. */
+  evidencePublished: 5,
+  /** And how many are in on instruction, with the glass wall assumed. */
+  evidenceOwnerDirected: 2,
+  makersQualified: ['Zook', 'ÖÖD', 'Irontown Modular'],
   bar: 'The maker\'s own words must describe a glass WALL or facade. "Large windows", "window '
     + 'designs" and "sliding glass entryway" are not evidence, and neither is a rendering.',
 } as const;

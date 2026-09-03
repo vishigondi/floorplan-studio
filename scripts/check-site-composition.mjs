@@ -23,7 +23,7 @@ const {
   deckAreaSqFt, flankStripCostSqFt, FLANK_STRIP_WIDTH_FT, mirroredUnits, requiresMirroring,
   isOrthogonal, ORTHOGONAL_ONLY, PAD_SPEC, PROHIBITED_FOUNDATIONS, foundationAllowed,
   DELIVERY_ACCESS, cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
-  NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED,
+  NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED, FOLDING_DOOR_UNITS,
 } = M;
 
 let failures = 0;
@@ -59,19 +59,61 @@ check('the tow sweep is the unit plus clearance and a run for the tractor',
   && near(area(towSweep(u0)), (12 + 4) * (42 + 25), 0.01));
 
 console.log('only units with a full-height glass wall are in the catalogue');
-check('five models survive, every one glazed, each with its own source',
-  OBSERVED_UNITS.length === 5 && glassUnits().length === 5
+check('seven models in play, every one glazed, each with its own source',
+  OBSERVED_UNITS.length === 7 && glassUnits().length === 7
   && OBSERVED_UNITS.every((u) => typeof u.source === 'string' && u.source.includes('.com')));
-check('four put the glass on the gable — the long wall is the towing face',
-  OBSERVED_UNITS.filter((u) => u.glassWall === 'gable').length === 4);
-// The bar that keeps a window from being read as a wall. Every unit has to
-// carry the maker's own words, quoted.
-check('every unit carries quoted evidence of a glass WALL, not a window',
-  OBSERVED_UNITS.every((u) => typeof u.glassEvidence === 'string'
-    && u.glassEvidence.length > 40 && u.glassEvidence.includes('"')));
-check('and the evidence names a wall, a facade or a glazed gable in each case',
-  OBSERVED_UNITS.every((u) => /glass wall|window wall|facade|Full glass|entire front|A-frame glass/i.test(u.glassEvidence)),
-  OBSERVED_UNITS.filter((u) => !/glass wall|window wall|facade|Full glass|entire front|A-frame glass/i.test(u.glassEvidence)).map((u) => u.model).join());
+check('six put the glass on the gable — the long wall is the towing face',
+  OBSERVED_UNITS.filter((u) => u.glassWall === 'gable').length === 6);
+// Two ways in, and they must not be confusable. Five rest on the maker's own
+// published words; two are in on instruction with the wall assumed.
+const published = OBSERVED_UNITS.filter((u) => u.evidenceStatus === 'published');
+const directed = OBSERVED_UNITS.filter((u) => u.evidenceStatus === 'owner-directed');
+check('five rest on published evidence, two are in on instruction',
+  published.length === 5 && directed.length === 2
+  && directed.every((u) => u.maker === 'Irontown Modular'));
+const WALL = /glass wall|window wall|facade|Full glass|entire front|A-frame glass/i;
+check('every published unit quotes the maker naming a wall, facade or glazed gable',
+  published.every((u) => u.glassEvidence.length > 40 && u.glassEvidence.includes('"')
+    && WALL.test(u.glassEvidence)),
+  published.filter((u) => !WALL.test(u.glassEvidence)).map((u) => u.model).join());
+// The check that stops an assumption quietly becoming a fact: an owner-directed
+// unit must SAY it is unpublished, and must not read as if a maker said it.
+// The floor plans came back and they say no. That answer has to survive in the
+// record, or the units quietly read as qualifying next time someone opens this.
+check('both owner-directed units record that they FAIL the bar on their own plan',
+  directed.every((u) => /FAILS THE GLASS-WALL BAR/.test(u.glassEvidence)
+    && /floor plan|FLOOR PLAN/i.test(u.entryNote)));
+check('and each states plainly what the plan shows instead',
+  directed.every((u) => /OPTIONAL folding door/.test(u.glassEvidence))
+  && /not a \s*full-height glass wall/.test(
+    OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').glassEvidence.replace(/\s+/g, ' ')));
+check('their sources cite the floor plan PDF, not the marketing page alone',
+  directed.every((u) => /floor plan PDF/.test(u.source)));
+// What the plans DO show, kept as its own fact rather than a consolation.
+check('both offer a folding door onto a covered deck at the living end',
+  FOLDING_DOOR_UNITS.length === 2
+  && FOLDING_DOOR_UNITS.every((u) => u.foldingDoorToDeck === true
+    && /covered deck at the living end/.test(u.factoryPorch)));
+check('and no published-evidence unit claims a folding door',
+  published.every((u) => u.foldingDoorToDeck === undefined));
+// The Cabana's real advantage, straight off the plan.
+check('the Cabana entry sits far closer to the deck end than any A-frame',
+  OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').doorAtFractionFromGlass === 0.4
+  && OBSERVED_UNITS.filter((u) => /A-Frame/.test(u.model))
+      .every((u) => u.doorAtFractionFromGlass > 0.7));
+check('the Mysa footprint is corrected from the web page to the plan',
+  OBSERVED_UNITS.find((u) => u.model === 'Mysa 400').lengthFt === 32.17
+  && /"14 x 32" is wrong/.test(OBSERVED_UNITS.find((u) => u.model === 'Mysa 400').entryNote));
+check('each owner-directed unit carries its open questions, glazing first',
+  directed.every((u) => Array.isArray(u.openQuestions) && u.openQuestions.length >= 4
+    && /full-height glass/.test(u.openQuestions[0])
+    && /floor plan says no/.test(u.openQuestions[0])));
+check('and published units carry none, so the two states stay distinguishable',
+  published.every((u) => u.openQuestions === undefined));
+// The Cabana's factory deck is the only real geometric evidence there is.
+check('the Cabana\'s factory deck is recorded as an END deck, from its own dimensions',
+  /adds six feet of length/.test(OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').entryNote)
+  && /at the LIVING END/.test(OBSERVED_UNITS.find((u) => u.model === 'Cabana PMRV').entryNote));
 check('and exactly one puts it on the long side',
   OBSERVED_UNITS.filter((u) => u.glassWall === 'side').map((u) => u.maker).join() === 'ÖÖD');
 // The geometric consequence that shapes every layout below.
@@ -92,8 +134,11 @@ check('and the mirror glazing carries its own warnings',
 
 console.log('what was looked at and rejected, and why');
 // The summary must be derived from the data it summarises, or it drifts.
-check('the survey count matches the catalogue it describes',
-  SURVEY.qualified === OBSERVED_UNITS.length && SURVEY.rejected === NEAR_MISSES.length);
+check('the survey counts match the catalogue they describe',
+  SURVEY.qualified === OBSERVED_UNITS.length && SURVEY.rejected === NEAR_MISSES.length
+  && SURVEY.evidencePublished === published.length
+  && SURVEY.evidenceOwnerDirected === directed.length
+  && SURVEY.evidencePublished + SURVEY.evidenceOwnerDirected === SURVEY.qualified);
 check('and the makers it names are exactly the makers in the catalogue',
   SURVEY.makersQualified.slice().sort().join()
   === [...new Set(OBSERVED_UNITS.map((u) => u.maker))].sort().join());
@@ -108,18 +153,14 @@ check('the bar is written down, naming what does NOT count as evidence',
   && /neither is a rendering/.test(SURVEY.bar));
 // Unknown is its own answer. Keeping it separate from "rejected" is what stops
 // a rendering being promoted to evidence a second time.
-check('two candidates are held as awaiting evidence, not rejected and not used',
-  UNVERIFIED.length === 2 && SURVEY.awaitingEvidence === UNVERIFIED.length);
-check('and neither has been quietly added to the catalogue or the reject list',
-  UNVERIFIED.every((c) => !OBSERVED_UNITS.some((u) => u.model === c.model))
-  && UNVERIFIED.every((c) => !NEAR_MISSES.some((n) => n.model === c.model)));
-check('each says what is missing and what to ask for',
-  UNVERIFIED.every((c) => /glazing|elevation|silence on glazing/i.test(c.missing)
-    && /floor plan|elevations/i.test(c.ask)));
-check('and each flags the missing certification claim separately from the glazing',
-  UNVERIFIED.every((c) => /RVIA or ANSI A119\.5/.test(c.alsoMissing)));
-check('the size-threshold wording is called out as not being a certification',
-  /is a size statement, not a certification/.test(UNVERIFIED[0].alsoMissing));
+check('the awaiting box is empty and the count agrees',
+  UNVERIFIED.length === 0 && SURVEY.awaitingEvidence === 0);
+check('nothing rejected is sitting in the catalogue',
+  NEAR_MISSES.every((n) => !OBSERVED_UNITS.some((u) => u.maker === n.maker)));
+check('the size-threshold wording is still called out where it appears',
+  directed.some((u) => u.openQuestions.some((q) => /about size/.test(q))));
+check('and the folding-door width is an open question, not an assumption',
+  directed.every((u) => u.openQuestions.some((q) => /How wide is the folding door/.test(q))));
 check('the permit-free unit is remembered even though it failed the glass test',
   NEAR_MISSES.some((n) => /no permit, escort or route approval/.test(n.why)));
 
