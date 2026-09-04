@@ -439,6 +439,90 @@ export const DESIGN_PLUS_BUILDER = {
     + 'collaboration is 36 x 11 at 396 sq ft. Same name, different units; do not conflate them in a quote.',
 } as const;
 
+/**
+ * WIND RIVER BUILT — read off their 2023/24 catalogue, which carries full window
+ * schedules and dimensioned plans. It changes the picture, and it is a hundred
+ * miles from the site.
+ *
+ * THE BROOKS IS THE FIND, AND IT IS NOT ON THEIR PRICE LIST. A 38 ft body with
+ * FOUR 42x80 fixed lights in a continuous run on the long wall — fourteen feet
+ * of glass at six foot eight, which is the closest thing to a glazed elevation
+ * in this entire survey. Side glazing, so the door sits in the same wall and one
+ * deck serves both: the OOD and Skyview geometry, from a builder in Chattanooga.
+ *
+ * TWO THINGS THEY OFFER THAT ZOOK GATES BEHIND TEN UNITS:
+ *   ENTRY POSITION IS A CHOICE. The catalogue draws the 30 ft Toccoa as both
+ *   "Side Entry" and "End Entry". That is the handing problem solved at the
+ *   order form.
+ *   ROOFLINE IS A CHOICE — shed, wedge, low-pitch gable, gable.
+ *
+ * ⚠️ AND ONE TO CHECK BEFORE ANYTHING ELSE. Their three largest models are sold
+ * as 45 ft. The Rutledge is drawn as a 38 ft body at 40 ft 6 in overall, so a
+ * 45 ft model is likely a 42-43 ft body — at 10 ft wide that is 420-430 sq ft,
+ * OVER the ANSI 400 sq ft cap. Those cannot be park models, and NC treats an
+ * unlabelled unit over 400 sq ft gross trailer area as a non-complying single
+ * family dwelling. Get the BODY dimension, not the advertised length.
+ */
+export const WIND_RIVER = {
+  maker: 'Wind River Built',
+  where: 'Chattanooga TN — roughly 100 miles from the site, against 700 to Zook',
+  certifier: 'PWA (Pacific West Associates) — see NC_LABEL_QUESTION before ruling in or out',
+  widths: { shortModelsFt: 8.5, longModelsFt: 10 },
+  permitFreeModels: ['24 ft Toccoa', '24 ft Pingora'],
+  entryIsAChoice: 'The 30 ft Toccoa is drawn both Side Entry and End Entry — handing at the order form.',
+  rooflineIsAChoice: ['shed', 'wedge', 'low-pitch gable', 'gable'],
+  glazing: [
+    'Brooks 38 ft — 42x80 Fixed x4 in a run: ~14 ft of glass at 6 ft 8 on the LONG wall.',
+    'Rutledge 38 ft — 30x80, 30x80, 42x80 Fixed: ~8 ft 6 in of full-height glass on the long wall.',
+    'Etowah 32 ft and Pingora 30 ft — 42x80 Fixed x2: ~7 ft.',
+  ],
+  loftsCountInNc: 'Plans note 6 ft headroom in lofts, which is above NCDOI\'s 5 ft — so they COUNT.',
+  areaWarning:
+    'The 45 ft models are advertised by overall length. Rutledge is a 38 ft body at 40 ft 6 in overall, '
+    + 'so 45 ft likely means a 42-43 ft body — 420-430 sq ft at 10 ft wide, OVER the 400 cap. Ask for '
+    + 'the body dimension and the gross trailer area, not the advertised length.',
+  prices: 'Toccoa 24 ft $86,900 to Pisgah 45 ft $179,000.',
+  source: 'windriverbuilt.com 2023/24 catalogue PDF, dimensioned plans with window schedules',
+} as const;
+
+/**
+ * ÖÖD'S OFFICE UNITS — usable, but not for the thing they look like they are for.
+ *
+ * The Large Office is 227 sq ft at $94,900 and the Medium 100 sq ft at $39,900,
+ * and NEITHER HAS A BED OR A BATH. So they are not lettable accommodation and
+ * they are not park models: with no living quarters, ANSI A119.5 does not reach
+ * them, there is no RVIA seal to have, and no vehicle classification to protect.
+ *
+ * What they ARE is a very good amenity building, and the plan already has two
+ * places for one — the Field Office product at Blueprint 0E.8, and the detached
+ * wellness kits at 0D.57. A mirror-glass pod as the field office or the sauna
+ * building is on-brand and needs no classification argument at all.
+ *
+ * The trade is that an amenity building is REAL PROPERTY. Foundation, building
+ * permit, 39-year life, and it counts as an accessory structure — which is fine
+ * when it is planned that way and expensive when it is discovered late.
+ */
+export const OOD_OFFICE_UNITS = {
+  units: [
+    { model: 'Large Office', sqFt: 227, priceUsd: 94900, beds: 0 },
+    { model: 'Medium Office', sqFt: 100, priceUsd: 39900, beds: 0 },
+    { model: 'Glamping House', sqFt: 100, priceUsd: 39900, beds: 0 },
+  ],
+  notLettable: 'No bed and no bath — not accommodation, and not a park model either.',
+  whatTheyAreGoodFor: [
+    'The Field Office product already specified at Blueprint 0E.8 — sell capacity, not rooms.',
+    'A detached wellness or sauna building in the 0D.57 kits.',
+    'Arrival, reception, or a small retail point where a mirror box does real work.',
+  ],
+  theTrade:
+    'An amenity building is REAL PROPERTY: foundation, building permit, 39-year life, accessory '
+    + 'structure. Fine when planned that way; expensive when discovered late. And it carries no vehicle '
+    + 'classification, so none of the wheels-and-axles or cord-and-plug rules apply to it.',
+  mirrorCaution:
+    'Reflective glazing on an amenity building sits where guests walk past it all day — the bird-strike '
+    + 'duty is higher here than on a unit at the end of a lot, not lower.',
+} as const;
+
 export const NEAR_MISSES = [
   {
     maker: 'Elevation', model: '7-Series',
@@ -462,7 +546,7 @@ export const NEAR_MISSES = [
       + 'the one idea worth taking from it.',
   },
   {
-    maker: 'Wind River Built', model: 'Pisgah / Tellico / Cumberland (45 ft) and five smaller',
+    maker: 'Wind River Built (SUPERSEDED — see catalogue findings)', model: 'see WIND_RIVER',
     why: 'Chattanooga TN, roughly 100 miles from the site — by far the closest builder found, and they '
       + 'ship nationwide. But certified by PWA, not RVIA, which fails in NC and at the bank. Their own '
       + 'explainer also says park models are "meant to be hardwired into an electric grid rather than with '

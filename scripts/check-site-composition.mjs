@@ -24,7 +24,7 @@ const {
   isOrthogonal, ORTHOGONAL_ONLY, PAD_SPEC, PROHIBITED_FOUNDATIONS, foundationAllowed,
   DELIVERY_ACCESS, cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
   NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED, FOLDING_DOOR_UNITS,
-  CERTIFICATION_BODIES, NC_LABEL_QUESTION, DESIGN_PLUS_BUILDER,
+  CERTIFICATION_BODIES, NC_LABEL_QUESTION, DESIGN_PLUS_BUILDER, WIND_RIVER, OOD_OFFICE_UNITS,
 } = M;
 
 let failures = 0;
@@ -237,17 +237,59 @@ check('and the stakes named — it reopens the nearest builder',
 check('the lender question is kept separate from the state question',
   /question for the lender, not the state/.test(NC_LABEL_QUESTION.lenderQuestion)
   && /two\s+answers need not agree/.test(NC_LABEL_QUESTION.lenderQuestion.replace(/\s+/g, ' ')));
-check('the two PWA builders are recorded as near-misses, not as usable',
-  NEAR_MISSES.some((n) => n.maker === 'Wind River Built' && /PWA, not RVIA/.test(n.why))
+check('the two PWA builders are recorded, Wind River now pointing at its catalogue entry',
+  NEAR_MISSES.some((n) => /Wind River Built/.test(n.maker) && /PWA, not RVIA/.test(n.why))
   && NEAR_MISSES.some((n) => n.maker === 'New Frontier Design' && /PWA certified/.test(n.why)));
+console.log('Wind River, read off a catalogue with real window schedules');
+check('the 24 ft models are 8 ft 6 in — permit-free to tow',
+  WIND_RIVER.widths.shortModelsFt === 8.5 && WIND_RIVER.widths.longModelsFt === 10
+  && WIND_RIVER.permitFreeModels.length === 2);
+// The two things Zook gates behind ten units, offered at the order form.
+check('entry position and roofline are both buyer choices',
+  /Side Entry and End Entry/.test(WIND_RIVER.entryIsAChoice)
+  && WIND_RIVER.rooflineIsAChoice.length === 4
+  && WIND_RIVER.rooflineIsAChoice.includes('gable'));
+check('the Brooks is recorded as the most glazed elevation in the survey',
+  WIND_RIVER.glazing.some((g) => /Brooks/.test(g) && /42x80 Fixed x4/.test(g)
+    && /LONG wall/.test(g)));
+// The thing to check before anything else.
+check('the 45 ft models carry an area warning, not an assumption',
+  /OVER the 400 cap/.test(WIND_RIVER.areaWarning)
+  && /body dimension/.test(WIND_RIVER.areaWarning)
+  && /not the advertised length/.test(WIND_RIVER.areaWarning));
+check('and their lofts are noted as counting in NC, at 6 ft headroom',
+  /6 ft headroom/.test(WIND_RIVER.loftsCountInNc) && /COUNT/.test(WIND_RIVER.loftsCountInNc));
+check('the certifier is recorded with the open label question, not a verdict',
+  /PWA/.test(WIND_RIVER.certifier) && /NC_LABEL_QUESTION/.test(WIND_RIVER.certifier));
+check('and the distance advantage is stated against the alternative',
+  /100 miles/.test(WIND_RIVER.where) && /700 to Zook/.test(WIND_RIVER.where));
+
+console.log('the OOD office units — usable, but not as lettings');
+check('none of the three has a bed',
+  OOD_OFFICE_UNITS.units.length === 3 && OOD_OFFICE_UNITS.units.every((u) => u.beds === 0));
+check('so they are recorded as neither lettable nor park models',
+  /not accommodation, and not a park model/.test(OOD_OFFICE_UNITS.notLettable));
+check('but they are matched to two places the plan already has for them',
+  OOD_OFFICE_UNITS.whatTheyAreGoodFor.length === 3
+  && OOD_OFFICE_UNITS.whatTheyAreGoodFor.some((u) => /Field Office/.test(u))
+  && OOD_OFFICE_UNITS.whatTheyAreGoodFor.some((u) => /wellness or sauna/.test(u)));
+// The trade that must not get lost: an amenity building is real property.
+check('and the trade is stated — real property, permit, 39-year life',
+  /REAL PROPERTY/.test(OOD_OFFICE_UNITS.theTrade)
+  && /39-year life/.test(OOD_OFFICE_UNITS.theTrade)
+  && /no vehicle classification/.test(OOD_OFFICE_UNITS.theTrade));
+check('with the mirror caution raised rather than lowered for an amenity',
+  /bird-strike duty is higher here/.test(OOD_OFFICE_UNITS.mirrorCaution));
+
 check('and the closest builder is flagged as worth a call, on the corrected footing',
   NEAR_MISSES.some((n) => /roughly 100 miles from the site/.test(n.why)
     && /too good not to make it/.test(n.why)
-    && /PWA is not a lesser certification/.test(n.why)));
+    && /PWA is not a lesser certification/.test(n.why))
+  && NEAR_MISSES.some((n) => /SUPERSEDED/.test(n.maker) && /WIND_RIVER/.test(n.model)));
 // The reason to be careful with that call, which must not be edited away: their
 // own explainer describes park models the way NC forbids.
 check('and their hardwiring claim is kept, because it contradicts the mobility test',
-  NEAR_MISSES.some((n) => n.maker === 'Wind River Built'
+  NEAR_MISSES.some((n) => /Wind River Built/.test(n.maker)
     && /hardwired into an electric grid/.test(n.why)
     && /opposite of what NC requires/.test(n.why)));
 
