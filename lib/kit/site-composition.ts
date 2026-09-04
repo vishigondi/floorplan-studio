@@ -398,6 +398,51 @@ export const CERTIFICATION_BODIES = [
  * in either direction — because the answer reopens Wind River Built, a hundred
  * miles from the site, and New Frontier's glazing.
  */
+/**
+ * THE AGENCY LANDSCAPE IS WIDER THAN RVIA AND PWA, AND NO LIST IS COMPLETE.
+ *
+ * The Tiny House Alliance's own certification page names five more accredited
+ * agencies — and mentions none of RVIA, PWA or QAI. Which is the finding: there
+ * is no single authoritative roster, so "is this builder certified" is always a
+ * question about WHICH agency and WHO accepts it, never a yes or no.
+ *
+ * RADCO is the one to notice. It inspects park models AND serves as DAPIA and
+ * IPIA for HUD manufactured housing — so a single agency can cover both lanes of
+ * this project, the A119.5 short-stay units and the HUD-code resident homes.
+ */
+export const OTHER_AGENCIES = [
+  { body: 'RADCO', does: 'Park models, modular, factory-built. IAS-accredited TL-209 and AA-650. Also HUD DAPIA and IPIA.' },
+  { body: 'PFS TECO', does: 'HUD-designated IPIA and DAPIA; plan review and inspection, five regional offices.' },
+  { body: 'Intertek', does: 'Global TIC, OSHA-recognised NRTL, accredited by A2LA, ANSI and IAS.' },
+  { body: 'T.R. Arnold & Associates', does: 'Engineering, plan review, inspection, Canadian certification. Indiana.' },
+  { body: 'NOAH Remote Digitized Inspection', does: 'Remote inspection service.' },
+] as const;
+
+/**
+ * AND THE SENTENCE THAT TIES THE WHOLE CHAIN TOGETHER.
+ *
+ *   "Most tiny home builders are building RVs built to the NFPA 1192 Standard or
+ *    the Park Model Standard, ANSI 119.5 for the ability to have them certified
+ *    and registered, to get a Vin number and title."
+ *
+ * Certification is not an end. It produces a VIN, which produces a TITLE, which
+ * is what makes the unit titled personal property at the DMV — the deal
+ * workstream's 0G.45(1d) has the DMV as the exclusive agency for the unit. And a
+ * title is what an RV lender lends against and an RV policy insures.
+ *
+ *   A119.5 certification -> VIN -> NCDMV title -> personal property
+ *     -> RV loan, RV insurance, and the classification the tax position needs
+ *
+ * Every link is the same decision. Lose the first and the rest go with it.
+ */
+export const CERT_TO_TITLE_CHAIN = [
+  'ANSI A119.5 certification by an accepted agency',
+  'VIN issued',
+  'NCDMV title — the DMV is the exclusive agency for the unit',
+  'Titled personal property, not real property',
+  'RV loan at 5-9% and an RV or park-model insurance policy',
+] as const;
+
 export const NC_LABEL_QUESTION = {
   settled: 'RVIA and RPTIA labels are pictured as acceptable for temporary use.',
   open:
@@ -408,8 +453,10 @@ export const NC_LABEL_QUESTION = {
     'A yes reopens Wind River Built at ~100 miles and New Frontier\'s glazing. A no confirms the current '
     + 'shortlist. Either way it is one question to the Manufactured Building Division, not a research task.',
   askThis:
-    'Does the Division accept a park model labelled by an accredited third-party agency other than RVIA — '
-    + 'specifically Pacific West Associates — for temporary use on an RV site?',
+    'Does the Division maintain a LIST of accepted third-party certification agencies for park models, '
+    + 'and who is on it? Ask it that way rather than naming one agency — California HCD approves agencies '
+    + 'and Los Angeles recognises only HCD-listed ones, so a roster is how jurisdictions usually handle '
+    + 'this, and a list answers the question for every builder at once instead of one at a time.',
   /** Separate from the state question, and it may have a different answer. */
   lenderQuestion:
     'Lenders commonly specify RVIA — Essex Credit advertises rates for "RVIA-certified homes". Whether a '

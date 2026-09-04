@@ -25,7 +25,9 @@ const {
   DELIVERY_ACCESS, cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
   NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED, FOLDING_DOOR_UNITS,
   CERTIFICATION_BODIES, NC_LABEL_QUESTION, DESIGN_PLUS_BUILDER, WIND_RIVER, OOD_OFFICE_UNITS,
+  OTHER_AGENCIES, CERT_TO_TITLE_CHAIN,
 } = M;
+const { loftCountsTowardArea } = await import(join(root, 'lib/kit/nc-classification.ts'));
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -228,9 +230,26 @@ check('what is settled is stated narrowly — pictured labels, temporary use',
 check('and the open question is framed as open in BOTH directions',
   /pictures neither/.test(NC_LABEL_QUESTION.open)
   && /cannot certify AT ALL/.test(NC_LABEL_QUESTION.open));
-check('with the question written out, ready to ask',
-  /Does the Division accept a park model labelled by an accredited third-party agency/
-    .test(NC_LABEL_QUESTION.askThis));
+check('with the question written to get a LIST, not a one-builder answer',
+  /maintain a LIST of accepted third-party certification agencies/.test(NC_LABEL_QUESTION.askThis)
+  && /rather than naming one agency/.test(NC_LABEL_QUESTION.askThis)
+  && /California HCD/.test(NC_LABEL_QUESTION.askThis));
+
+console.log('the agency landscape, and what certification is actually for');
+check('five more accredited agencies recorded beyond RVIA and PWA',
+  OTHER_AGENCIES.length === 5 && OTHER_AGENCIES.every((a) => a.does.length > 25));
+// RADCO covers both lanes, which is why it is worth noticing.
+check('RADCO is noted as covering park models AND HUD, so one agency spans both lanes',
+  /Park models/.test(OTHER_AGENCIES.find((a) => a.body === 'RADCO').does)
+  && /HUD DAPIA and IPIA/.test(OTHER_AGENCIES.find((a) => a.body === 'RADCO').does));
+// Certification is a means, not an end.
+check('the chain runs certification to VIN to title to loan, in five links',
+  CERT_TO_TITLE_CHAIN.length === 5
+  && /ANSI A119\.5/.test(CERT_TO_TITLE_CHAIN[0])
+  && /VIN/.test(CERT_TO_TITLE_CHAIN[1])
+  && /NCDMV title/.test(CERT_TO_TITLE_CHAIN[2])
+  && /personal property/.test(CERT_TO_TITLE_CHAIN[3])
+  && /RV loan/.test(CERT_TO_TITLE_CHAIN[4]));
 check('and the stakes named — it reopens the nearest builder',
   /reopens Wind River Built at ~100 miles/.test(NC_LABEL_QUESTION.whyItMatters));
 // The lender question is separate and may answer differently.
@@ -257,8 +276,13 @@ check('the 45 ft models carry an area warning, not an assumption',
   /OVER the 400 cap/.test(WIND_RIVER.areaWarning)
   && /body dimension/.test(WIND_RIVER.areaWarning)
   && /not the advertised length/.test(WIND_RIVER.areaWarning));
-check('and their lofts are noted as counting in NC, at 6 ft headroom',
-  /6 ft headroom/.test(WIND_RIVER.loftsCountInNc) && /COUNT/.test(WIND_RIVER.loftsCountInNc));
+// Test the LOGIC, not the wording: 6 ft must actually be above NCDOI's 5 ft
+// threshold and must actually count. A mutation to "below" passed the earlier
+// word-matching version of this check.
+check('and their lofts are noted as counting in NC, because 6 ft clears the 5 ft test',
+  /6 ft headroom/.test(WIND_RIVER.loftsCountInNc) && /COUNT/.test(WIND_RIVER.loftsCountInNc)
+  && /above NCDOI/.test(WIND_RIVER.loftsCountInNc)
+  && loftCountsTowardArea(6) === true && loftCountsTowardArea(4.9) === false);
 check('the certifier is recorded with the open label question, not a verdict',
   /PWA/.test(WIND_RIVER.certifier) && /NC_LABEL_QUESTION/.test(WIND_RIVER.certifier));
 check('and the distance advantage is stated against the alternative',
