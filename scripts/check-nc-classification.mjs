@@ -17,6 +17,9 @@ const {
   GROSS_TRAILER_AREA, loftCountsTowardArea, ANSI_DEFINITION, assessNcRoute,
   MANUFACTURER_GATING_QUESTIONS, RV_PARK_WASTEWATER, parkModelDdfGpd, withinLocalReview,
   OWNERSHIP_DECIDES_CLASSIFICATION, TINY_HOME_ROUTE, MOVABLE_HOUSING_ROUTES, routesThatStayMovable,
+  SEWER_DESIGN_FLOW_02T, sewerAllocationGpd, classificationSpreadGpd, FLOW_REDUCTION_02T,
+  SEWER_EXTENSION_PERMIT, PUBLIC_WATER_SYSTEM, sitesReachingPwsPeopleTest, OPERATIONAL_AGREEMENT,
+  TOWN_CONNECTED_THRESHOLDS, thresholdsAt,
 } = await import(join(root, 'lib/kit/nc-classification.ts'));
 
 let failures = 0;
@@ -193,6 +196,91 @@ check('the park-model route names common control and the ten-space ceiling',
 check('tiny homes are recorded as a dead end, with the reason',
   TINY_HOME_ROUTE.classification === 'permanent single-family dwelling under the NC Residential Code'
   && /building with extra rules, not a movable asset/.test(TINY_HOME_ROUTE.notAWayAround));
+
+console.log('on town sewer the rulebook changes — 02T, not 18E');
+check('the sewer extension route is Fast Track, PE-sealed, 30 days',
+  SEWER_EXTENSION_PERMIT.rule === '15A NCAC 02T .0300'
+  && SEWER_EXTENSION_PERMIT.requiresSealedByPE === true
+  && SEWER_EXTENSION_PERMIT.reviewDays === 30
+  && /Division of Water Resources/.test(SEWER_EXTENSION_PERMIT.issuedBy));
+// The classification is worth more than the engineering, and the numbers say so.
+check('the three flow bases are 100, 200 and 240 gpd',
+  SEWER_DESIGN_FLOW_02T.campsiteWithHookupsGpd === 100
+  && SEWER_DESIGN_FLOW_02T.cottageOrCabinGpd === 200
+  && SEWER_DESIGN_FLOW_02T.dwellingMinimumGpd === 240);
+check('allocation is derived from sites and basis, not stored',
+  sewerAllocationGpd(20, 'campsite-hookups') === 2000
+  && sewerAllocationGpd(20, 'cottage-cabin') === 4000
+  && sewerAllocationGpd(20, 'dwelling') === 4800
+  && sewerAllocationGpd(0, 'dwelling') === 0);
+check('and the spread between best and worst case scales with the park',
+  classificationSpreadGpd(20) === 2800 && classificationSpreadGpd(10) === 1400
+  && classificationSpreadGpd(20) === classificationSpreadGpd(10) * 2);
+// The ambiguity itself is the finding — 02T has no park-model row.
+check('02T is recorded as having NO park-model line, with the question stated',
+  SEWER_DESIGN_FLOW_02T.parkModelNotListed === true
+  && /no park-model line in 02T/.test(SEWER_DESIGN_FLOW_02T.theQuestion)
+  && /in writing before sizing/.test(SEWER_DESIGN_FLOW_02T.theQuestion));
+check('and the on-site rate is noted as already heavier than a traditional RV',
+  RV_PARK_WASTEWATER.parkModelRvGpd === 150
+  && RV_PARK_WASTEWATER.parkModelRvGpd > SEWER_DESIGN_FLOW_02T.campsiteWithHookupsGpd);
+
+console.log('the public water system threshold arrives earlier than expected');
+check('the thresholds are 15 connections or 25 people over 60 days',
+  PUBLIC_WATER_SYSTEM.serviceConnectionThreshold === 15
+  && PUBLIC_WATER_SYSTEM.individualsThreshold === 25
+  && PUBLIC_WATER_SYSTEM.daysPerYearThreshold === 60);
+// Seven sites, not fifteen. That is the point.
+check('at four occupants a site, the people test lands at seven sites',
+  sitesReachingPwsPeopleTest() === 7
+  && sitesReachingPwsPeopleTest() < PUBLIC_WATER_SYSTEM.serviceConnectionThreshold);
+// Exercised on figures it has never seen — the only way to tell arithmetic from
+// a stored 7.
+check('and it is genuinely derived, not a stored answer',
+  sitesReachingPwsPeopleTest(25, 2) === 13 && sitesReachingPwsPeopleTest(25, 1) === 26
+  && sitesReachingPwsPeopleTest(99, 10) === 10 && sitesReachingPwsPeopleTest(25, 8) === 4);
+check('it moves the right way with occupancy, and survives a zero',
+  sitesReachingPwsPeopleTest(25, 2) > sitesReachingPwsPeopleTest(25, 4)
+  && sitesReachingPwsPeopleTest(25, 0) === Infinity);
+check('the likely category is transient non-community, not community',
+  /transient non-community/.test(PUBLIC_WATER_SYSTEM.likelyCategory)
+  && /not year-round residents/.test(PUBLIC_WATER_SYSTEM.likelyCategory));
+check('and the master-meter fork is stated as a decision, not an assumption',
+  /Individual town meters keep the town as the water system/.test(PUBLIC_WATER_SYSTEM.theFork)
+  && /master meter/.test(PUBLIC_WATER_SYSTEM.theFork)
+  && /before the site plan is fixed/.test(PUBLIC_WATER_SYSTEM.theFork));
+
+console.log('flow reduction, and the association that two agencies both want');
+check('flow reduction needs 12 months of data and is not available on day one',
+  FLOW_REDUCTION_02T.availableFromDayOne === false
+  && FLOW_REDUCTION_02T.monthsOfDataRequired === 12
+  && FLOW_REDUCTION_02T.requires.length === 6);
+// It cuts both ways, and that is the part worth remembering.
+check('and it is recorded that the same rule can force an INCREASE',
+  /flow INCREASES/.test(FLOW_REDUCTION_02T.warning)
+  && /what the meter will say/.test(FLOW_REDUCTION_02T.warning));
+check('an owners\' association applicant triggers an Operational Agreement',
+  OPERATIONAL_AGREEMENT.rule === '15A NCAC 02T .0115'
+  && OPERATIONAL_AGREEMENT.requires.length === 4
+  && OPERATIONAL_AGREEMENT.requires.includes('Executed Operational Agreement'));
+check('and it is tied back to the association that preserves common control',
+  /same association that keeps separately owned spaces under common control/.test(OPERATIONAL_AGREEMENT.connectsTo)
+  && /before the sewer permit, not after/.test(OPERATIONAL_AGREEMENT.connectsTo));
+
+console.log('when the limits actually bite');
+check('six thresholds recorded, each citing its rule',
+  TOWN_CONNECTED_THRESHOLDS.length === 6
+  && TOWN_CONNECTED_THRESHOLDS.every((t) => /15A NCAC/.test(t.rule)));
+check('four apply at any size and two are size-triggered',
+  TOWN_CONNECTED_THRESHOLDS.filter((t) => t.atSites === null).length === 4
+  && TOWN_CONNECTED_THRESHOLDS.filter((t) => t.atSites !== null).length === 2);
+// thresholdsAt has to actually filter, and bite at the boundary.
+check('a six-site park has not reached the people test; a seven-site park has',
+  thresholdsAt(6).length === 4 && thresholdsAt(7).length === 5
+  && thresholdsAt(15).length === 6 && thresholdsAt(0).length === 4);
+check('the ten-space septic ceiling is NOT among them — that rule is 18E',
+  !TOWN_CONNECTED_THRESHOLDS.some((t) => /18E/.test(t.rule))
+  && TOWN_CONNECTED_THRESHOLDS.every((t) => /02T|18C/.test(t.rule)));
 
 if (failures > 0) { console.error(`\nnc-classification battery: ${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nnc-classification battery clean');

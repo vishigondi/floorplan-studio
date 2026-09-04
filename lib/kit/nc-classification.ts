@@ -389,3 +389,242 @@ export const MOVABLE_HOUSING_ROUTES = [
 export function routesThatStayMovable() {
   return MOVABLE_HOUSING_ROUTES.filter((r) => r.isBuilding === false);
 }
+
+// ---------------------------------------------------------------------------
+// CONNECTED TO TOWN WATER AND SEWER — A DIFFERENT RULEBOOK ENTIRELY
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything above about design daily flow, septic tanks, LTAR and dispersal
+ * fields is 15A NCAC 18E — ON-SITE wastewater. Connecting to municipal sewer
+ * moves the project out from under almost all of it and under 15A NCAC 02T,
+ * which governs waste not discharged to surface waters, including sewer
+ * extensions. The limits are real but they are different limits, and the
+ * ten-space septic ceiling is not one of them.
+ */
+
+/**
+ * 15A NCAC 02T .0114(c) — the table that sets the sewer allocation you must buy
+ * from the town. THE CLASSIFICATION IS WORTH MORE THAN THE ENGINEERING HERE.
+ *
+ * There is no park-model line in this table. A site is priced as a campsite, a
+ * cabin or a dwelling, and the three answers differ by a factor of nearly two
+ * and a half on identical hardware.
+ */
+export const SEWER_DESIGN_FLOW_02T = {
+  rule: '15A NCAC 02T .0114(c)',
+  campsiteWithHookupsGpd: 100,
+  campsiteComfortStationNoHookupsGpd: 75,
+  dumpStationGpd: 50,
+  cottageOrCabinGpd: 200,
+  hotelWithInRoomCookingGpd: 175,
+  /** Dwelling units: 120/bedroom, floor of 240 per unit. */
+  dwellingPerBedroomGpd: 120,
+  dwellingMinimumGpd: 240,
+  /**
+   * ⚠️ THE AMBIGUITY THAT DECIDES THE BILL. 02T has no "park model" entry. The
+   * on-site rules (18E) created one at 150 gpd, above a traditional RV's 100 —
+   * so the state does already treat park models as heavier than tents. Under
+   * 02T you would argue "campgrounds with water and sewer hookups" at 100
+   * gal/campsite; a reviewer could as easily reach for "cottages, cabins" at
+   * 200. Settle it with the DWR regional office in writing BEFORE sizing the
+   * connection, because it doubles the allocation on identical hardware.
+   */
+  parkModelNotListed: true,
+  theQuestion:
+    'Does DWR price a park-model site as a campsite with hookups (100 gpd) or as a cottage/cabin '
+    + '(200 gpd)? There is no park-model line in 02T. Get the answer in writing before sizing.',
+} as const;
+
+export type SiteFlowBasis = 'campsite-hookups' | 'cottage-cabin' | 'dwelling';
+
+/** Allocation to buy, by how the reviewer classifies a site. */
+export function sewerAllocationGpd(sites: number, basis: SiteFlowBasis): number {
+  const rate = basis === 'campsite-hookups' ? SEWER_DESIGN_FLOW_02T.campsiteWithHookupsGpd
+    : basis === 'cottage-cabin' ? SEWER_DESIGN_FLOW_02T.cottageOrCabinGpd
+      : SEWER_DESIGN_FLOW_02T.dwellingMinimumGpd;
+  return sites * rate;
+}
+
+/** What the classification argument is worth, in gallons per day. */
+export function classificationSpreadGpd(sites: number): number {
+  return sewerAllocationGpd(sites, 'dwelling') - sewerAllocationGpd(sites, 'campsite-hookups');
+}
+
+/**
+ * 02T .0114(f) — a reduced rate can be granted, but only on evidence, and the
+ * evidence is twelve months of it. This is a second-park lever, not a first-park
+ * one: you need documented representative data from this or a comparable
+ * facility, flow-meter calibration dates, a connection-type breakdown, collection
+ * system ownership and age, and an inflow-and-infiltration analysis, submitted by
+ * an authorised signing official. Worth knowing exists; not worth planning on.
+ */
+export const FLOW_REDUCTION_02T = {
+  rule: '15A NCAC 02T .0114(f)',
+  availableFromDayOne: false,
+  monthsOfDataRequired: 12,
+  requires: [
+    'Documented representative data from this or a comparable facility',
+    'Flow meter calibration dates and any adjustments',
+    'Breakdown of connection types and customer counts by month',
+    'Owner and age of the collection system',
+    'Inflow and infiltration analysis',
+    'Submission by an authorised signing official under .0106',
+  ],
+  method:
+    'The estimated minimum design daily flow is the numerical average of the top three daily readings '
+    + 'for the highest average flow month, accounting for seasonal variation and I&I.',
+  warning:
+    'It cuts both ways — .0114(f)(3) requires flow INCREASES where the data yields a higher number than '
+    + 'the table. Do not open this door without knowing what the meter will say.',
+} as const;
+
+/** Sewer extension permitting. A permit and a PE, not a barrier. */
+export const SEWER_EXTENSION_PERMIT = {
+  rule: '15A NCAC 02T .0300',
+  route: 'Fast Track',
+  requiresSealedByPE: true,
+  reviewDays: 30,
+  issuedBy: 'NC Division of Water Resources regional office',
+  note:
+    'Available for gravity sewers, pump stations and force mains that need no Environmental Assessment '
+    + 'and are not Construction Grants funded. Design documents must exist before applying even though '
+    + 'they are not submitted up front.',
+} as const;
+
+/**
+ * ⚠️ THE THRESHOLD MOST LIKELY TO ARRIVE UNANNOUNCED.
+ *
+ * A public water system is one serving 15+ service connections OR regularly
+ * serving 25+ individuals at least 60 days a year. At the state's own planning
+ * figure of four occupants per RV, SEVEN OCCUPIED SITES IS TWENTY-EIGHT PEOPLE.
+ * A five-star park clears both tests almost immediately.
+ *
+ * Buying the water from the town does not automatically settle it. What settles
+ * it is who owns the pipe past the meter:
+ *
+ *   Individual town meters at each site — the town stays the water system and
+ *   the park carries no PWS obligation. Higher connection fees, more town
+ *   infrastructure, less control.
+ *
+ *   One master meter, park-owned distribution — the park is redistributing to
+ *   its own connections and becomes a transient non-community water system in
+ *   its own right, with sampling, reporting and an operating permit.
+ *
+ * That is a cost and compliance fork disguised as a plumbing detail, and it is
+ * decided at the point the service is designed. Put it to the town and to the
+ * DEQ Public Water Supply Section before the site plan is fixed.
+ */
+export const PUBLIC_WATER_SYSTEM = {
+  rule: '15A NCAC 18C / Safe Drinking Water Act',
+  serviceConnectionThreshold: 15,
+  individualsThreshold: 25,
+  daysPerYearThreshold: 60,
+  likelyCategory: 'transient non-community water system (guests are not year-round residents)',
+  occupantsPerSitePlanning: 4,
+  theFork:
+    'Individual town meters keep the town as the water system. A master meter with park-owned '
+    + 'distribution makes the park its own public water system. Decide it with the town and the DEQ '
+    + 'Public Water Supply Section before the site plan is fixed.',
+} as const;
+
+/**
+ * Sites at which the 25-person test is reached, at the planning occupancy.
+ *
+ * Arguments default to the rule's own figures but stay open so the arithmetic
+ * can be exercised on numbers it has never seen. Pinning only the real answer
+ * cannot tell a calculation from a hardcoded 7 — a mutation proving exactly
+ * that survived the first version of this gate.
+ */
+export function sitesReachingPwsPeopleTest(
+  peopleThreshold: number = PUBLIC_WATER_SYSTEM.individualsThreshold,
+  occupantsPerSite: number = PUBLIC_WATER_SYSTEM.occupantsPerSitePlanning,
+): number {
+  if (occupantsPerSite <= 0) return Infinity;
+  return Math.ceil((peopleThreshold + 1) / occupantsPerSite);
+}
+
+/**
+ * 02T .0115 — and the ownership structure that protects the RV classification
+ * has a cost here too. Where the applicant is a legally formed owners'
+ * association, DWR requires an executed Operational Agreement plus the Articles
+ * of Incorporation, Declarations and By-laws with the permit application.
+ *
+ * So the association that keeps the park under common control for the health
+ * rules is the same association DWR will want incorporated and documented before
+ * it issues the sewer permit. One decision, two agencies, and the corporate
+ * documents need to exist before the utility work is permitted rather than after
+ * the units are ordered.
+ */
+export const OPERATIONAL_AGREEMENT = {
+  rule: '15A NCAC 02T .0115',
+  triggeredBy: 'applicant is a legally formed Homeowners\' or Property Owner\'s Association',
+  requires: [
+    'Executed Operational Agreement',
+    'Articles of Incorporation',
+    'Declarations',
+    'By-laws',
+  ],
+  alsoRequiredFor: 'donation of the system to a public utility or municipality',
+  connectsTo:
+    'This is the same association that keeps separately owned spaces under common control for the RV '
+    + 'park health rules. The entity has to exist and be documented before the sewer permit, not after '
+    + 'the units are ordered.',
+} as const;
+
+export interface Threshold {
+  atSites: number | null;
+  trigger: string;
+  consequence: string;
+  rule: string;
+}
+
+/** When the limits actually bite, for a town-connected park. */
+export const TOWN_CONNECTED_THRESHOLDS: readonly Threshold[] = [
+  {
+    atSites: null,
+    trigger: 'Any sewer extension to the town main',
+    consequence: 'Fast Track permit, PE-sealed plans, 30-day DWR review.',
+    rule: '15A NCAC 02T .0300',
+  },
+  {
+    atSites: 7,
+    trigger: '25 individuals served 60+ days/year, at 4 occupants per site',
+    consequence:
+      'Public water system territory on the people test. Whether it lands on the park or stays with '
+      + 'the town depends on master meter versus individual town meters.',
+    rule: '15A NCAC 18C',
+  },
+  {
+    atSites: 15,
+    trigger: '15 service connections',
+    consequence: 'Public water system on the connection test as well, if the park owns the distribution.',
+    rule: '15A NCAC 18C',
+  },
+  {
+    atSites: null,
+    trigger: 'Whenever a reviewer prices the sites',
+    consequence:
+      'Campsite with hookups is 100 gpd; cottage/cabin is 200; dwelling is 240 minimum. The same '
+      + 'hardware, priced up to 2.4x apart. This is the single largest lever on the utility bill.',
+    rule: '15A NCAC 02T .0114(c)',
+  },
+  {
+    atSites: null,
+    trigger: 'An owners\' association is the permit applicant',
+    consequence: 'Operational Agreement plus Articles, Declarations and By-laws, before permit issue.',
+    rule: '15A NCAC 02T .0115',
+  },
+  {
+    atSites: null,
+    trigger: '12 months of operating flow data exists',
+    consequence:
+      'A flow reduction can be requested — and a flow INCREASE can be imposed if the meter reads high.',
+    rule: '15A NCAC 02T .0114(f)',
+  },
+];
+
+/** Thresholds that bite at or below a given park size. */
+export function thresholdsAt(sites: number): Threshold[] {
+  return TOWN_CONNECTED_THRESHOLDS.filter((t) => t.atSites === null || sites >= t.atSites);
+}
