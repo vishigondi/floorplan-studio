@@ -15,7 +15,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const {
   NC_MEMO, TEMPORARY_INSTALLATION, PERMANENT_INSTALLATION, UNLABELLED_OR_SITE_BUILT,
   GROSS_TRAILER_AREA, loftCountsTowardArea, ANSI_DEFINITION, assessNcRoute,
-  MANUFACTURER_GATING_QUESTIONS,
+  MANUFACTURER_GATING_QUESTIONS, RV_PARK_WASTEWATER, parkModelDdfGpd, withinLocalReview,
+  OWNERSHIP_DECIDES_CLASSIFICATION, TINY_HOME_ROUTE, MOVABLE_HOUSING_ROUTES, routesThatStayMovable,
 } = await import(join(root, 'lib/kit/nc-classification.ts'));
 
 let failures = 0;
@@ -123,6 +124,75 @@ check('and they cover delivery, the loft, and the tow bar in the order',
   MANUFACTURER_GATING_QUESTIONS.some((q) => /deliver to western North Carolina/.test(q))
   && MANUFACTURER_GATING_QUESTIONS.some((q) => /habitable loft/.test(q))
   && MANUFACTURER_GATING_QUESTIONS.some((q) => /remain on the unit, and will you say so in the order/.test(q)));
+
+console.log('the utilities problem, resolved by a different agency');
+// The OSFM memo forbids permanent connections. Read alone that looks fatal. The
+// health rules give park models their own design flow inside an RV park, so the
+// state plainly does contemplate a connected one — just not a connected DWELLING.
+check('a park model has its own design flow, half again a traditional RV',
+  RV_PARK_WASTEWATER.parkModelRvGpd === 150 && RV_PARK_WASTEWATER.traditionalRvGpd === 100
+  && RV_PARK_WASTEWATER.parkModelRvGpd > RV_PARK_WASTEWATER.traditionalRvGpd);
+check('and the park is sized as a park, explicitly NOT as a dwelling unit',
+  /and not as a dwelling unit/.test(RV_PARK_WASTEWATER.definition)
+  && /common ownership or control/.test(RV_PARK_WASTEWATER.definition));
+check('flow is derived from the space count, not stored',
+  parkModelDdfGpd(10) === 1500 && parkModelDdfGpd(4) === 600 && parkModelDdfGpd(0) === 0);
+// Ten spaces is exactly the ceiling — the check has to bite on both sides of it.
+check('ten park-model spaces is the ceiling for local-only review, and eleven is not',
+  withinLocalReview(10) === true && withinLocalReview(11) === false
+  && RV_PARK_WASTEWATER.parkModelMaxSpacesLocal === 10
+  && RV_PARK_WASTEWATER.localReviewCeilingGpd === 1500);
+// The two limits coincide at the unadjusted rate, so they must be exercised
+// apart or the space cap is untested. A DDF adjustment is exactly that case.
+check('the space cap still bites when an adjustment pulls the flow under the ceiling',
+  withinLocalReview(14, 1400) === false);
+check('and the flow ceiling still bites when the space count is legal',
+  withinLocalReview(8, 1600) === false);
+check('both limits satisfied together is the only way through',
+  withinLocalReview(8, 1400) === true);
+check('traditional RVs get more spaces on local review than park models do',
+  RV_PARK_WASTEWATER.traditionalMaxSpacesLocal === 15
+  && RV_PARK_WASTEWATER.traditionalMaxSpacesLocal > RV_PARK_WASTEWATER.parkModelMaxSpacesLocal);
+check('high strength is the default assumption, with the cost of disproving it named',
+  /assumed to be high strength/.test(RV_PARK_WASTEWATER.strengthDefault)
+  && /BOD, TSS, TKN and FOG/.test(RV_PARK_WASTEWATER.strengthConsequence));
+check('and the bathhouse route is recorded as closed to park models',
+  /70 gpd\/campsite/.test(RV_PARK_WASTEWATER.bathhouseAlternative)
+  && /Park models cannot use this route/.test(RV_PARK_WASTEWATER.bathhouseAlternative)
+  && /no holding tanks/.test(RV_PARK_WASTEWATER.bathhouseAlternative));
+
+console.log('ownership decides the classification, not construction');
+check('separately owned parcels outside common control forfeit RV-park treatment',
+  /separately owned parcels not under common control/.test(OWNERSHIP_DECIDES_CLASSIFICATION.forfeits)
+  && /same requirements as a dwelling unit/.test(OWNERSHIP_DECIDES_CLASSIFICATION.forfeits));
+check('and the surviving route — separately owned SPACES under an association — is quoted',
+  /owner\'s association and bi-party agreement/.test(OWNERSHIP_DECIDES_CLASSIFICATION.survives)
+  && /18E \.0204\(g\)/.test(OWNERSHIP_DECIDES_CLASSIFICATION.survives));
+check('the parcels-versus-spaces distinction is stated, not left to be inferred',
+  /[Ss]eparately owned PARCELS/.test(OWNERSHIP_DECIDES_CLASSIFICATION.soWhat)
+  && /[Ss]eparately owned SPACES/.test(OWNERSHIP_DECIDES_CLASSIFICATION.soWhat)
+  && /upstream of every design decision/.test(OWNERSHIP_DECIDES_CLASSIFICATION.soWhat));
+// This module records the rule and refuses the conclusion.
+check('and the tax consequence is escalated rather than decided here',
+  /tax workstream/.test(OWNERSHIP_DECIDES_CLASSIFICATION.escalateTo)
+  && /before a sales structure is settled/.test(OWNERSHIP_DECIDES_CLASSIFICATION.escalateTo));
+
+console.log('the movable-housing routes, and which ones stay movable');
+check('four routes recorded, and exactly two stay movable',
+  MOVABLE_HOUSING_ROUTES.length === 4 && routesThatStayMovable().length === 2);
+check('and the two that stay movable are the two RV-park routes',
+  routesThatStayMovable().map((r) => r.id).sort().join()
+  === 'park-model-in-rv-park,traditional-rv-park');
+check('keeping the wheels and being a building are opposite in every route',
+  MOVABLE_HOUSING_ROUTES.every((r) => r.keepsWheels === !r.isBuilding));
+check('every route names its catch, including the ones that work',
+  MOVABLE_HOUSING_ROUTES.every((r) => typeof r.catch === 'string' && r.catch.length > 30));
+check('the park-model route names common control and the ten-space ceiling',
+  /common ownership or control/.test(MOVABLE_HOUSING_ROUTES[0].catch)
+  && /Ten spaces/.test(MOVABLE_HOUSING_ROUTES[0].catch));
+check('tiny homes are recorded as a dead end, with the reason',
+  TINY_HOME_ROUTE.classification === 'permanent single-family dwelling under the NC Residential Code'
+  && /building with extra rules, not a movable asset/.test(TINY_HOME_ROUTE.notAWayAround));
 
 if (failures > 0) { console.error(`\nnc-classification battery: ${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nnc-classification battery clean');

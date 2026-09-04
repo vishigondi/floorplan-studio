@@ -211,3 +211,181 @@ export const MANUFACTURER_GATING_QUESTIONS = [
   'Does your quoted square footage already include a habitable loft at 5 ft or more of ceiling?',
   'Will the tow bar, wheels and axles remain on the unit, and will you say so in the order?',
 ] as const;
+
+// ---------------------------------------------------------------------------
+// THE WAY THROUGH: NC ALREADY HAS A PARK MODEL CATEGORY FOR UTILITIES
+// ---------------------------------------------------------------------------
+
+/**
+ * The OSFM memo says a park model may have no permanent connections. Read alone
+ * that looks fatal to a rental cabin, which needs water, sewer and power.
+ *
+ * It is not fatal, because a second agency regulates the other half. NC DHHS
+ * Division of Public Health, On-Site Water Protection Branch, "Permitting and
+ * Design Guidance for Wastewater Treatment and Dispersal Systems for
+ * Recreational Vehicle Parks", 21 August 2024, updated to reflect 15A NCAC 18E,
+ * gives PARK MODEL RVs their own design flow inside an RV Park.
+ *
+ * So the state does contemplate a connected park model. What it does not
+ * contemplate is a connected park model that is a DWELLING. The unit is served
+ * as an RV SPACE, on a system sized as an RV park "and not as a dwelling unit".
+ * That distinction is the whole game, and it is a question about the PARK's
+ * ownership structure rather than about the unit.
+ *
+ * Source: ehs.dph.ncdhhs.gov/oswp/docs/design/RV-ParksGuidance.pdf
+ */
+export const RV_PARK_WASTEWATER = {
+  issuer: 'NC DHHS, Division of Public Health — On-Site Water Protection Branch',
+  dated: '2024-08-21',
+  rule: '15A NCAC 18E',
+  /** Design daily flow per space. A park model is rated half again a traditional RV. */
+  traditionalRvGpd: 100,
+  parkModelRvGpd: 150,
+  maxOccupantsPerRv: 4,
+  /** Spaces the local health department may approve without State review. */
+  traditionalMaxSpacesLocal: 15,
+  parkModelMaxSpacesLocal: 10,
+  localReviewCeilingGpd: 1500,
+  peRequiredAboveGpd: 1500,
+  stateReviewAboveGpd: 3000,
+  definition:
+    'an RV Park addressed by this guidance includes two or more RVs located on an individual lot or '
+    + 'tract of land or multiple RVs, each located on adjoining lots under common ownership or control. '
+    + 'The RV Park is served by a common system sized in accordance with this document and not as a '
+    + 'dwelling unit.',
+  /** Assume the worst unless you pay to prove otherwise. */
+  strengthDefault:
+    'If wastewater strength is not characterized specifically, it shall be assumed to be high strength.',
+  strengthConsequence:
+    'High strength drives advanced pretreatment or a characterisation programme — two effluent samples '
+    + 'from a comparable facility, analysed for BOD, TSS, TKN and FOG. It is a real line item, and it '
+    + 'is cheaper to plan for than to discover.',
+  bathhouseAlternative:
+    'Traditional RV spaces with NO water and sewer connections may be treated as campsites where a '
+    + 'bathhouse is provided, at 70 gpd/campsite. Park models cannot use this route: they carry no '
+    + 'holding tanks, so they depend on connection.',
+} as const;
+
+/** Design daily flow for a park of this size, before any adjustment. */
+export function parkModelDdfGpd(spaces: number): number {
+  return spaces * RV_PARK_WASTEWATER.parkModelRvGpd;
+}
+
+/**
+ * Below the ceiling the local health department can approve it alone.
+ *
+ * These are TWO INDEPENDENT LIMITS, not one expressed twice. At the unadjusted
+ * 150 gpd they happen to coincide — ten spaces is exactly 1,500 gpd — which
+ * makes the space cap look like dead code until you remember that the guidance
+ * also allows DDF ADJUSTMENTS under 18E .0403. An adjustment can pull the flow
+ * back under the ceiling while the space count stays over its own cap, and the
+ * cap still bites. Hence the optional argument: it is the only way to exercise
+ * the two limits apart, and without it a mutation deleting the space cap
+ * survives unnoticed.
+ */
+export function withinLocalReview(spaces: number, adjustedDdfGpd?: number): boolean {
+  const ddf = adjustedDdfGpd ?? parkModelDdfGpd(spaces);
+  return spaces <= RV_PARK_WASTEWATER.parkModelMaxSpacesLocal
+    && ddf <= RV_PARK_WASTEWATER.localReviewCeilingGpd;
+}
+
+/**
+ * ⚠️ THE SENTENCE THAT BEARS DIRECTLY ON SELLING UNITS TO BUYERS.
+ *
+ * The guidance draws its line at ownership and control, not at construction:
+ *
+ *   "Individual RVs on separately owned parcels not under common control or RVs
+ *    that are designed or used as permanent dwelling units are required to meet
+ *    the same requirements as a dwelling unit."
+ *
+ * So a structure where each buyer owns a SEPARATE PARCEL, outside common
+ * control, is the one arrangement that forfeits RV-park treatment and pulls
+ * every unit up to dwelling requirements. The thing being sold decides the
+ * classification more than the thing being built does.
+ *
+ * The same document names the route that survives: separately owned SPACES, on
+ * a common system, held together by an owners' association and a bi-party
+ * agreement under 15A NCAC 18E .0204(g). That keeps common control while still
+ * letting buyers own something.
+ *
+ * WHAT FOLLOWS FROM EITHER STRUCTURE IN TAX TERMS IS NOT THIS MODULE'S CALL.
+ * This records what the health rules require of each; the depreciation and
+ * ownership consequences belong to the tax workstream, and they should see this
+ * sentence before a sales structure is settled.
+ */
+export const OWNERSHIP_DECIDES_CLASSIFICATION = {
+  forfeits:
+    'Individual RVs on separately owned parcels not under common control or RVs that are designed or '
+    + 'used as permanent dwelling units are required to meet the same requirements as a dwelling unit.',
+  survives:
+    'When the individual spaces are to be separately owned, and a common on-site wastewater system '
+    + 'serves two or more individual spaces an owner\'s association and bi-party agreement are typically '
+    + 'required, in accordance with 15A NCAC 18E .0204(g).',
+  soWhat:
+    'Separately owned PARCELS outside common control forfeit RV-park treatment. Separately owned SPACES '
+    + 'under an association, on a common system, do not. If the commercial plan is to sell to buyers, '
+    + 'that distinction is upstream of every design decision in this kit.',
+  escalateTo: 'tax workstream, before a sales structure is settled',
+} as const;
+
+/**
+ * Tiny homes are not a way around any of this. NCDOI's Tiny Homes memo of
+ * 15 February 2019 treats them as PERMANENT single-family dwellings under the
+ * NC Residential Code: 7 ft ceilings, 70 sq ft habitable rooms, plumbing to
+ * sewer or an approved private system with "Storage tanks are not acceptable",
+ * heating, egress and energy compliance. Built through the NC Modular programme
+ * they also take a 5:12 minimum roof pitch, 10 in eaves, a 7 ft 6 in exterior
+ * wall and perimeter foundation supports.
+ *
+ * That is a building. Chasing it does not produce movable housing; it produces
+ * a small house with extra rules.
+ */
+export const TINY_HOME_ROUTE = {
+  memoDated: '2019-02-15',
+  classification: 'permanent single-family dwelling under the NC Residential Code',
+  notAWayAround:
+    'Full residential code compliance, permanent connection to sewer or an approved private system, and '
+    + 'perimeter foundation supports if built modular. It is a building with extra rules, not a movable '
+    + 'asset — so it answers neither the utilities problem nor the classification one.',
+  source: 'ncosfm.gov/modular-building/tiny-homes-nc-memo',
+} as const;
+
+/** Every movable-housing category NC recognises, and what each actually gets you. */
+export const MOVABLE_HOUSING_ROUTES = [
+  {
+    id: 'park-model-in-rv-park',
+    what: 'Park Model RV (ANSI A119.5, RVIA labelled) on a space in an RV park under common control.',
+    utilities: 'Yes — 150 gpd/space, connected as an RV space, on a system sized as a park not a dwelling.',
+    keepsWheels: true,
+    isBuilding: false,
+    catch: 'Needs common ownership or control. Ten spaces is the ceiling for local-only review.',
+  },
+  {
+    id: 'traditional-rv-park',
+    what: 'Travel trailers and motorhomes on traditional RV spaces.',
+    utilities: 'Yes — 100 gpd/space, or 70 gpd as campsites with a bathhouse and no hookups.',
+    keepsWheels: true,
+    isBuilding: false,
+    catch: 'Fifteen spaces on local review, but these are smaller units with holding tanks — a different product.',
+  },
+  {
+    id: 'dual-labelled-permanent',
+    what: 'Park model built through RVIA AND the NC Modular or HUD programme.',
+    utilities: 'Yes, permanently — it is a dwelling.',
+    keepsWheels: false,
+    isBuilding: true,
+    catch: 'A manufacturer capability that cannot be added later, and it ends the vehicle argument.',
+  },
+  {
+    id: 'tiny-home',
+    what: 'Tiny home under the NCDOI tiny-home guidelines.',
+    utilities: 'Yes, permanently — it is a dwelling.',
+    keepsWheels: false,
+    isBuilding: true,
+    catch: 'Full NC Residential Code. Not a movable asset in any useful sense.',
+  },
+] as const;
+
+export function routesThatStayMovable() {
+  return MOVABLE_HOUSING_ROUTES.filter((r) => r.isBuilding === false);
+}
