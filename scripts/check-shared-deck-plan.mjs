@@ -14,6 +14,10 @@ const {
   SHARED_DECK, GUARD_TRIGGER_IN, GUARD_HEIGHT_IN, guardRequired, OPEN_EDGE_STRATEGY,
   FIRE_ON_DECK, FLANK_WALK_THRESHOLD_FT, preferredStance, assessFit,
   broadsidePairFitsFt, broadsidePairFits, SYMMETRY_NEEDS_HANDING,
+  FLANK_DECK_WIDTH_FT, FLANK_SIDE, innerFlanksFit, flankDeckAreaSqFt,
+  pairedDeckAreaSqFt, identicalPairWorks, rankedForPairing, PAIRING_VERDICT,
+  pairOnOneDeck, PAIR_WIDTH_TOLERANCE_FT, COMMON_REAR_DATUM,
+  parkRoadWidthGovernedBy, MIXING_ACROSS_MAKERS,
 } = S;
 
 let failures = 0;
@@ -84,6 +88,67 @@ check('so their verdict offers the right-angle pair instead',
   /right-angle pair/.test(assessFit(unit('Skyview 400')).verdict));
 check('but a short enough unit would fit, so the test is not always-false',
   broadsidePairFits({ lengthFt: 19 }) === true);
+
+console.log('the glass faces the view, so the flank becomes deck');
+// The glazing is the product; it is never turned away to shorten a walk.
+check('the flank deck is a room, not a walkway',
+  FLANK_DECK_WIDTH_FT === 8 && FLANK_SIDE === 'outer');
+// Drawing it settled this: two inner flanks do not fit the gap.
+check('two inner flanks do NOT fit the 15 ft gap, and the module says so',
+  innerFlanksFit(SHARED_DECK.unitGapFt) === false
+  && innerFlanksFit(2 * FLANK_DECK_WIDTH_FT + 4) === true);
+check('so the flanks are outboard, facing away',
+  /outer wall, facing away into the trees/.test(assessFit(unit('A-Frame Studio')).verdict));
+check('flank area is derived from the walk, and is zero when there is no walk',
+  flankDeckAreaSqFt(unit('A-Frame Studio')) === 218 && flankDeckAreaSqFt(unit('Luna')) === 216
+  && flankDeckAreaSqFt(unit('A-Frame Classic')) === 175 && flankDeckAreaSqFt(unit('Mysa 400')) === 193
+  && flankDeckAreaSqFt(unit('Cabana PMRV')) === 0);
+check('and all four fall out of the same 8 ft width times their own walk',
+  [['A-Frame Studio', 218], ['Luna', 216], ['A-Frame Classic', 175], ['Mysa 400', 193]]
+    .every(([m, a]) => Math.round(FLANK_DECK_WIDTH_FT * assessFit(unit(m)).walkToDoorFt) === a));
+// The inversion: the worst door position buys the most private deck.
+const studio = pairedDeckAreaSqFt(unit('A-Frame Studio'));
+const cabana = pairedDeckAreaSqFt(unit('Cabana PMRV'));
+check('the longest walk yields the most private deck, and the shortest none',
+  studio.flankSqFt === 436 && cabana.flankSqFt === 0
+  && studio.privateShare > 0.25 && cabana.privateShare === 0);
+check('and the shared deck is the same 1152 sq ft either way',
+  studio.sharedSqFt === 1152 && cabana.sharedSqFt === 1152
+  && studio.totalSqFt === studio.sharedSqFt + studio.flankSqFt);
+
+console.log('mixing models — three questions, three answers');
+check('a pair must agree roughly on width',
+  PAIR_WIDTH_TOLERANCE_FT === 2
+  && pairOnOneDeck(unit('A-Frame Studio'), unit('A-Frame Classic')).compatible === true);
+// Skyview and Cabana differ ONLY in glazing wall — same width band, both with
+// the door on the deck. So this isolates the glazing test; any pair that also
+// differs on the flank would pass for the wrong reason.
+const isolated = pairOnOneDeck(unit('Skyview 400'), unit('Cabana PMRV'));
+check('and a pair that differs ONLY in glazing wall is rejected for exactly that',
+  isolated.compatible === false && isolated.reasons.length === 1
+  && /Glazing walls differ/.test(isolated.reasons[0]));
+check('a unit always pairs with itself, unless a pair will not physically fit',
+  identicalPairWorks(unit('A-Frame Studio')) === true
+  && identicalPairWorks(unit('Cabana PMRV')) === true
+  && identicalPairWorks(unit('Skyview 400')) === false);
+check('and the verdict is to pair a unit with itself and vary between decks',
+  /Pair a unit with itself/.test(PAIRING_VERDICT.rule)
+  && /never within one/.test(PAIRING_VERDICT.rule));
+check('six of the six gable units are rankable for an identical pair',
+  rankedForPairing(C.OBSERVED_UNITS).length === 6
+  && rankedForPairing(C.OBSERVED_UNITS)[0].model === 'Cabana PMRV');
+check('the datum rule keeps one pedestal detail across mixed lengths',
+  /GLASS end on the deck edge/.test(COMMON_REAR_DATUM.rule)
+  && COMMON_REAR_DATUM.buys.some((b) => /rear of the stand never moves/.test(b)));
+// The road is set by the widest unit that will ever arrive.
+check('road geometry is governed by the widest unit in the mix',
+  parkRoadWidthGovernedBy(C.OBSERVED_UNITS).model === 'A-Frame Classic'
+  && parkRoadWidthGovernedBy(C.OBSERVED_UNITS).widthFt === 13.83
+  && parkRoadWidthGovernedBy([unit('Extended Park Model RV')]).widthFt === 11.16);
+check('and mixing across makers is named as the expensive one',
+  /volume does not pool/.test(MIXING_ACROSS_MAKERS.theTrap)
+  && /five and five unlocks nothing/.test(MIXING_ACROSS_MAKERS.theTrap)
+  && /Mixing WITHIN a maker costs almost nothing/.test(MIXING_ACROSS_MAKERS.whereItIsCheap));
 
 console.log('the symmetry the render shows forces a handed pair');
 check('both doors facing the path means one left-hand and one right-hand plan',

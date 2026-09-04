@@ -7,7 +7,7 @@ import { writeFileSync } from 'node:fs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const S = await import(join(root, 'lib/kit/shared-deck-plan.ts'));
 const C = await import(join(root, 'lib/kit/site-composition.ts'));
-const { SHARED_DECK, assessFit, preferredStance } = S;
+const { SHARED_DECK, assessFit, preferredStance, FLANK_DECK_WIDTH_FT, pairedDeckAreaSqFt } = S;
 
 const P = (a) => a.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 const R = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
@@ -28,12 +28,14 @@ function scene(u) {
       parts.push({ t: 'unit', pts: R(cx - w / 2, 0, cx + w / 2, l) });
       // Glass is the gable meeting the deck.
       parts.push({ t: 'glass', pts: [{ x: cx - w / 2, y: 0 }, { x: cx + w / 2, y: 0 }] });
-      // Door on the INNER wall (facing the path), at its fraction along the length.
+      // Door on the OUTER wall — the flank deck faces away into the trees.
       const dy = l * u.doorAtFractionFromGlass;
-      const dx = cx - s * (w / 2);
+      const dx = cx + s * (w / 2);
       parts.push({ t: 'door', at: { x: dx, y: dy } });
-      // The walk from deck to door, up the inner flank.
-      if (f.needsFlankWalk) parts.push({ t: 'walk', pts: R(dx - s * 4, 0, dx, dy) });
+      // The flank is a private deck, drawn as deck — because that is what it is.
+      if (f.needsFlankWalk) {
+        parts.push({ t: 'flank', pts: R(dx, 0, dx + s * FLANK_DECK_WIDTH_FT, dy + 3) });
+      }
     }
     parts.push({ t: 'path', pts: R(-gap / 2 + 2, 0, gap / 2 - 2, u.lengthFt + 14) });
   } else {
@@ -56,10 +58,11 @@ function draw(u) {
   const minY = Math.min(...all.map((p) => p.y)) - pad, maxY = Math.max(...all.map((p) => p.y)) + pad;
   const flip = (minY + maxY).toFixed(1);
   const g = [`<g transform="translate(0,${flip}) scale(1,-1)">`,
+    `<polygon points="${P(R(minX, minY, maxX, minY + 7))}" fill="#7E9B77" fill-opacity=".30"/>`,
     `<polygon points="${P(deck)}" fill="#C9A97D" stroke="#8B6E46" stroke-width=".5"/>`];
   for (const p of parts) {
     if (p.t === 'path') g.push(`<polygon points="${P(p.pts)}" fill="#B9B3A6" fill-opacity=".85"/>`);
-    if (p.t === 'walk') g.push(`<polygon points="${P(p.pts)}" fill="#C2701A" fill-opacity=".45" stroke="#C2701A" stroke-width=".4" stroke-dasharray="2 1.5"/>`);
+    if (p.t === 'flank') g.push(`<polygon points="${P(p.pts)}" fill="#C9A97D" fill-opacity=".72" stroke="#8B6E46" stroke-width=".5"/>`);
   }
   for (const p of parts) {
     if (p.t === 'unit') g.push(`<polygon points="${P(p.pts)}" fill="#202628" stroke="#000" stroke-width=".5"/>`);
@@ -67,12 +70,13 @@ function draw(u) {
     if (p.t === 'door') g.push(`<circle cx="${p.at.x.toFixed(1)}" cy="${p.at.y.toFixed(1)}" r="1.7" fill="#E7A23C" stroke="#7a5410" stroke-width=".3"/>`);
   }
   g.push('</g>');
+  const a = pairedDeckAreaSqFt(u);
   const cls = f.verdict.startsWith('✅') ? 'ok' : f.verdict.startsWith('⚠️') ? 'warn' : 'bad';
   return `<figure class="${cls}">
   <svg viewBox="${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}">${g.join('')}</svg>
   <figcaption><b>${u.maker} ${u.model}</b>
   <span>${u.widthFt} &times; ${u.lengthFt} ft &middot; ${u.glassWall} glazing &middot; ${f.stance}</span>
-  <span class="${cls}">walk from deck to door: ${f.walkToDoorFt} ft</span>
+  <span class="${cls}">door ${f.walkToDoorFt} ft from the deck &middot; ${a.flankSqFt} sq ft private &middot; ${a.totalSqFt} sq ft total</span>
   <span class="v">${f.verdict}</span></figcaption></figure>`;
 }
 
@@ -91,8 +95,8 @@ figcaption span{color:#5A6163}
 .ok{color:#2F6B4F!important;font-weight:600}.warn{color:#9A5A14!important;font-weight:600}.bad{color:#A03A1E!important;font-weight:600}
 .v{font-size:11px;line-height:1.35}
 </style>
-<h1>The plan of record — where the entry actually is</h1>
-<p class="k">Deck (tan) at the bottom, downhill. Cyan = the glazed wall meeting the deck. Amber dot = the entry door. Grey = the stone path up the middle. <b>Dashed amber = the flank walkway you have to build when the door is at the far end of the unit.</b> The render assumes you step off the deck into the unit; on five of the eight units you do not.</p>
+<h1>Glass on the view, flank extruded as a private deck</h1>
+<p class="k">Green band at the bottom = <b>the view</b>. Cyan = the glazed wall, always facing it. Tan = deck. Amber dot = the entry door. Grey = the stone path up the middle. <b>The flank is drawn as deck, because that is what it is</b> — an 8 ft private room at your own door, on the OUTER wall facing the trees. Drawn on the inner walls two of them need 16 ft of a 15 ft gap and there is no path left; outboard they work, and the arrival goes shared deck first, then your own side.</p>
 <div class="grid">${units.map(draw).join('')}</div>`;
 
 writeFileSync(process.argv[2], html);
