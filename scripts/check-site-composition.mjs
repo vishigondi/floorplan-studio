@@ -24,6 +24,7 @@ const {
   isOrthogonal, ORTHOGONAL_ONLY, PAD_SPEC, PROHIBITED_FOUNDATIONS, foundationAllowed,
   DELIVERY_ACCESS, cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
   NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED, FOLDING_DOOR_UNITS,
+  CERTIFICATION_RULE, DESIGN_PLUS_BUILDER,
 } = M;
 
 let failures = 0;
@@ -178,8 +179,12 @@ check('the A-frame doors sit near the hitch end, not centred on the wall',
 check('no unit in the catalogue tows permit-free — all exceed 8.5 ft',
   PERMIT_FREE_WIDTH_FT === 8.5 && OBSERVED_UNITS.every((u) => u.towsPermitFree === false)
   && OBSERVED_UNITS.every((u) => u.widthFt > PERMIT_FREE_WIDTH_FT));
-check('the unresolved door positions are flagged, not guessed',
-  OBSERVED_UNITS.filter((u) => /not published/.test(u.entryNote)).length === 2);
+// Luna's caveat is now specific rather than generic, so count the warnings
+// rather than one phrase — the point is that no door position is silently assumed.
+check('every unresolved door position carries a warning, none silently assumed',
+  OBSERVED_UNITS.filter((u) => /⚠️/.test(u.entryNote)).length === 3
+  && /not published/.test(OBSERVED_UNITS.find((u) => u.maker === 'ÖÖD').entryNote)
+  && /may be far closer to the deck/.test(OBSERVED_UNITS.find((u) => u.model === 'Luna').entryNote));
 check('and the mirror glazing carries its own warnings',
   /bird-strike/.test(OBSERVED_UNITS.find((u) => u.maker === 'ÖÖD').entryNote)
   && /mirror whatever stands in front/.test(OBSERVED_UNITS.find((u) => u.maker === 'ÖÖD').entryNote));
@@ -194,8 +199,47 @@ check('the survey counts match the catalogue they describe',
 check('and the makers it names are exactly the makers in the catalogue',
   SURVEY.makersQualified.slice().sort().join()
   === [...new Set(OBSERVED_UNITS.map((u) => u.maker))].sort().join());
-check('five near-misses recorded, each with a reason',
-  NEAR_MISSES.length === 5 && NEAR_MISSES.every((n) => n.why.length > 60));
+check('seven near-misses recorded, each with a reason',
+  NEAR_MISSES.length === 7 && NEAR_MISSES.every((n) => n.why.length > 60));
+
+console.log('the certifying body filters harder than any spec, because it fails twice');
+check('RVIA and RPTIA are acceptable; PWA and NOAH are not',
+  CERTIFICATION_RULE.acceptable.length === 2
+  && CERTIFICATION_RULE.notAcceptableHere.some((c) => /PWA/.test(c))
+  && CERTIFICATION_RULE.notAcceptableHere.some((c) => /NOAH/.test(c)));
+check('and both failure modes are recorded — the state AND the bank',
+  CERTIFICATION_RULE.failsTwice.length === 2
+  && CERTIFICATION_RULE.failsTwice.some((f) => /OSFM memo names RVIA/.test(f))
+  && CERTIFICATION_RULE.failsTwice.some((f) => /RV loan at 5-9%/.test(f)));
+check('with the exception that stops it discarding good builders',
+  /RVIA certification as a paid option/.test(CERTIFICATION_RULE.theException)
+  && /New Frontier does/.test(CERTIFICATION_RULE.theException));
+check('the two PWA builders are recorded as near-misses, not as usable',
+  NEAR_MISSES.some((n) => n.maker === 'Wind River Built' && /PWA, not RVIA/.test(n.why))
+  && NEAR_MISSES.some((n) => n.maker === 'New Frontier Design' && /PWA certified/.test(n.why)));
+check('and the closest builder is flagged as worth a call despite failing',
+  NEAR_MISSES.some((n) => /roughly 100 miles from the site/.test(n.why)
+    && /too good to discard on a website reading/.test(n.why)));
+// The reason to be careful with that call, which must not be edited away: their
+// own explainer describes park models the way NC forbids.
+check('and their hardwiring claim is kept, because it contradicts the mobility test',
+  NEAR_MISSES.some((n) => n.maker === 'Wind River Built'
+    && /hardwired into an electric grid/.test(n.why)
+    && /opposite of what NC requires/.test(n.why)));
+
+console.log('the partnering structure already exists, and it is not importing');
+check('the design-house plus RVIA-builder structure is recorded with its example',
+  /New Frontier Design/.test(DESIGN_PLUS_BUILDER.example)
+  && /RVIA-member manufacturer builds, seals and carries the liability/.test(DESIGN_PLUS_BUILDER.structure));
+check('and why it beats importing is stated',
+  /No customs chain/.test(DESIGN_PLUS_BUILDER.whyItBeatsImporting)
+  && /already under RVIA audit/.test(DESIGN_PLUS_BUILDER.whyItBeatsImporting));
+check('the two Lunas are explicitly kept apart',
+  /Same name, different units/.test(DESIGN_PLUS_BUILDER.note)
+  && /8 ft 6 in wide — permit-free/.test(DESIGN_PLUS_BUILDER.note));
+check('and Luna\'s own record now carries the RVIA seal and the window wall',
+  /RVIA seal to ANSI A119\.5/.test(OBSERVED_UNITS.find((u) => u.model === 'Luna').glassEvidence)
+  && /expansive window wall at one end/.test(OBSERVED_UNITS.find((u) => u.model === 'Luna').glassEvidence));
 check('Elevation is recorded as rejected, with the window-versus-wall reason',
   NEAR_MISSES.some((n) => n.maker === 'Elevation' && /not a glass wall/.test(n.why)));
 check('and no rejected maker is still sitting in the catalogue',

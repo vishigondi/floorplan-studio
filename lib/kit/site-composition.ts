@@ -143,11 +143,15 @@ export const OBSERVED_UNITS: readonly ObservedUnit[] = [
   {
     maker: 'Zook', model: 'Luna', widthFt: 11, lengthFt: 36, interiorSqFt: 400,
     entry: 'side', glassWall: 'gable', glassSplitFromDoor: true, doorAtFractionFromGlass: 0.75,
-    entryNote: 'Fiberglass full-lite entry door; dramatic window wall on the GABLE end, black stained '
-      + 'cedar surround with LED valance lighting. ⚠️ Door wall not published — confirm before siting.',
+    entryNote: 'A Zook x NEW FRONTIER DESIGN collaboration — David Latimer\'s design, Zook\'s RVIA-sealed '
+      + 'build, 35% larger than New Frontier\'s own 25 ft Luna (256 sq ft, 8 ft 6 in wide, PWA-certified — a '
+      + 'DIFFERENT unit sharing the name). Heavy-duty FOUR-AXLE steel chassis with a detachable hitch. '
+      + '⚠️ The entry door is described as "positioned to face the lounge seating area", which sits at the '
+      + 'glass end — so the door may be far closer to the deck than the 0.75 assumed here. Confirm it: it '
+      + 'would move Luna out of the flank-deck group entirely.',
     factoryPorch: null, towsPermitFree: false, mirroring: 'volume-only',
     evidenceStatus: 'published',
-    glassEvidence: "\"anchored by a dramatic window wall that frames the outdoors\"; black stained cedar surround to a 'large gable window' with LED valance lighting.",
+    glassEvidence: "\"an expansive window wall at one end\"; \"large gable window\"; the New Frontier spec for this design reads \"Custom Glass End Wall (fixed) with 1 ft Cantilever\". Carries an RVIA seal to ANSI A119.5.",
     source: 'zookcabins.com/cabin/luna',
   },
   {
@@ -304,6 +308,63 @@ export const OOD_CLASSIFICATION_CONFLICT = {
  * Makers looked at and NOT used, each with the reason. Recorded so that nobody
  * repeats this search and reaches a different answer from the same evidence.
  */
+/**
+ * ⚠️ THE CERTIFYING BODY FILTERS HARDER THAN ANY SPEC, BECAUSE IT FAILS TWICE.
+ *
+ * Much of the architect-led tiny-house market certifies through PWA (Pacific
+ * West Associates) or NOAH rather than RVIA. Both are real accreditation routes
+ * and neither helps here:
+ *
+ *   IN NORTH CAROLINA the OSFM memo names the RVIA and RPTIA labels and says a
+ *   unit not labelled under the RVIA programme "cannot be accepted as a
+ *   permanent dwelling structure". Whether NC accepts a PWA label is an ask, and
+ *   not one to build a site plan on.
+ *
+ *   AND AT THE BANK a park-model RV loan — 5-9% over terms to twenty years —
+ *   REQUIRES RVIA certification. Without it the buyer drops to a personal loan
+ *   at 11-13% over five to seven years. The seal is not paperwork; it is the
+ *   monthly payment on the same box.
+ *
+ * So the filter is RVIA or nothing, and it removes most of the market whose
+ * glazing we keep admiring. One exception worth remembering: New Frontier will
+ * deliver RVIA certified FOR AN EXTRA FEE. Ask every PWA builder that question
+ * before writing them off.
+ */
+export const CERTIFICATION_RULE = {
+  acceptable: ['RVIA', 'RPTIA (older units)'],
+  notAcceptableHere: ['PWA (Pacific West Associates)', 'NOAH'],
+  failsTwice: [
+    'NC: the OSFM memo names RVIA and RPTIA labels; an unlabelled unit cannot be a permanent dwelling.',
+    'Financing: an RV loan at 5-9% over 20 years REQUIRES RVIA certification; without it the buyer takes '
+    + 'a personal loan at 11-13% over 5-7 years.',
+  ],
+  theException:
+    'A PWA builder may offer RVIA certification as a paid option — New Frontier does. Ask before writing '
+    + 'any of them off; the fee is trivial against the financing difference.',
+} as const;
+
+/**
+ * AND THE PARTNERING STRUCTURE ALREADY EXISTS HERE, WITHOUT IMPORTING ANYTHING.
+ *
+ * The Zook Luna is a New Frontier Design drawing built and sealed by Zook. A
+ * design house supplies the architecture; an RVIA-member manufacturer supplies
+ * the plant, the seal and the liability. That is the same shape as partnering
+ * with a manufacturer — proven, domestic, and with no customs chain and no
+ * manufacturer-of-record question attached.
+ *
+ * If the aim is a unit nobody else has, this is the route: commission the
+ * design, have an RVIA member build it. Not import a shell.
+ */
+export const DESIGN_PLUS_BUILDER = {
+  example: 'Zook Cabins x New Frontier Design — the Luna',
+  structure: 'Design house draws it; RVIA-member manufacturer builds, seals and carries the liability.',
+  whyItBeatsImporting:
+    'No customs chain, no manufacturer-of-record question, no certification gap. The seal comes from a '
+    + 'plant already under RVIA audit, which is the only place it can come from.',
+  note: 'New Frontier\'s own Luna is 25 ft, 256 sq ft and 8 ft 6 in wide — permit-free to tow. The Zook '
+    + 'collaboration is 36 x 11 at 396 sq ft. Same name, different units; do not conflate them in a quote.',
+} as const;
+
 export const NEAR_MISSES = [
   {
     maker: 'Elevation', model: '7-Series',
@@ -325,6 +386,21 @@ export const NEAR_MISSES = [
     maker: 'Wheelhaus', model: 'Wedge',
     why: 'A "sliding glass entryway" is a slider. It does ship a fully covered front deck, which is '
       + 'the one idea worth taking from it.',
+  },
+  {
+    maker: 'Wind River Built', model: 'Pisgah / Tellico / Cumberland (45 ft) and five smaller',
+    why: 'Chattanooga TN, roughly 100 miles from the site — by far the closest builder found, and they '
+      + 'ship nationwide. But certified by PWA, not RVIA, which fails in NC and at the bank. Their own '
+      + 'explainer also says park models are "meant to be hardwired into an electric grid rather than with '
+      + 'an RV plug", which is the opposite of what NC requires. Worth one call to ask whether they will '
+      + 'build to RVIA — the location is too good to discard on a website reading.',
+  },
+  {
+    maker: 'New Frontier Design', model: 'Luna (their own 25 ft) and four others',
+    why: 'Nashville. The strongest glass-wall wording found anywhere — "Custom Glass End Wall (fixed) '
+      + 'with 1 ft Cantilever" — and at 8 ft 6 in wide the 25 ft Luna tows permit-free. PWA certified, but '
+      + 'they will deliver RVIA FOR A FEE, so this near-miss may not be one. Their design already reaches '
+      + 'us through the Zook Luna in the catalogue above.',
   },
   {
     maker: 'Deep Blue', model: 'Mirror Cabin',
@@ -378,7 +454,7 @@ export const FOLDING_DOOR_UNITS = OBSERVED_UNITS.filter((u) => u.foldingDoorToDe
 
 export const SURVEY = {
   qualified: 8,
-  rejected: 5,
+  rejected: 7,
   awaitingEvidence: 0,
   /** Of the qualified, how many rest on published evidence. */
   evidencePublished: 6,
