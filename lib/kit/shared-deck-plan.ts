@@ -226,6 +226,54 @@ export function assessFit(u: ObservedUnit, stance: DeckStance = preferredStance(
  * It also collides with NEC 551.77, which puts the pedestal on the unit's LEFT.
  * On one of the two units the door and the pedestal end up on the same side.
  */
+/**
+ * 🔴 FOUND IN REVIEW — TWO MODULES IN THIS KIT CONTRADICTED EACH OTHER, AND THE
+ * GATES DID NOT CATCH IT BECAUSE NOTHING CHECKED THEM TOGETHER.
+ *
+ *   lot-positioning.ts:  NEC 551.77 puts the pedestal on the unit's LEFT, so the
+ *                        deck belongs on its RIGHT.
+ *   shared-deck-plan.ts: flank decks go on the OUTER walls of a flanking pair.
+ *
+ * For a mirror-symmetric pair either side of a path, one unit's OUTER wall IS
+ * its left. So in every handed pair, ONE of the two units has its 8 ft private
+ * deck sitting exactly where the code reserves the pedestal. Confirmed by
+ * running assessLot() on both hands: right clears, left fouls.
+ *
+ * THE RESOLUTION IS THE UNHANDED PAIR, and it is better than the thing it
+ * replaces. Build both units to the SAME hand — both doors right, both pedestals
+ * left, both flank decks right:
+ *
+ *   the unit left of the path  — deck toward the path, pedestal outboard
+ *   the unit right of the path — deck outboard, pedestal toward the path
+ *
+ * Both clear. And it needs NO REVERSED PLAN, which removes the ten-unit
+ * manufacturer gate from the critical path entirely — the constraint that has
+ * been shaping this composition since the door-position work.
+ *
+ * What it costs is the mirror symmetry of the render. The pair becomes an
+ * echelon rather than a mirror: one deck faces in, one faces out. Which is
+ * arguably the better hospitality answer anyway, because the two private decks
+ * then face opposite ways instead of at each other.
+ *
+ * ⚠️ Sizing note: with the left unit's deck in the gap and the right unit's
+ * pedestal band also in the gap, 15 ft is tight. Widen the gap to about 20 ft,
+ * or shift the pedestal along its 15 ft window.
+ */
+export const UNHANDED_PAIR_RESOLVES_PEDESTAL = {
+  conflict:
+    'A mirror-symmetric pair puts one unit\'s flank deck on its left, which is where NEC 551.77 '
+    + 'reserves the pedestal. One of the two units always fouls.',
+  resolution: 'Build both units to the SAME hand — doors right, pedestals left, flank decks right.',
+  buys: [
+    'Both pedestal bands clear, on both units.',
+    'NO reversed plan needed, so the maker\'s ten-unit customisation gate leaves the critical path.',
+    'The two private decks face opposite ways instead of at each other.',
+  ],
+  costs: 'The pair reads as an echelon, not a mirror. The render\'s symmetry goes.',
+  sizing: 'Widen the central gap to about 20 ft: one unit\'s deck and the other\'s pedestal band both '
+    + 'land in it, and 15 ft will not hold both.',
+} as const;
+
 export const SYMMETRY_NEEDS_HANDING = {
   why: 'Both doors facing the central path means one is a left-hand plan and the other a right-hand plan.',
   supplyConsequence: 'A reversed plan. Zook do not hand a plan below ten units.',
@@ -235,8 +283,10 @@ export const SYMMETRY_NEEDS_HANDING = {
     + 'pedestal at the far end of its code window, and keep the flank walk on the opposite side of it.',
   ifUnhanded:
     'With two identical units the pair is not symmetrical: both doors land on the same side, so one '
-    + 'opens onto the path and the other opens away from it, onto its outer flank. That is buildable '
-    + 'and it is not what the render shows — the second unit needs its own outer walkway.',
+    + 'opens onto the path and the other opens away from it. ⭐ UPGRADED IN REVIEW — this is no longer '
+    + 'the fallback, it is the RECOMMENDATION. It is the only arrangement in which both pedestal bands '
+    + 'stay clear, and it removes the ten-unit handing gate from the critical path. See '
+    + 'UNHANDED_PAIR_RESOLVES_PEDESTAL.',
 } as const;
 
 // ---------------------------------------------------------------------------

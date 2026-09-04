@@ -16,7 +16,7 @@ const {
   broadsidePairFitsFt, broadsidePairFits, SYMMETRY_NEEDS_HANDING,
   FLANK_DECK_WIDTH_FT, FLANK_SIDE, innerFlanksFit, flankDeckAreaSqFt,
   pairedDeckAreaSqFt, identicalPairWorks, rankedForPairing, PAIRING_VERDICT,
-  pairOnOneDeck, PAIR_WIDTH_TOLERANCE_FT, COMMON_REAR_DATUM,
+  pairOnOneDeck, PAIR_WIDTH_TOLERANCE_FT, COMMON_REAR_DATUM, UNHANDED_PAIR_RESOLVES_PEDESTAL,
   parkRoadWidthGovernedBy, MIXING_ACROSS_MAKERS,
   MIN_PRIVATE_DECK_SQFT, PRIVATE_DECK_WITH_TUB_SQFT, assessRental, lettableAlone, DUAL_MODE_RULES,
 } = S;
@@ -158,9 +158,10 @@ check('both doors facing the path means one left-hand and one right-hand plan',
 check('and it collides with the pedestal, which the code fixes to the left',
   /NEC 551\.77/.test(SYMMETRY_NEEDS_HANDING.pedestalCollision)
   && /door and its pedestal on the same side/.test(SYMMETRY_NEEDS_HANDING.pedestalCollision));
-check('the unhanded fallback is described rather than hidden',
+check('the unhanded arrangement is no longer a fallback but the recommendation',
   /both doors land on the same side/.test(SYMMETRY_NEEDS_HANDING.ifUnhanded)
-  && /is not what the render shows/.test(SYMMETRY_NEEDS_HANDING.ifUnhanded));
+  && /no longer '?the fallback/.test(SYMMETRY_NEEDS_HANDING.ifUnhanded.replace(/\s+/g, ' '))
+  && /RECOMMENDATION/.test(SYMMETRY_NEEDS_HANDING.ifUnhanded));
 check('the deck as drawn is 48 x 24 with the boards running across',
   SHARED_DECK.deckWidthFt === 48 && SHARED_DECK.deckDepthFt === 24
   && SHARED_DECK.unitGapFt === 15 && /across the long axis/.test(SHARED_DECK.boardDirection));
@@ -204,6 +205,31 @@ check('the tension is named rather than divided away',
 check('and a tub is flagged as a framing decision before the joists are cut',
   /thousands of pounds/.test(DUAL_MODE_RULES.tubStructure)
   && /before the joists are cut/.test(DUAL_MODE_RULES.tubStructure));
+
+console.log('CROSS-MODULE — the check that was missing, and that found a real conflict');
+// Nothing checked lot-positioning and shared-deck-plan together, so a direct
+// contradiction sat between them: a mirror pair puts one flank deck exactly
+// where NEC reserves the pedestal. This check exists so it cannot come back.
+const L = await import(join(root, 'lib/kit/lot-positioning.ts'));
+const lotFor = (side) => ({ id: 'x', doorSide: side, unitWidthFt: 13.5, unitLengthFt: 32,
+  padMarginFt: L.PAD_MARGIN_DEFAULT_FT, sideDeckDepthFt: FLANK_DECK_WIDTH_FT, viewDeckDepthFt: 14 });
+check('a flank deck on the RIGHT clears the pedestal band; on the LEFT it fouls',
+  L.assessLot(lotFor('right')).ok === true && L.assessLot(lotFor('left')).ok === false);
+check('so a mirror-symmetric pair always fouls on one of its two units',
+  L.assessLot(lotFor('right')).ok !== L.assessLot(lotFor('left')).ok);
+check('and the conflict is recorded rather than left implicit',
+  /reserves the pedestal/.test(UNHANDED_PAIR_RESOLVES_PEDESTAL.conflict)
+  && /One of the two units always fouls/.test(UNHANDED_PAIR_RESOLVES_PEDESTAL.conflict));
+check('with the unhanded pair as the resolution, and what it buys',
+  /SAME hand/.test(UNHANDED_PAIR_RESOLVES_PEDESTAL.resolution)
+  && UNHANDED_PAIR_RESOLVES_PEDESTAL.buys.length === 3
+  && UNHANDED_PAIR_RESOLVES_PEDESTAL.buys.some((b) => /ten-unit customisation gate/.test(b)));
+check('and what it costs, stated rather than glossed',
+  /echelon, not a mirror/.test(UNHANDED_PAIR_RESOLVES_PEDESTAL.costs)
+  && /20 ft/.test(UNHANDED_PAIR_RESOLVES_PEDESTAL.sizing)
+  && /will not hold both/.test(UNHANDED_PAIR_RESOLVES_PEDESTAL.sizing));
+check('and it points at the resolution rather than restating it',
+  /UNHANDED_PAIR_RESOLVES_PEDESTAL/.test(SYMMETRY_NEEDS_HANDING.ifUnhanded));
 
 if (failures > 0) { console.error(`\nshared-deck-plan battery: ${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nshared-deck-plan battery clean');
