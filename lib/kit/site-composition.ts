@@ -443,15 +443,41 @@ export const CERT_TO_TITLE_CHAIN = [
   'RV loan at 5-9% and an RV or park-model insurance policy',
 ] as const;
 
+/**
+ * ⛔ RE-AIMED 4 Sep — the deal workstream re-read the OSFM exclusion verbatim and
+ * my framing was pointed at the wrong agency.
+ *
+ * The exclusion paragraph is HEADED "Unlabeled/Site Constructed". The rule
+ * attaches to a MISSING label, not to which accredited agency issued one. And
+ * what it bars is PERMANENT-DWELLING status — which the short-stay lane does not
+ * want and is actively avoiding. Temporary use on an RV site is expressly
+ * permitted, subject to the electrical rules and the 400 sq ft cap.
+ *
+ * So the building code is not the binding constraint on an agency-certified
+ * unit. THE BINDING QUESTION IS WHETHER NCDMV WILL TITLE IT — because the chain
+ * this whole kit protects runs A119.5 -> VIN -> NCDMV title -> personal
+ * property, and the DMV is the exclusive agency for the unit.
+ *
+ * Which also changes who to call first: the builder, not a regulator. Ask Wind
+ * River what their units title as in NC and whether any customer has titled one
+ * here. A maker shipping nationwide will know, and it is a faster answer than a
+ * roster request.
+ */
 export const NC_LABEL_QUESTION = {
-  settled: 'RVIA and RPTIA labels are pictured as acceptable for temporary use.',
+  settled: 'RVIA and RPTIA labels are pictured as acceptable for temporary use. The exclusion paragraph '
+    + 'is headed "Unlabeled/Site Constructed" and bars PERMANENT-DWELLING status, which we do not want.',
   open:
     'Whether NCDOI accepts a PWA (or NOAH, or QAI) label on a park model. The memo pictures neither, and '
     + 'its exclusion is aimed at manufacturers who cannot certify AT ALL rather than at those certifying '
     + 'through another accredited agency.',
   whyItMatters:
     'A yes reopens Wind River Built at ~100 miles and New Frontier\'s glazing. A no confirms the current '
-    + 'shortlist. Either way it is one question to the Manufactured Building Division, not a research task.',
+    + 'shortlist. But ask the DMV question first — it is the one that actually binds.',
+  theBindingQuestion:
+    'Will NCDMV title a park model certified by an accredited agency other than RVIA? The classification '
+    + 'chain runs through the title, not through the building code, and the DMV is the exclusive agency '
+    + 'for the unit. Ask the BUILDER first — a maker shipping nationwide already knows how their units '
+    + 'title in NC, and that is faster than a roster request.',
   askThis:
     'Does the Division maintain a LIST of accepted third-party certification agencies for park models, '
     + 'and who is on it? Ask it that way rather than naming one agency — California HCD approves agencies '

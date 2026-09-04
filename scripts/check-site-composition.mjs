@@ -252,6 +252,16 @@ check('the chain runs certification to VIN to title to loan, in five links',
   && /RV loan/.test(CERT_TO_TITLE_CHAIN[4]));
 check('and the stakes named — it reopens the nearest builder',
   /reopens Wind River Built at ~100 miles/.test(NC_LABEL_QUESTION.whyItMatters));
+// Re-aimed: the building code is not what binds an agency-certified unit.
+check('the settled half now records that the exclusion is headed Unlabeled/Site Constructed',
+  /Unlabeled\/Site Constructed/.test(NC_LABEL_QUESTION.settled)
+  && /bars PERMANENT-DWELLING status, which we do not want/.test(NC_LABEL_QUESTION.settled));
+check('and the BINDING question is NCDMV titling, not the building code',
+  /Will NCDMV title/.test(NC_LABEL_QUESTION.theBindingQuestion)
+  && /not through the building code/.test(NC_LABEL_QUESTION.theBindingQuestion));
+check('with the builder named as the faster first call than a regulator',
+  /Ask the BUILDER first/.test(NC_LABEL_QUESTION.theBindingQuestion)
+  && /faster than a roster request/.test(NC_LABEL_QUESTION.theBindingQuestion));
 // The lender question is separate and may answer differently.
 check('the lender question is kept separate from the state question',
   /question for the lender, not the state/.test(NC_LABEL_QUESTION.lenderQuestion)
