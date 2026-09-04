@@ -401,3 +401,95 @@ export function pairedDeckAreaSqFt(u: ObservedUnit): {
     privateShare: Math.round((flank / total) * 100) / 100,
   };
 }
+
+// ---------------------------------------------------------------------------
+// RENTING THE PAIR TOGETHER OR SEPARATELY
+// ---------------------------------------------------------------------------
+
+/**
+ * A dual-mode requirement, and it reverses the ranking above.
+ *
+ *   TOGETHER   one party takes both units and the whole compound. The shared
+ *              deck, the fire and both flanks are theirs. This is the premium
+ *              product and it is what the render sells.
+ *
+ *   SEPARATELY two parties, two units, ONE shared deck between strangers.
+ *
+ * The second mode is the hard one, and it is where the flank deck stops being
+ * an amenity and becomes a requirement. A guest paying a resort rate will share
+ * a view; they will not share the only place to sit. If a unit has no outdoor
+ * space of its own it cannot be let alone at that rate — it can only be let as
+ * half of something.
+ *
+ * Which inverts the earlier ranking completely. The Cabana, whose door opens
+ * straight onto the shared deck, has NO private outdoor space and is therefore
+ * the WORST unit here for separate letting. The A-frames, whose long walk looked
+ * like a defect two sections ago, each buy 175 to 218 sq ft of private deck and
+ * are the best.
+ */
+export type RentalMode = 'together' | 'separate';
+
+/** Two chairs, a small table, and room to pass behind them. */
+export const MIN_PRIVATE_DECK_SQFT = 100;
+/** With a tub or plunge on it, the same deck needs to be bigger. */
+export const PRIVATE_DECK_WITH_TUB_SQFT = 180;
+
+export interface RentalFit {
+  model: string;
+  privateSqFtPerUnit: number;
+  lettableAlone: boolean;
+  takesATub: boolean;
+  note: string;
+}
+
+export function assessRental(u: ObservedUnit): RentalFit {
+  const per = flankDeckAreaSqFt(u);
+  const lettableAlone = per >= MIN_PRIVATE_DECK_SQFT;
+  const takesATub = per >= PRIVATE_DECK_WITH_TUB_SQFT;
+  let note: string;
+  if (!lettableAlone && per === 0) {
+    note = '🔴 No private outdoor space at all — the door opens onto the shared deck. Fine let as a '
+      + 'pair, but let alone the guest has nowhere of their own, and the rate has to come down to say so.';
+  } else if (!lettableAlone) {
+    note = `⚠️ Only ${per} sq ft private, against ${MIN_PRIVATE_DECK_SQFT} for a unit that stands alone.`;
+  } else if (takesATub) {
+    note = `✅ ${per} sq ft private — enough for chairs AND a tub or cold plunge, which is what makes a `
+      + 'single unit hold a resort rate on its own.';
+  } else {
+    note = `✅ ${per} sq ft private — chairs and a table of your own. No tub without widening the flank.`;
+  }
+  return { model: u.model, privateSqFtPerUnit: per, lettableAlone, takesATub, note };
+}
+
+/** Units that can be let on their own, most private space first. */
+export function lettableAlone(units: readonly ObservedUnit[]): ObservedUnit[] {
+  return units.filter((u) => assessRental(u).lettableAlone)
+    .sort((a, b) => flankDeckAreaSqFt(b) - flankDeckAreaSqFt(a));
+}
+
+/**
+ * What the two modes each need from the plan. The point is that one deck has to
+ * do both jobs, and the jobs disagree.
+ */
+export const DUAL_MODE_RULES = {
+  together: [
+    'The whole compound is one party\'s. Nothing needs dividing, and the shared deck is the living room.',
+    'This is the premium listing and the one the render photographs.',
+  ],
+  separate: [
+    'Every unit needs its own outdoor space or it is not a standalone product — see MIN_PRIVATE_DECK_SQFT.',
+    'The shared deck becomes a common room between strangers. List it as shared; do not imply otherwise.',
+    'ONE fire, on the shared deck. Two fires turns a shared deck into two decks that happen to touch, '
+    + 'and loses the composition for no gain.',
+    'The central path is the boundary between the two lettings. Keep it legible — a change of surface '
+    + 'is enough, a fence is not.',
+  ],
+  theTension:
+    'A deck good enough to share is a deck neither party owns. The resolution is not to divide it but to '
+    + 'make the private space elsewhere and generous: shared deck for the view and the fire, flank deck '
+    + 'for your own evening. Then letting together simply hands one party all three.',
+  /** A filled tub is a point load the deck was not framed for. */
+  tubStructure:
+    'If a flank deck takes a tub or plunge, that bay needs framing for it — a filled tub runs to the '
+    + 'thousands of pounds and lands on a few square feet. Decide it before the joists are cut, not after.',
+} as const;

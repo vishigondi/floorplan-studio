@@ -18,6 +18,7 @@ const {
   pairedDeckAreaSqFt, identicalPairWorks, rankedForPairing, PAIRING_VERDICT,
   pairOnOneDeck, PAIR_WIDTH_TOLERANCE_FT, COMMON_REAR_DATUM,
   parkRoadWidthGovernedBy, MIXING_ACROSS_MAKERS,
+  MIN_PRIVATE_DECK_SQFT, PRIVATE_DECK_WITH_TUB_SQFT, assessRental, lettableAlone, DUAL_MODE_RULES,
 } = S;
 
 let failures = 0;
@@ -163,6 +164,46 @@ check('the unhanded fallback is described rather than hidden',
 check('the deck as drawn is 48 x 24 with the boards running across',
   SHARED_DECK.deckWidthFt === 48 && SHARED_DECK.deckDepthFt === 24
   && SHARED_DECK.unitGapFt === 15 && /across the long axis/.test(SHARED_DECK.boardDirection));
+
+console.log('letting the pair together OR separately — which reverses the ranking');
+check('the thresholds are 100 sq ft to stand alone, 180 to take a tub',
+  MIN_PRIVATE_DECK_SQFT === 100 && PRIVATE_DECK_WITH_TUB_SQFT === 180
+  && PRIVATE_DECK_WITH_TUB_SQFT > MIN_PRIVATE_DECK_SQFT);
+// The reversal is the finding. The unit that was best when the walk looked like
+// a defect is the only one that cannot be let alone.
+check('the Cabana has NO private outdoor space and cannot stand alone',
+  assessRental(unit('Cabana PMRV')).privateSqFtPerUnit === 0
+  && assessRental(unit('Cabana PMRV')).lettableAlone === false
+  && /nowhere of their own/.test(assessRental(unit('Cabana PMRV')).note));
+check('and every A-frame can, the longest walk giving the most space',
+  ['A-Frame Studio', 'A-Frame Bunkhouse', 'A-Frame Classic', 'Luna']
+    .every((m) => assessRental(unit(m)).lettableAlone === true));
+check('four of them clear the tub threshold and the Classic does not',
+  assessRental(unit('A-Frame Studio')).takesATub === true
+  && assessRental(unit('Luna')).takesATub === true
+  && assessRental(unit('Mysa 400')).takesATub === true
+  && assessRental(unit('A-Frame Classic')).takesATub === false);
+// The ordering must be by private space, and it must invert the entry ordering.
+const alone = lettableAlone(C.OBSERVED_UNITS);
+check('the standalone ranking is led by the unit with the LONGEST walk',
+  alone[0].model === 'A-Frame Studio'
+  && !alone.some((u) => u.model === 'Cabana PMRV'));
+check('which is the exact reverse of the entry ranking',
+  rankedForPairing(C.OBSERVED_UNITS)[0].model === 'Cabana PMRV'
+  && alone[0].model !== 'Cabana PMRV');
+check('both letting modes carry their own rules',
+  DUAL_MODE_RULES.together.length === 2 && DUAL_MODE_RULES.separate.length === 4);
+check('separate letting insists on ONE fire and an honest listing',
+  DUAL_MODE_RULES.separate.some((r) => /ONE fire/.test(r))
+  && DUAL_MODE_RULES.separate.some((r) => /List it as shared; do not imply otherwise/.test(r)));
+check('and the boundary is a change of surface, not a fence',
+  DUAL_MODE_RULES.separate.some((r) => /a fence is not/.test(r)));
+check('the tension is named rather than divided away',
+  /neither party owns/.test(DUAL_MODE_RULES.theTension)
+  && /not to divide it/.test(DUAL_MODE_RULES.theTension));
+check('and a tub is flagged as a framing decision before the joists are cut',
+  /thousands of pounds/.test(DUAL_MODE_RULES.tubStructure)
+  && /before the joists are cut/.test(DUAL_MODE_RULES.tubStructure));
 
 if (failures > 0) { console.error(`\nshared-deck-plan battery: ${failures} FAILURE(S)`); process.exit(1); }
 console.log('\nshared-deck-plan battery clean');
