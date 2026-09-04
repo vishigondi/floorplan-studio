@@ -24,7 +24,7 @@ const {
   isOrthogonal, ORTHOGONAL_ONLY, PAD_SPEC, PROHIBITED_FOUNDATIONS, foundationAllowed,
   DELIVERY_ACCESS, cornerClearanceFt, cornerSavingFt, CUSTOMISATION, customisationAvailableAt,
   NEAR_MISSES, SURVEY, OOD_CLASSIFICATION_CONFLICT, UNVERIFIED, FOLDING_DOOR_UNITS,
-  CERTIFICATION_RULE, DESIGN_PLUS_BUILDER,
+  CERTIFICATION_BODIES, NC_LABEL_QUESTION, DESIGN_PLUS_BUILDER,
 } = M;
 
 let failures = 0;
@@ -202,24 +202,48 @@ check('and the makers it names are exactly the makers in the catalogue',
 check('seven near-misses recorded, each with a reason',
   NEAR_MISSES.length === 7 && NEAR_MISSES.every((n) => n.why.length > 60));
 
-console.log('the certifying body filters harder than any spec, because it fails twice');
-check('RVIA and RPTIA are acceptable; PWA and NOAH are not',
-  CERTIFICATION_RULE.acceptable.length === 2
-  && CERTIFICATION_RULE.notAcceptableHere.some((c) => /PWA/.test(c))
-  && CERTIFICATION_RULE.notAcceptableHere.some((c) => /NOAH/.test(c)));
-check('and both failure modes are recorded — the state AND the bank',
-  CERTIFICATION_RULE.failsTwice.length === 2
-  && CERTIFICATION_RULE.failsTwice.some((f) => /OSFM memo names RVIA/.test(f))
-  && CERTIFICATION_RULE.failsTwice.some((f) => /RV loan at 5-9%/.test(f)));
-check('with the exception that stops it discarding good builders',
-  /RVIA certification as a paid option/.test(CERTIFICATION_RULE.theException)
-  && /New Frontier does/.test(CERTIFICATION_RULE.theException));
+console.log('the certifying bodies — a membership label and an agency label, one standard');
+check('five bodies recorded, each with its standard and how you get it',
+  CERTIFICATION_BODIES.length === 5
+  && CERTIFICATION_BODIES.every((b) => b.standard.length > 5 && b.howYouGetIt.length > 20));
+// The correction: the distinction is who issues the label, not quality.
+check('RVIA is recorded as an ASSOCIATION requiring membership',
+  CERTIFICATION_BODIES.find((b) => b.body === 'RVIA').kind === 'industry association'
+  && /Membership/.test(CERTIFICATION_BODIES.find((b) => b.body === 'RVIA').howYouGetIt));
+check('and PWA as an INDEPENDENT AGENCY, not a lesser certification',
+  /independent third-party/.test(CERTIFICATION_BODIES.find((b) => /PWA/.test(b.body)).kind)
+  && /in-plant inspections/.test(CERTIFICATION_BODIES.find((b) => /PWA/.test(b.body)).howYouGetIt));
+check('both certify to the same standard',
+  CERTIFICATION_BODIES.find((b) => b.body === 'RVIA').standard
+    .includes('ANSI A119.5')
+  && CERTIFICATION_BODIES.find((b) => /PWA/.test(b.body)).standard.includes('ANSI A119.5'));
+check('exactly two are pictured in the NC memo',
+  CERTIFICATION_BODIES.filter((b) => b.ncMemoPicturesIt).map((b) => b.body).sort().join()
+  === 'RPTIA,RVIA');
+
+console.log('what NC has actually settled, and what it has not');
+check('what is settled is stated narrowly — pictured labels, temporary use',
+  /pictured as acceptable for temporary use/.test(NC_LABEL_QUESTION.settled));
+// The honest position: the memo neither pictures nor clearly excludes PWA.
+check('and the open question is framed as open in BOTH directions',
+  /pictures neither/.test(NC_LABEL_QUESTION.open)
+  && /cannot certify AT ALL/.test(NC_LABEL_QUESTION.open));
+check('with the question written out, ready to ask',
+  /Does the Division accept a park model labelled by an accredited third-party agency/
+    .test(NC_LABEL_QUESTION.askThis));
+check('and the stakes named — it reopens the nearest builder',
+  /reopens Wind River Built at ~100 miles/.test(NC_LABEL_QUESTION.whyItMatters));
+// The lender question is separate and may answer differently.
+check('the lender question is kept separate from the state question',
+  /question for the lender, not the state/.test(NC_LABEL_QUESTION.lenderQuestion)
+  && /two\s+answers need not agree/.test(NC_LABEL_QUESTION.lenderQuestion.replace(/\s+/g, ' ')));
 check('the two PWA builders are recorded as near-misses, not as usable',
   NEAR_MISSES.some((n) => n.maker === 'Wind River Built' && /PWA, not RVIA/.test(n.why))
   && NEAR_MISSES.some((n) => n.maker === 'New Frontier Design' && /PWA certified/.test(n.why)));
-check('and the closest builder is flagged as worth a call despite failing',
+check('and the closest builder is flagged as worth a call, on the corrected footing',
   NEAR_MISSES.some((n) => /roughly 100 miles from the site/.test(n.why)
-    && /too good to discard on a website reading/.test(n.why)));
+    && /too good not to make it/.test(n.why)
+    && /PWA is not a lesser certification/.test(n.why)));
 // The reason to be careful with that call, which must not be edited away: their
 // own explainer describes park models the way NC forbids.
 check('and their hardwiring claim is kept, because it contradicts the mobility test',

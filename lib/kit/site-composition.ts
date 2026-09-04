@@ -330,17 +330,91 @@ export const OOD_CLASSIFICATION_CONFLICT = {
  * deliver RVIA certified FOR AN EXTRA FEE. Ask every PWA builder that question
  * before writing them off.
  */
-export const CERTIFICATION_RULE = {
-  acceptable: ['RVIA', 'RPTIA (older units)'],
-  notAcceptableHere: ['PWA (Pacific West Associates)', 'NOAH'],
-  failsTwice: [
-    'NC: the OSFM memo names RVIA and RPTIA labels; an unlabelled unit cannot be a permanent dwelling.',
-    'Financing: an RV loan at 5-9% over 20 years REQUIRES RVIA certification; without it the buyer takes '
-    + 'a personal loan at 11-13% over 5-7 years.',
-  ],
-  theException:
-    'A PWA builder may offer RVIA certification as a paid option — New Frontier does. Ask before writing '
-    + 'any of them off; the fee is trivial against the financing difference.',
+/**
+ * ⛔ CORRECTED — an earlier version of this record said the filter was "RVIA or
+ * nothing" and treated PWA as a lesser certification. That was wrong, and the
+ * distinction is not quality. It is WHO ISSUES THE LABEL.
+ *
+ *   RVIA is an INDUSTRY ASSOCIATION. Its label requires MEMBERSHIP. Members
+ *   certify their own units and the association audits them periodically.
+ *
+ *   PWA is an INDEPENDENT THIRD-PARTY AGENCY — thirty years old, staffed by
+ *   licensed electrical, mechanical, structural and forensic engineers, and
+ *   "part of the committee that writes the codes". It is appointed by two or
+ *   more state agencies to conduct A119.5 and NFPA 1192 inspections, or meets
+ *   ASTM E-699 for a third-party agency, and it inspects in-plant between once
+ *   a year and once a quarter.
+ *
+ * BOTH CERTIFY TO THE SAME STANDARD. One is a membership label, the other an
+ * agency label. Neither is inherently the better-built unit.
+ */
+export const CERTIFICATION_BODIES = [
+  {
+    body: 'RVIA', kind: 'industry association',
+    standard: 'ANSI A119.5 (park models) / NFPA 1192 (RVs)',
+    howYouGetIt: 'Membership. Members self-certify every unit built in their plant; RVIA audits.',
+    ncMemoPicturesIt: true,
+  },
+  {
+    body: 'RPTIA', kind: 'industry association (merged into RVIA)',
+    standard: 'ANSI A119.5',
+    howYouGetIt: 'Historic. Appears on older units only.',
+    ncMemoPicturesIt: true,
+  },
+  {
+    body: 'PWA (Pacific West Associates)', kind: 'independent third-party inspection + design approval agency',
+    standard: 'ANSI A119.5 / NFPA 1192',
+    howYouGetIt: 'Appoint them as your inspection agency; in-plant inspections 1-4 times a year.',
+    ncMemoPicturesIt: false,
+  },
+  {
+    body: 'NOAH', kind: 'certification body for tiny homes (NOAH+ since 2023)',
+    standard: 'NOAH+ — "in most cases the same guidelines RVIA standards require", with variations',
+    howYouGetIt: '$1,760 per build occasional, or $2,505 a year plus $500 a seal; video inspection.',
+    ncMemoPicturesIt: false,
+  },
+  {
+    body: 'QAI', kind: 'accredited third-party body (SCC-accredited, RVIA-recognised)',
+    standard: 'ANSI A119.5 / NFPA 1192',
+    howYouGetIt: 'Document review, factory inspection, periodic surveillance.',
+    ncMemoPicturesIt: false,
+  },
+] as const;
+
+/**
+ * WHAT IS ACTUALLY SETTLED IN NORTH CAROLINA, AND WHAT IS NOT.
+ *
+ * The OSFM memo pictures RVIA and RPTIA labels under "Acceptable Examples of
+ * Recreational Park Trailer (Park Model) Labels for Temporary Use". It does not
+ * picture a PWA label.
+ *
+ * But read its exclusion carefully. It targets manufacturers who are "not
+ * members of the RVIA and are not authorized/able to certify and label" their
+ * units — and a PWA-certified builder IS authorised to certify, through an
+ * agency two or more states appointed. The memo neither pictures a PWA label
+ * nor clearly excludes one.
+ *
+ * So this is genuinely open, and it is worth one call rather than an assumption
+ * in either direction — because the answer reopens Wind River Built, a hundred
+ * miles from the site, and New Frontier's glazing.
+ */
+export const NC_LABEL_QUESTION = {
+  settled: 'RVIA and RPTIA labels are pictured as acceptable for temporary use.',
+  open:
+    'Whether NCDOI accepts a PWA (or NOAH, or QAI) label on a park model. The memo pictures neither, and '
+    + 'its exclusion is aimed at manufacturers who cannot certify AT ALL rather than at those certifying '
+    + 'through another accredited agency.',
+  whyItMatters:
+    'A yes reopens Wind River Built at ~100 miles and New Frontier\'s glazing. A no confirms the current '
+    + 'shortlist. Either way it is one question to the Manufactured Building Division, not a research task.',
+  askThis:
+    'Does the Division accept a park model labelled by an accredited third-party agency other than RVIA — '
+    + 'specifically Pacific West Associates — for temporary use on an RV site?',
+  /** Separate from the state question, and it may have a different answer. */
+  lenderQuestion:
+    'Lenders commonly specify RVIA — Essex Credit advertises rates for "RVIA-certified homes". Whether a '
+    + 'PWA label finances on the same terms is a question for the lender, not the state, and the two '
+    + 'answers need not agree. Ask both before ruling a builder in or out.',
 } as const;
 
 /**
@@ -392,8 +466,10 @@ export const NEAR_MISSES = [
     why: 'Chattanooga TN, roughly 100 miles from the site — by far the closest builder found, and they '
       + 'ship nationwide. But certified by PWA, not RVIA, which fails in NC and at the bank. Their own '
       + 'explainer also says park models are "meant to be hardwired into an electric grid rather than with '
-      + 'an RV plug", which is the opposite of what NC requires. Worth one call to ask whether they will '
-      + 'build to RVIA — the location is too good to discard on a website reading.',
+      + 'an RV plug", which is the opposite of what NC requires. ⚠️ CORRECTED: PWA is not a lesser '
+      + 'certification — it is an independent agency certifying to the same ANSI A119.5, appointed by two '
+      + 'or more states. The open question is whether NCDOI accepts its label (NC_LABEL_QUESTION), not '
+      + 'whether the unit is well built. One call decides it, and the location is too good not to make it.',
   },
   {
     maker: 'New Frontier Design', model: 'Luna (their own 25 ft) and four others',
