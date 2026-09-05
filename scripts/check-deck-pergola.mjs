@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS, COMPOSED_PAIR, assessLink } =
+const { buildDeckPlan, renderDeckTender, girderSpanFt, ZOOK_A_FRAME_CLASSIC, APPENDIX_M, ZIPPER_SCREEN, OPEN_DECK, PREFAB_PANEL, GUARD, DECK_BOARD_DIRECTION, OBSERVED_COMPARABLE, PARK_MODEL_ENVELOPE, fitsEnvelope, CANTILEVER, checkCantilever, BALANCED_CANTILEVER, balancedSpanFor, maxWoodOverhangFt, sweetSpotFor, MANUFACTURER_SUPPLIED_DECKS, COMPOSED_PAIR, assessLink, MATCHED_PITCH_EXTENSION } =
   await import(join(root, 'lib/kit/deck-pergola.ts'));
 const { CHEROKEE_WIND, CHEROKEE_GROUND_SNOW } = await import(join(root, 'lib/kit/foundation.ts'));
 
@@ -345,6 +345,29 @@ check('only the enclosed case has a continuous envelope',
   ALL_LINKS.filter((k) => assessLink(k).continuousEnvelope).length === 1 && enclosed.continuousEnvelope);
 check('and separate units survive exactly where the envelope is broken',
   ALL_LINKS.map((k) => assessLink(k)).every((a) => a.preservesSeparateUnits === !a.continuousEnvelope));
+
+console.log('carrying the roofline out over the deck — the move and its one hard rule');
+check('the effect is stated: the eye reads the roof, not the wall',
+  /the building it describes is the size of the roof/.test(MATCHED_PITCH_EXTENSION.effect));
+// The whole point: the obvious construction is the forbidden one.
+check('extending the UNIT roof onto deck posts is named as forbidden',
+  /Extending the UNIT/.test(MATCHED_PITCH_EXTENSION.theForbiddenWay)
+  && /cannot tow out without dismantling a roof/.test(MATCHED_PITCH_EXTENSION.theForbiddenWay));
+check('and the buildable way is a SEPARATE plane on the deck\'s own posts',
+  /SEPARATE roof plane/.test(MATCHED_PITCH_EXTENSION.theBuildableWay)
+  && /tows away untouched/.test(MATCHED_PITCH_EXTENSION.theBuildableWay));
+check('four details, led by the two that do the work',
+  MATCHED_PITCH_EXTENSION.detailsThatSellIt.length === 4
+  && /Match the pitch exactly and align the fascia/.test(MATCHED_PITCH_EXTENSION.detailsThatSellIt[0]));
+check('including the soffit lighting the extension makes possible',
+  MATCHED_PITCH_EXTENSION.detailsThatSellIt.some((d) => /Downlights in the new soffit/.test(d)));
+// It is covered area, and that is not free.
+check('the cost is stated — it counts against the covered fraction, one side only',
+  /counts against OPEN_DECK.maxCoveredFraction/.test(MATCHED_PITCH_EXTENSION.cost)
+  && /never the whole ring/.test(MATCHED_PITCH_EXTENSION.cost));
+check('and it may never bridge two units',
+  MATCHED_PITCH_EXTENSION.neverBetweenUnits === true
+  && MATCHED_PITCH_EXTENSION.neverBetweenUnits === OPEN_DECK.neverLinkUnits);
 
 console.log('the observed comparable is recorded as observation, not as approval');
 // Photographs of the nearest working resort show posts on precast/poured pier

@@ -69,6 +69,62 @@ export const OPEN_DECK = {
 };
 
 /**
+ * MAKING THE UNIT READ AS A BUILDING: CARRY THE ROOFLINE OUT OVER THE DECK.
+ *
+ * The move is right and it is the cheapest volume on the site. A shed roof that
+ * continues past the wall at the same pitch, landing on posts at the deck edge,
+ * turns a small box with a porch into one larger form. The eye reads the roof,
+ * not the wall, so the building it describes is the size of the roof.
+ *
+ * 🔴 BUT THE OBVIOUS WAY TO BUILD IT IS THE ONE WAY THAT IS FORBIDDEN.
+ *
+ * If the UNIT'S roof is extended and posts on the deck hold up its far end, the
+ * deck is now carrying part of the unit. That fails in both directions at once:
+ * NCDOI tells inspectors that "accessory structures may not be supported by
+ * these units", and here the unit is supported BY the accessory structure, which
+ * makes them one structure either way. Worse, it fails the test that actually
+ * decides everything — the unit can no longer be towed out without dismantling
+ * a roof, so it stops being a vehicle.
+ *
+ * ✅ SO THE ROOF BELONGS TO THE DECK, NOT TO THE UNIT.
+ *
+ * Build a separate roof plane on the deck's own posts, at the unit's pitch, with
+ * its fascia aligned to the unit's fascia and a reveal where the two meet. It is
+ * structurally independent, it tows away without touching the unit, and from
+ * every position a guest or a camera actually occupies it reads as one
+ * continuous roof. Which is the same trick as the deck itself: EXPRESS THE GAP,
+ * MATCH THE GEOMETRY.
+ *
+ * ⚠️ It is not free. A matched-pitch roof is covered area and it counts against
+ * OPEN_DECK.maxCoveredFraction like any other roof — the open-deck position is
+ * what keeps three units reading as three vehicles rather than one building. Put
+ * it over ONE side, the outdoor room, exactly as a pergola zone would go.
+ */
+export type DeckRoofKind = 'pergola' | 'matched-pitch';
+
+export const MATCHED_PITCH_EXTENSION = {
+  effect: 'The eye reads the roof, not the wall — so the building it describes is the size of the roof.',
+  theForbiddenWay:
+    'Extending the UNIT\'s roof onto posts standing on the deck. The deck then carries part of the unit, '
+    + 'they become one structure, and the unit cannot tow out without dismantling a roof.',
+  theBuildableWay:
+    'A SEPARATE roof plane on the deck\'s own posts, at the unit\'s pitch, fascia aligned, with a reveal '
+    + 'where they meet. Structurally independent, tows away untouched, reads as one roof from the ground.',
+  detailsThatSellIt: [
+    'Match the pitch exactly and align the fascia line — those two do all the work.',
+    'Hold a reveal at the junction and flash it loose, fastened only to the deck side.',
+    'Downlights in the new soffit. The extension gives you a ceiling to light from, which is far better '
+    + 'than a pole, and it is what makes the outdoor room read as a room after dark.',
+    'A horizontal slat screen in pale timber on the outer bay — privacy without a fence, and the '
+    + 'contrast against dark cladding is the same move the accent budget already relies on.',
+  ],
+  cost:
+    'It is covered area and counts against OPEN_DECK.maxCoveredFraction. Roof ONE side — the outdoor '
+    + 'room — never the whole ring, and never bridging two units.',
+  neverBetweenUnits: OPEN_DECK.neverLinkUnits,
+} as const;
+
+/**
  * THE CANTILEVER, AND WHY IT IS THE BEST PREFAB CANDIDATE ON THIS PROJECT.
  *
  * A post-and-beam ring is many small connections made in the field on a 12.8%
